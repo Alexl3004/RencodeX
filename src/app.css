@@ -1,0 +1,315 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=DM+Sans:wght@400;500;600&display=swap");
+@import "tailwindcss";
+
+/* ── Neutraliser les styles Flowbite qui cassent les overlays ─────── */
+[data-modal-backdrop],
+.flowbite-overlay {
+  display: none !important;
+}
+
+/* ── Dark theme (default) ─────────────────────────────────────────── */
+:root {
+  --color-surface: #1d1d1d;
+  --color-panel: #222222;
+  --color-panel2: #1c1c1c;
+  --color-border: #2a2a2a;
+  --color-border2: #333333;
+  --color-accent: #e07b39;
+  --color-accent2: #c96828;
+  --color-danger: #e05252;
+  --color-success: #4dbb6a;
+  --color-warning: #d4a043;
+  --color-muted: #3a3a3a;
+  --color-text: #e8e8e8;
+  --color-subtext: #6b6b6b;
+  --color-subtext2: #4a4a4a;
+}
+
+/* ── Light theme ──────────────────────────────────────────────────── */
+.light {
+  --color-surface: #f5f4f2;
+  --color-panel: #ffffff;
+  --color-panel2: #f0eeeb;
+  --color-border: #ddd9d3;
+  --color-border2: #ccc8c2;
+  --color-accent: #c96828;
+  --color-accent2: #a85520;
+  --color-danger: #c0392b;
+  --color-success: #27834a;
+  --color-warning: #b07d20;
+  --color-muted: #c5c1bb;
+  --color-text: #1a1a1a;
+  --color-subtext: #7a7670;
+  --color-subtext2: #aaa69e;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+body {
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ── Scrollbars ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border2);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-subtext);
+}
+
+/* ── Drag-over highlight ──────────────────────────────────────────── */
+.drop-zone.dragging {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+}
+
+/* ── Log colors ───────────────────────────────────────────────────── */
+.log-info {
+  color: var(--color-subtext);
+}
+.log-warning {
+  color: var(--color-warning);
+}
+.log-error {
+  color: var(--color-danger);
+}
+.log-success {
+  color: var(--color-success);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 500;
+  border-radius: 7px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel2);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    background 0.1s,
+    border-color 0.12s,
+    color 0.1s;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+.btn:hover {
+  background: var(--color-muted);
+  border-color: var(--color-subtext2);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--color-accent) 82%, white);
+}
+
+.btn-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.btn-danger:hover {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background: var(--color-panel2);
+  border-color: var(--color-border);
+}
+
+/* ── Section labels ───────────────────────────────────────────────── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-subtext);
+  font-family: "Geist Mono", monospace;
+}
+
+/* ── Mono utility ─────────────────────────────────────────────────── */
+.font-mono {
+  font-family: "Geist Mono", monospace;
+}
+
+/* ── Table ────────────────────────────────────────────────────────── */
+.file-table {
+  border-collapse: collapse;
+}
+.file-table th {
+  background: var(--color-surface);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-subtext);
+  border-bottom: 1px solid var(--color-border);
+  padding: 7px 12px;
+  font-family: "Geist Mono", monospace;
+}
+.file-table td {
+  padding: 7px 12px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+.file-table tr:hover td {
+  background: color-mix(in srgb, var(--color-muted) 8%, transparent);
+}
+
+.btn-secondary {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-subtext);
+}
+.btn-secondary:hover {
+  background: var(--color-panel2);
+  border-color: var(--color-border2);
+  color: var(--color-text);
+}
+.btn-secondary:active {
+  transform: translateY(1px);
+}
+.btn-secondary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Language selector buttons ────────────────────────────────────── */
+.btn-lang-active {
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent) 30%,
+    var(--color-border)
+  );
+  color: var(--color-accent);
+  font-weight: 500;
+}
+.btn-lang-active:hover {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--color-accent) 45%,
+    var(--color-border)
+  );
+  color: var(--color-accent);
+}
+
+/* ── Progress bars ────────────────────────────────────────────────── */
+progress::-webkit-progress-bar {
+  background: var(--color-surface);
+  border-radius: 1px;
+}
+progress::-webkit-progress-value {
+  background: var(--color-accent);
+  border-radius: 1px;
+}
+
+/* ── Input / range base ───────────────────────────────────────────── */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  font-family: "Geist Mono", monospace;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: 2px;
+  font-size: 12px;
+  transition: border-color 0.12s;
+  outline: none;
+}
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+  border-color: var(--color-accent);
+}
+
+/* ── Toggle switch ────────────────────────────────────────────────── */
+.toggle {
+  position: relative;
+  width: 32px;
+  height: 17px;
+  background: var(--color-muted);
+  border-radius: 999px;
+  border: 1px solid var(--color-border2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.toggle.on {
+  background: var(--color-accent);
+  border-color: var(--color-accent2);
+}
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+.toggle.on::after {
+  transform: translateX(15px);
+}
+
+/* ── Accent line decoration ───────────────────────────────────────── */
+.accent-bar {
+  width: 3px;
+  background: var(--color-accent);
+  border-radius: 1px;
+}
+
+/* ── Hairline separators ──────────────────────────────────────────── */
+.sep {
+  width: 1px;
+  background: var(--color-border);
+}
+
+/* ── Reset anti-Flowbite : empêcher overflow:hidden sur html/body ─── */
+html, body {
+  overflow: visible !important;
+  height: 100%;
+}
+
+/* ── Garantir que les fixed overlays passent au-dessus de tout ────── */
+.fixed {
+  position: fixed;
+}
