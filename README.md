@@ -1,38 +1,58 @@
 # RenCodeX — Tauri 2 + Svelte 5 + Rust
 
-Encodeur vidéo desktop H265/HEVC NVENC pour Windows 11.
+Encodeur vidéo desktop **H265/HEVC NVENC** pour Windows, avec nettoyage intelligent de noms de fichiers, notifications Discord, rapports email et scan de dossiers.
+
+---
 
 ## Prérequis
 
 | Outil | Version minimale |
-|-------|-----------------|
+|---|---|
 | [Rust + Cargo](https://rustup.rs/) | 1.77+ (stable) |
 | [Node.js](https://nodejs.org/) | 18+ |
 | [FFmpeg + ffprobe](https://ffmpeg.org/) | 6.x (avec NVENC) |
 | GPU NVIDIA | Kepler+ (GTX 600+) |
 | Windows | 10/11 (x64) |
 
-### Installer les pré-requis Tauri (Windows)
+### Outils C++ requis par Tauri
+
 ```powershell
-# Outils C++ (WebView2 est inclus dans Win11)
 winget install Microsoft.VisualStudio.2022.BuildTools
-# Choisir "Desktop development with C++"
+# Cocher "Desktop development with C++" dans l'installateur
+# WebView2 est inclus nativement dans Windows 11
 ```
+
+---
 
 ## Installation
 
 ```powershell
-# 1. Cloner / extraire le projet
-cd rencodex
+# 1. Cloner le dépôt
+git clone https://github.com/Alexl3004/RencodeX.git
+cd RencodeX
 
 # 2. Installer les dépendances JS
 npm install
-
-# 3. Configurer le chemin FFmpeg
-# Éditer src-tauri/src/lib.rs ligne :
-#   fn ffmpeg_path() -> PathBuf { ... }
-# OU déposer ffmpeg.exe dans C:\Outil\ffmpeg\bin\ffmpeg.exe (chemin par défaut)
 ```
+
+### Configurer le chemin FFmpeg
+
+Par défaut, RenCodeX cherche FFmpeg ici :
+
+```
+C:\Outil\ffmpeg\bin\ffmpeg.exe
+```
+
+Pour utiliser un chemin différent, deux options :
+
+**Option A — Variable d'environnement (recommandée) :**
+```powershell
+$env:RENCODEX_FFMPEG_PATH = "C:\chemin\vers\ffmpeg.exe"
+```
+
+**Option B — Via l'interface :** modifier le chemin dans les Settings de l'application (sauvegardé dans `%APPDATA%\RenCodeX\config.json`).
+
+---
 
 ## Développement
 
@@ -44,26 +64,35 @@ npm run tauri dev
 
 ```powershell
 npm run tauri build
-# L'installateur .msi / .exe sera dans :
-# src-tauri/target/release/bundle/
+# Installateur généré dans :
+# src-tauri/target/release/bundle/   (.msi et .exe)
 ```
+
+---
 
 ## Architecture
 
 ```
-rencodex/
-├── src-tauri/           # Backend Rust
+RenCodeX/
+├── src-tauri/                   # Backend Rust
 │   ├── src/
-│   │   ├── main.rs      # Point d'entrée Tauri
-│   │   └── lib.rs       # Toute la logique : ffprobe, encodage, email
+│   │   ├── main.rs              # Point d'entrée Tauri + démarrage bot Discord
+│   │   ├── models.rs            # Structs partagées (AppConfig, EncodeJob, etc.)
+│   │   ├── state.rs             # État global de l'encodeur (Mutex partagé)
+│   │   ├── regex.rs             # Regex pré-compilées (Once_cell) pour noms de fichiers
+│   │   ├── utils.rs             # Utilitaires : chemins, langues, config, resolve_config
+│   │   ├── filename.rs          # Logique de nettoyage et parsing de noms de fichiers
+│   │   ├── media.rs             # Analyse ffprobe + encodage FFmpeg async
+│   │   ├── notify.rs            # Notifications Discord (bot + webhooks) + email SMTP
+│   │   └── commands.rs          # Commandes Tauri exposées au frontend
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 │
-├── src/                 # Frontend Svelte 5
+├── src/                         # Frontend Svelte 5
 │   ├── routes/
 │   │   ├── +layout.svelte
 │   │   ├── +layout.ts
-│   │   └── +page.svelte  # Page principale
+│   │   └── +page.svelte         # Page principale
 │   ├── components/
 │   │   ├── TopBar.svelte
 │   │   ├── DropZone.svelte
@@ -77,48 +106,96 @@ rencodex/
 │   │   ├── stores/
 │   │   │   ├── encoder.svelte.ts   # Store Svelte 5 runes (état encodeur)
 │   │   │   └── theme.svelte.ts     # Store thème dark/light
-│   │   └── utils.ts               # Formatage temps / taille
+│   │   └── utils.ts               # Formatage durée / taille
 │   └── app.css                    # Variables CSS thème
 │
 ├── package.json
 ├── svelte.config.js
-├── tailwind.config.js
-└── vite.config.ts
+├── vite.config.ts
+└── .gitignore
 ```
 
-## Fonctionnalités portées depuis Python
+---
 
-| Feature | Statut |
-|---------|--------|
+## Fonctionnalités
+
+| Fonctionnalité | Statut |
+|---|---|
 | Drag & drop fichiers | ✅ |
-| Analyse ffprobe async | ✅ |
-| Détection langues audio/sous-titres | ✅ |
-| Sélection pistes à conserver | ✅ |
+| Scan de dossier récursif | ✅ |
+| Analyse ffprobe async (streams, langues, durée, FPS) | ✅ |
+| Détection langues audio & sous-titres | ✅ |
+| Sélection des pistes à conserver | ✅ |
 | Encodage H265 NVENC (cq=28, main10, p010le) | ✅ |
-| Progression temps-réel | ✅ |
-| Calcul vitesse / temps restant | ✅ |
-| Nettoyage nom de fichier (regex) | ✅ |
-| Renommage double-clic | ✅ |
-| Annulation propre | ✅ |
+| Progression temps-réel (vitesse, temps restant) | ✅ |
+| Annulation propre (suppression du fichier partiel) | ✅ |
+| Nettoyage intelligent de noms de fichiers (regex) | ✅ |
+| Renommage double-clic dans la file | ✅ |
 | Dark / Light mode | ✅ |
-| Config persistante JSON | ✅ |
-| Rapport email (SMTP) | ✅ |
+| Config persistante JSON (`%APPDATA%\RenCodeX\`) | ✅ |
+| Notifications Discord (bot + embeds rich) | ✅ |
+| Bot Discord avec commandes à distance | ✅ |
+| Rapport email (SMTP / lettre) | ✅ |
 
-## Notes importantes
+---
 
-- **NVENC uniquement** : codec `hevc_nvenc`. Si votre GPU ne supporte pas NVENC, 
-  remplacez dans `lib.rs` par `libx265` (encodage CPU, plus lent).
-- **Pause/Reprise** : la version Python pausait FFmpeg via CTRL_C puis reprenait 
-  avec `-ss`. Tauri ne supporte pas SIGSTOP sur Windows proprement, 
-  donc la pause annule + redémarre. Un vrai pause peut être implémenté 
-  via `CREATE_SUSPENDED` si nécessaire.
-- **Email** : configurez vos identifiants dans les Settings (à ajouter à la page Settings).
+## Configuration Discord
 
-## Personnalisation FFmpeg
+RenCodeX peut envoyer des notifications Discord via un bot et écouter des commandes à distance.
 
-Dans `src-tauri/src/lib.rs`, la fonction `start_encoding` construit la commande.
-Pour changer les paramètres d'encodage, modifiez :
-```rust
-"-cq".into(), "28".into(),      // Qualité constante (18-35, plus bas = meilleure qualité)
-"-preset".into(), "p5".into(),  // Vitesse encodage NVENC (p1=lent/qualité, p7=rapide)
+**Variables d'environnement (prioritaires sur la config UI) :**
+
+```powershell
+$env:RENCODEX_DISCORD_TOKEN = "Bot_token_ici"
 ```
+
+**Via l'UI Settings :**
+- `discord_bot_token` — token du bot Discord
+- `discord_log_channel_id` — channel pour les notifications (résumés, erreurs, progression)
+- `discord_cmd_channel_id` — channel pour les commandes à distance (bot en écoute)
+
+**Notifications disponibles :**
+- Début d'encodage (total fichiers, taille, paramètres)
+- Fin de chaque fichier (taille avant/après, durée)
+- Erreurs d'encodage
+- Progression périodique (intervalle configurable, désactivé par défaut)
+- Résumé final de session
+
+---
+
+## Configuration Email
+
+Le rapport email est envoyé via SMTP à la fin d'une session d'encodage.
+
+Les identifiants sont passés depuis le frontend lors de l'appel à `send_email_report` (non stockés en clair dans la config principale) :
+
+```json
+{
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "username": "ton@email.com",
+  "password": "app_password",
+  "to": "destinataire@email.com"
+}
+```
+
+---
+
+## Personnalisation de l'encodage
+
+Dans `src-tauri/src/media.rs`, la fonction `start_encoding` construit la commande FFmpeg. Paramètres clés :
+
+```rust
+"-cq".into(), "28".into(),     // Qualité (18–35, plus bas = meilleure qualité)
+"-preset".into(), "p5".into(), // Vitesse NVENC (p1=lent/qualité ↔ p7=rapide)
+```
+
+Pour encoder en CPU (sans GPU NVIDIA), remplacer `hevc_nvenc` par `libx265` dans la commande FFmpeg.
+
+---
+
+## Notes
+
+- **NVENC uniquement par défaut** : le codec utilisé est `hevc_nvenc`. Un GPU NVIDIA Kepler+ est requis. Pour un encodage CPU, substituer `libx265` dans `media.rs`.
+- **Pause/Reprise** : non implémentée nativement (SIGSTOP non supporté proprement sur Windows). L'annulation supprime le fichier de sortie partiel. Une vraie pause via `CREATE_SUSPENDED` est envisageable.
+- **Fichier de config** : stocké dans `%APPDATA%\RenCodeX\config.json`. Aucun credential sensible (token, mot de passe) n'est sauvegardé dans ce fichier — ils sont fournis à chaque session via l'UI ou des variables d'environnement.
