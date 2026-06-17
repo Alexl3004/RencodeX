@@ -2,6 +2,10 @@
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
   import type { AppFile, CleanedName } from "$lib/stores/encoder.svelte";
+  import Edit2Icon from "@iconify-svelte/lucide/edit-2";
+  import XIcon from "@iconify-svelte/lucide/x";
+  import RotateCcwIcon from "@iconify-svelte/lucide/rotate-ccw";
+  import CheckIcon from "@iconify-svelte/lucide/check";
 
   // ── Props ────────────────────────────────────────────────────────────────────
   type Props = {
@@ -92,18 +96,7 @@
   >
     <div class="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] shrink-0">
       <div class="flex items-center gap-2">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          class="text-[var(--color-accent)]"
-        >
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
+        <Edit2Icon height="1em" class="text-[var(--color-accent)]" />
         <span class="text-sm font-medium text-[var(--color-text)]">Renommer le fichier</span>
       </div>
       <button
@@ -111,17 +104,7 @@
         class="text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors p-1"
         title="Fermer (Échap)"
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
+        <XIcon height="1em" />
       </button>
     </div>
 
@@ -150,17 +133,7 @@
               class="text-[10px] text-[var(--color-accent)] hover:text-[var(--color-accent)]/70 transition-colors
                      flex items-center gap-1"
             >
-              <svg
-                width="9"
-                height="9"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.5"
-              >
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 .49-3.47" />
-              </svg>
+              <RotateCcwIcon height="1em" />
               Réinitialiser au nom suggéré
             </button>
           {/if}
@@ -220,16 +193,7 @@
         disabled={!editValue.trim()}
         class="btn btn-primary text-xs disabled:opacity-40"
       >
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
+        <CheckIcon height="1em" />
         Renommer
       </button>
     </div>

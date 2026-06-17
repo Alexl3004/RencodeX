@@ -1,6 +1,9 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { tick } from "svelte";
+  import CheckIcon from "@iconify-svelte/lucide/check";
+  import CopyIcon from "@iconify-svelte/lucide/copy";
+  import Trash2Icon from "@iconify-svelte/lucide/trash-2";
 
   let { onClose }: { onClose?: () => void } = $props();
 
@@ -102,25 +105,16 @@
         class="font-mono text-[10px] transition-colors flex items-center gap-1
                {copied ? 'text-[var(--color-success)]' : 'text-[var(--color-subtext)] hover:text-[var(--color-text)]'}">
         {#if copied}
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+          <CheckIcon height="1em" />
           COPIÉ
         {:else}
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-          </svg>
+          <CopyIcon height="1em" />
           COPY
         {/if}
       </button>
       <button type="button" onclick={() => encoder.clearLogs()}
         class="font-mono text-[10px] text-[var(--color-subtext)] hover:text-[var(--color-danger)] transition-colors flex items-center gap-1">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-          <path d="M10 11v6" /><path d="M14 11v6" />
-        </svg>
+        <Trash2Icon height="1em" />
         CLR
       </button>
       {#if onClose}

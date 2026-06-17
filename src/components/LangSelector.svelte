@@ -1,5 +1,6 @@
 <script lang="ts">
   import { encoder, LANG_ORDER, langName } from "$lib/stores/encoder.svelte";
+  import CheckIcon from "@iconify-svelte/lucide/check";
 
   const { mode }: { mode: "audio" | "sub" } = $props();
 
@@ -50,10 +51,7 @@
           aria-label={isActive ? `Désactiver ${langName(lang)}` : `Activer ${langName(lang)}`}
         >
           {#if isActive}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2.5" class="shrink-0">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+            <CheckIcon height="1em" class="shrink-0" />
           {/if}
           <span class="opacity-70 text-[9px] tracking-wider">{lang.toUpperCase()}</span>
           <span>{langName(lang)}</span>

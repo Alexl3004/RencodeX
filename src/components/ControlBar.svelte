@@ -1,5 +1,7 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
+  import PlayIcon from "@iconify-svelte/lucide/play";
+  import XIcon from '@iconify-svelte/lucide/x';
 
   function handleReset() {
     encoder.resetToDefault();
@@ -20,16 +22,7 @@
       ></span>
       ENCODAGE EN COURS…
     {:else}
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        stroke="none"
-        class="shrink-0"
-      >
-        <polygon points="5 3 19 12 5 21 5 3" />
-      </svg>
+      <PlayIcon height="1em" fill="currentColor" stroke="none" class="shrink-0" />
       LANCER L'ENCODAGE
     {/if}
   </button>
@@ -39,17 +32,7 @@
       onclick={() => encoder.cancelEncoding()}
       class="btn btn-danger font-mono text-[11px] gap-1.5"
     >
-      <svg
-        width="10"
-        height="10"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        aria-hidden="true"
-      >
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-      </svg>
+      <XIcon height="1em" aria-hidden="true" />
       ANNULER
     </button>
   {/if}

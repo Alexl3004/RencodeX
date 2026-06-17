@@ -1,6 +1,9 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatTime, formatSize, gainPct } from "$lib/utils";
+  import FileIcon from "@iconify-svelte/lucide/file";
+  import CheckIcon from "@iconify-svelte/lucide/check";
+  import VideoIcon from "@iconify-svelte/lucide/video";
 
   let p = $derived(encoder.progress);
   let s = $derived(encoder.summary);
@@ -51,10 +54,7 @@
         <div class="space-y-2">
           <div class="flex justify-between items-center">
             <div class="flex items-center gap-2 min-w-0">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--color-subtext)] shrink-0">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-                <polyline points="13 2 13 9 20 9"/>
-              </svg>
+              <FileIcon height="1em" class="text-[var(--color-subtext)] shrink-0" />
               <span class="text-[11px] font-mono text-[var(--color-text)] truncate" title={p.file_name}>
                 {p.file_name}
               </span>
@@ -72,7 +72,7 @@
           
           <!-- Temps restant fichier -->
           <div class="flex items-center justify-between text-[11px]">
-            <span class="text-[var(--color-subtext)]">⏱️ Restant fichier</span>
+            <span class="text-[var(--color-subtext)]">Restant fichier</span>
             <span class="font-mono font-semibold text-[var(--color-text)]">{formatTime(p.remaining_file)}</span>
           </div>
         </div>
@@ -81,7 +81,7 @@
         {#if p.file_total > 1}
           <div class="space-y-2 pt-1 border-t border-[var(--color-border)]">
             <div class="flex justify-between text-[11px]">
-              <span class="text-[var(--color-text)]">📊 Progression globale</span>
+              <span class="text-[var(--color-text)]">Progression globale</span>
               <span class="font-mono text-[var(--color-subtext)]">{totalPercent.toFixed(0)}%</span>
             </div>
             <div class="h-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full overflow-hidden">
@@ -91,7 +91,7 @@
               ></div>
             </div>
             <div class="flex items-center justify-between text-[11px]">
-              <span class="text-[var(--color-subtext)]">⏱️ Restant total</span>
+              <span class="text-[var(--color-subtext)]">Restant total</span>
               <span class="font-mono font-semibold text-[var(--color-accent)]">{formatTime(p.remaining_total)}</span>
             </div>
           </div>
@@ -126,9 +126,7 @@
   {:else if s}
     <!-- Summary -->
     <div class="flex items-center gap-2 px-4 py-2 border-b border-[var(--color-border)] bg-[var(--color-success)]/5 shrink-0">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-[var(--color-success)]">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
+      <CheckIcon height="1em" class="text-[var(--color-success)]" />
       <span class="text-[11px] font-mono text-[var(--color-success)] uppercase tracking-wider">Terminé</span>
     </div>
 
@@ -166,10 +164,7 @@
     <!-- Empty state -->
     <div class="flex-1 flex items-center justify-center p-4">
       <div class="text-center">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="mx-auto mb-2 text-[var(--color-subtext)]/20">
-          <polygon points="22 12 18 9 6 9 2 12 6 15 18 15 22 12"/>
-          <path d="M6 9L6 15"/><path d="M18 9L18 15"/>
-        </svg>
+        <VideoIcon width="40" height="40" class="mx-auto mb-2 text-[var(--color-subtext)]/20" />
         <p class="text-[12px] font-medium text-[var(--color-subtext)]">Prêt à encoder</p>
         <p class="text-[10px] text-[var(--color-subtext2)] mt-1">Ajoutez des fichiers pour commencer</p>
       </div>

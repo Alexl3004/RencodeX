@@ -6,6 +6,9 @@
   } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import RenameModal from "$components/RenameModal.svelte";
+  import BadgeInfoIcon from "@iconify-svelte/lucide/badge-info";
+  import Edit2Icon from "@iconify-svelte/lucide/edit-2";
+  import XIcon from "@iconify-svelte/lucide/x";
 
   let editingFile = $state<AppFile | null>(null);
   let selectedFile = $state<AppFile | null>(null);
@@ -29,18 +32,22 @@
 
   // Déterminer si un fichier est en cours d'encodage
   function isCurrentlyEncoding(file: AppFile): boolean {
-    return file.status === "encoding" && encoder.progress?.file_index === encoder.files.findIndex(f => f.path === file.path);
+    return (
+      file.status === "encoding" &&
+      encoder.progress?.file_index ===
+        encoder.files.findIndex((f) => f.path === file.path)
+    );
   }
 
   // Déterminer si un fichier est en attente (dans la file)
   function isPending(file: AppFile): boolean {
     if (!encoder.encoding) return false;
     if (file.status !== "ready") return false;
-    
+
     const currentIndex = encoder.progress?.file_index;
     if (currentIndex === undefined) return false;
-    
-    const fileIndex = encoder.files.findIndex(f => f.path === file.path);
+
+    const fileIndex = encoder.files.findIndex((f) => f.path === file.path);
     return fileIndex > currentIndex;
   }
 
@@ -80,10 +87,14 @@
   />
 {/if}
 
-<div class="border border-[var(--color-border)] rounded-[2px] overflow-auto h-[30vh]">
+<div
+  class="border border-[var(--color-border)] rounded-[2px] overflow-auto h-[30vh]"
+>
   {#if encoder.files.length === 0}
     <div class="py-10 text-center flex items-center justify-center h-full">
-      <p class="text-[11px] font-mono text-[var(--color-subtext)] uppercase tracking-widest">
+      <p
+        class="text-[11px] font-mono text-[var(--color-subtext)] uppercase tracking-widest"
+      >
         Aucun fichier
       </p>
     </div>
@@ -104,7 +115,11 @@
         {#each encoder.files as file, index (file.path)}
           {@const isCurrentEncoding = isCurrentlyEncoding(file)}
           {@const isFilePending = isPending(file)}
-          <tr class="group transition-colors {isCurrentEncoding ? 'bg-[var(--color-accent)]/5' : ''}">
+          <tr
+            class="group transition-colors {isCurrentEncoding
+              ? 'bg-[var(--color-accent)]/5'
+              : ''}"
+          >
             <!-- Nom de sortie -->
             <td class="max-w-[400px]">
               <div class="flex items-center gap-1.5">
@@ -114,19 +129,7 @@
                   title="Infos"
                   aria-label="Informations fichier"
                 >
-                  <svg
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    aria-hidden="true"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="12" x2="12" y2="16" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                  </svg>
+                  <BadgeInfoIcon height="1em" />
                 </button>
                 <button
                   onclick={() => openRename(file)}
@@ -135,22 +138,7 @@
                   title="Renommer"
                   aria-label="Renommer le fichier"
                 >
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.8"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
-                    />
-                    <path
-                      d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-                    />
-                  </svg>
+                  <Edit2Icon height="1em" />
                 </button>
                 <span
                   class="truncate text-[var(--color-text)] font-mono flex-1 min-w-0"
@@ -192,10 +180,14 @@
             <td class="text-center">
               {#if isCurrentEncoding && encoder.progress}
                 <div class="flex flex-col items-center gap-0.5">
-                  <span class="font-mono text-[10px] text-[var(--color-accent)] font-bold animate-pulse">
+                  <span
+                    class="font-mono text-[10px] text-[var(--color-accent)] font-bold animate-pulse"
+                  >
                     {getStatusLabel(file)}
                   </span>
-                  <span class="font-mono text-[9px] text-[var(--color-subtext)]">
+                  <span
+                    class="font-mono text-[9px] text-[var(--color-subtext)]"
+                  >
                     {Math.round(encoder.progress.percent)}%
                   </span>
                 </div>
@@ -264,18 +256,7 @@
           class="text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors p-1"
           aria-label="Fermer"
         >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            aria-hidden="true"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <XIcon height="1em" aria-hidden="true" />
         </button>
       </div>
       <!-- Body -->
@@ -288,7 +269,7 @@
             {selectedFile.filename}
           </div>
         </div>
-        
+
         <div>
           <div class="section-label mb-1">Fichier de sortie</div>
           <div
@@ -376,7 +357,8 @@
                   <span class="text-[var(--color-accent)]"
                     >{s.codec_type?.toUpperCase()}</span
                   >
-                  <span class="text-[var(--color-subtext)]">{s.codec_name}</span>
+                  <span class="text-[var(--color-subtext)]">{s.codec_name}</span
+                  >
                   {#if s.width && s.height}<span
                       class="text-[var(--color-subtext2)]"
                       >{s.width}×{s.height}</span

@@ -2,6 +2,9 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
+  import ImportIcon from '@iconify-svelte/lucide/import';
+  import FolderIcon from '@iconify-svelte/lucide/folder';
+  import ChevronDownIcon from '@iconify-svelte/lucide/chevron-down';
 
   let dragging = $state(false);
   let scanning = $state(false);
@@ -89,11 +92,7 @@
   <!-- Source -->
   <div class="flex items-center">
     <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
+      <ImportIcon height="1em" />
     </div>
     
     <div class="flex-1 px-3 py-3">
@@ -115,9 +114,7 @@
   <!-- Destination avec historique -->
   <div class="flex items-center relative">
     <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-      </svg>
+      <FolderIcon height="1em" />
     </div>
 
     <div class="flex-1 relative">
@@ -133,9 +130,7 @@
       >
         {encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}
         {#if history.length > 0}
-          <svg class="inline-block ml-1 text-[var(--color-subtext)]" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+          <ChevronDownIcon class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
         {/if}
       </button>
 
