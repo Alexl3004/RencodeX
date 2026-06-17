@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { stats } from "./stats.svelte";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -236,6 +237,7 @@ function createEncoder() {
   async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
     loadEncodingSettings();
+    stats.init();
     log(`Dossier de sortie : ${outputDir}`, "info");
     await listenEvents();
   }
@@ -442,6 +444,7 @@ function createEncoder() {
 
     try {
       summary = await invoke<EncodeSummary>("start_encoding", { jobs });
+      stats.recordSummary(summary);
 
       const ok        = summary.files.filter(f => f.status === "ok").length;
       const errors    = summary.files.filter(f => f.status === "error").length;

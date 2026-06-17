@@ -5,9 +5,11 @@
   import Settings from "$components/Settings.svelte";
   import LogConsole from "$components/LogConsole.svelte";
   import EncodingSettings from "$components/EncodingSettings.svelte";
+  import Dashboard from "$components/Dashboard.svelte";
 
   let showLogs = $state(false);
   let showSettings = $state(false);
+  let showDashboard = $state(false);
 
   let totalSize  = $derived(encoder.files.reduce((acc, f) => acc + (f.size_mb ?? 0), 0));
   let readyCount = $derived(encoder.files.filter(f => f.status === "ready").length);
@@ -88,6 +90,17 @@
       ENCODE
     </button>
 
+    <!-- Bouton Dashboard -->
+    <button type="button" onclick={() => (showDashboard = !showDashboard)} class="btn btn-ghost px-2 py-1 text-[11px] gap-1.5 font-mono"
+            title="Dashboard des statistiques">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="20" x2="18" y2="10"/>
+        <line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      DASHBOARD
+    </button>
+
     <!-- Bouton thème -->
     <button type="button" onclick={() => theme.toggle()} class="btn btn-ghost px-2 py-1 text-[11px] gap-1.5 font-mono"
             title="Basculer thème">
@@ -143,6 +156,23 @@
   >
     <div class="w-[600px] max-w-[90vw] max-h-[80vh]">
       <EncodingSettings onClose={() => (showSettings = false)} />
+    </div>
+  </div>
+{/if}
+
+<!-- Overlay Dashboard -->
+{#if showDashboard}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Dashboard des statistiques"
+    onclick={(e) => e.target === e.currentTarget && (showDashboard = false)}
+    onkeydown={(e) => e.key === 'Escape' && (showDashboard = false)}
+    tabindex="-1"
+  >
+    <div class="w-[600px] max-w-[90vw] max-h-[80vh]">
+      <Dashboard onClose={() => (showDashboard = false)} />
     </div>
   </div>
 {/if}
