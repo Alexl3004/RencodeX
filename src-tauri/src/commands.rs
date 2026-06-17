@@ -7,11 +7,11 @@ use std::os::windows::process::CommandExt;
 use std::time::Duration;
 
 use crate::models::{
-    AppConfig, CleanedName, EncodeJob, EncodeSummary, EmailConfig, FileAnalysis,
+    AppConfig, CleanedName, EncodeJob, EncodeSummary, EmailConfig, FileAnalysis, Stats,
 };
 use crate::state::lock_encoder;
 use crate::utils::{
-    config_path, delete_partial_output, filename_of, resolve_config,
+    config_path, delete_partial_output, filename_of, resolve_config, stats_path,
 };
 use crate::filename::clean_filename as clean_filename_impl;
 use crate::media::{analyze_file as analyze_file_impl, start_encoding as start_encoding_impl};
@@ -40,6 +40,33 @@ pub fn save_config(config: AppConfig) -> Result<(), String> {
     let path = config_path();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    std::fs::write(path, json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn load_stats() -> Stats {
+    match std::fs::read_to_string(stats_path()) {
+        Ok(data) => match serde_json::from_str(&data) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[stats] Erreur parsing stats.json : {}", e);
+                Stats::default()
+            }
+        },
+        Err(e) => {
+            eprintln!("[stats] Erreur lecture stats.json : {}", e);
+            Stats::default()
+        }
+    }
+}
+
+#[tauri::command]
+pub fn save_stats(stats: Stats) -> Result<(), String> {
+    let path = stats_path();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let json = serde_json::to_string_pretty(&stats).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
 

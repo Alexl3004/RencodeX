@@ -51,6 +51,8 @@ fn main() {
             commands::send_discord_progress_notification,
             commands::scan_folder,
             commands::send_email_report,
+            commands::load_stats,
+            commands::save_stats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -128,3 +128,12 @@ pub struct EmailConfig {
     pub password: String,
     pub to: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Stats {
+    pub total_files: u32,
+    pub total_original_mb: f64,
+    pub total_encoded_mb: f64,
+    pub sum_ratio_pct: f64,
+    pub last_updated: Option<String>,
+}

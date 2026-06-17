@@ -26,6 +26,13 @@ pub fn config_path() -> PathBuf {
         .join("config.json")
 }
 
+pub fn stats_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("RenCodeX")
+        .join("stats.json")
+}
+
 #[allow(dead_code)]
 pub fn delete_partial_output(path: &str) -> bool {
     let p = Path::new(path);

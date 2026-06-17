@@ -237,7 +237,7 @@ function createEncoder() {
   async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
     loadEncodingSettings();
-    stats.init();
+    await stats.init();
     log(`Dossier de sortie : ${outputDir}`, "info");
     await listenEvents();
   }

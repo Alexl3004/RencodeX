@@ -1,25 +1,21 @@
-// Svelte 5 runes-based store — statistiques globales d'encodage
-// Les chiffres sont cumulés au fil des sessions et persistés en localStorage.
-
+import { invoke } from "@tauri-apps/api/core";
 import type { EncodeSummary } from "./encoder.svelte";
 
-const STORAGE_KEY = "rencodex-stats";
-
 interface RawStats {
-  totalFiles:       number; // nb de fichiers encodés avec succès
-  totalOriginalMb:  number; // somme des tailles d'entrée
-  totalEncodedMb:   number; // somme des tailles de sortie
-  sumRatioPct:      number; // somme des ratios de compression individuels (pour la moyenne)
-  lastUpdated:      string | null;
+  total_files:        number; // nb de fichiers encodés avec succès
+  total_original_mb:  number; // somme des tailles d'entrée
+  total_encoded_mb:   number; // somme des tailles de sortie
+  sum_ratio_pct:       number; // somme des ratios de compression individuels (pour la moyenne)
+  last_updated:        string | null;
 }
 
 function emptyStats(): RawStats {
   return {
-    totalFiles: 0,
-    totalOriginalMb: 0,
-    totalEncodedMb: 0,
-    sumRatioPct: 0,
-    lastUpdated: null,
+    total_files: 0,
+    total_original_mb: 0,
+    total_encoded_mb: 0,
+    sum_ratio_pct: 0,
+    last_updated: null,
   };
 }
 
@@ -30,31 +26,37 @@ function createStats() {
   let sumRatioPct      = $state(0);
   let lastUpdated      = $state<string | null>(null);
 
-  function persist() {
-    if (typeof localStorage === "undefined") return;
-    const raw: RawStats = { totalFiles, totalOriginalMb, totalEncodedMb, sumRatioPct, lastUpdated };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(raw));
+  async function persist() {
+    const raw: RawStats = {
+      total_files: totalFiles,
+      total_original_mb: totalOriginalMb,
+      total_encoded_mb: totalEncodedMb,
+      sum_ratio_pct: sumRatioPct,
+      last_updated: lastUpdated,
+    };
+    try {
+      await invoke("save_stats", { stats: raw });
+    } catch (e) {
+      console.error("Impossible de sauvegarder les statistiques :", e);
+    }
   }
 
-  function init() {
-    if (typeof localStorage === "undefined") return;
+  async function init() {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) return;
-      const raw = JSON.parse(saved) as RawStats;
-      totalFiles      = raw.totalFiles      ?? 0;
-      totalOriginalMb = raw.totalOriginalMb ?? 0;
-      totalEncodedMb  = raw.totalEncodedMb  ?? 0;
-      sumRatioPct      = raw.sumRatioPct     ?? 0;
-      lastUpdated      = raw.lastUpdated     ?? null;
-    } catch {
-      // ignore corrupted storage
+      const raw = await invoke<RawStats>("load_stats");
+      totalFiles      = raw.total_files       ?? 0;
+      totalOriginalMb = raw.total_original_mb ?? 0;
+      totalEncodedMb  = raw.total_encoded_mb  ?? 0;
+      sumRatioPct      = raw.sum_ratio_pct     ?? 0;
+      lastUpdated      = raw.last_updated      ?? null;
+    } catch (e) {
+      console.error("Impossible de charger les statistiques :", e);
     }
   }
 
   // Enregistre les résultats d'une session d'encodage terminée.
   // Seuls les fichiers réussis ("ok") comptent dans les stats.
-  function recordSummary(summary: EncodeSummary) {
+  async function recordSummary(summary: EncodeSummary) {
     const okFiles = summary.files.filter(f => f.status === "ok" && f.original_mb > 0);
     if (okFiles.length === 0) return;
 
@@ -65,17 +67,17 @@ function createStats() {
       sumRatioPct += ((f.original_mb - f.encoded_mb) / f.original_mb) * 100;
     }
     lastUpdated = new Date().toISOString();
-    persist();
+    await persist();
   }
 
-  function reset() {
+  async function reset() {
     const e = emptyStats();
-    totalFiles      = e.totalFiles;
-    totalOriginalMb = e.totalOriginalMb;
-    totalEncodedMb  = e.totalEncodedMb;
-    sumRatioPct      = e.sumRatioPct;
-    lastUpdated      = e.lastUpdated;
-    persist();
+    totalFiles      = e.total_files;
+    totalOriginalMb = e.total_original_mb;
+    totalEncodedMb  = e.total_encoded_mb;
+    sumRatioPct      = e.sum_ratio_pct;
+    lastUpdated      = e.last_updated;
+    await persist();
   }
 
   return {
