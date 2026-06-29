@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { encoder } from "$lib/stores/encoder.svelte";
+  import { encoder, SEASON_EPISODE_FORMATS, formatSeasonEpisode } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import { X } from '@lucide/svelte';
 
   let { onClose }: { onClose?: () => void } = $props();
   let crf    = $derived(encoder.crf);
   let preset = $derived(encoder.preset);
+  let seFormat = $derived(encoder.seasonEpisodeFormat);
 
   let totalOriginalMb = $derived(
     encoder.files.reduce((s: number, f: any) => s + (f.size_mb || 0), 0),
@@ -132,6 +133,34 @@
           {/if}
         </div>
         <div class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">{presetInfo[preset].desc}</div>
+      </div>
+    </div>
+
+    <!-- Format Saison/Épisode -->
+    <div class="space-y-3 pt-1" style="border-top: 1px solid var(--color-border);">
+      <div class="pt-2">
+        <div class="section-label">Format saison/épisode</div>
+        <p class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">Affichage dans le nom de sortie</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-1.5">
+        {#each SEASON_EPISODE_FORMATS as f}
+          <button
+            type="button"
+            onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
+            class="font-mono text-[11px] px-2 py-1.5 rounded-[2px] transition-all preset-btn"
+            class:preset-btn--active={seFormat === f.value}
+          >
+            {f.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="px-3 py-2.5 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+        <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
+        <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
+          Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P BluRay H265 10bit AAC
+        </span>
       </div>
     </div>
 

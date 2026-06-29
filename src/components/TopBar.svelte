@@ -11,7 +11,7 @@
     ChartColumnDecreasing,
     Sun,
     Moon,
-    SlidersVertical,
+    Wrench,
     SlidersHorizontal,
     Logs,
   } from "@lucide/svelte";
@@ -109,8 +109,6 @@
   <!-- Right: icon buttons -->
   <div class="flex items-center gap-0.5">
     <div class="flex items-center">
-      <LangPopover />
-
       <!-- Logs -->
       <div class="relative inline-flex">
         <button
@@ -189,6 +187,7 @@
 
     <!-- Config -->
     <div class="flex items-center">
+    <LangPopover />
       <!-- Paramètres encodage -->
       <div class="relative inline-flex">
         <button
@@ -220,23 +219,21 @@
           </div>
         {/if}
       </div>
-
-      <!-- Paramètres app -->
-      <button
-        type="button"
-        onclick={() => (showAppSettings = !showAppSettings)}
-        class="topbar-btn {showAppSettings ? 'topbar-btn--active' : ''}"
-        aria-label="Paramètres de l'application"
-        aria-pressed={showAppSettings}
-        title="Paramètres (FFmpeg, Discord…)"
-      >
-        <SlidersVertical class="w-4 h-4" />
-      </button>
-      <Settings bind:open={showAppSettings} />
     </div>
 
     <div class="sep h-4 mx-1.5"></div>
-
+    <!-- Paramètres app -->
+    <button
+      type="button"
+      onclick={() => (showAppSettings = !showAppSettings)}
+      class="topbar-btn {showAppSettings ? 'topbar-btn--active' : ''}"
+      aria-label="Paramètres de l'application"
+      aria-pressed={showAppSettings}
+      title="Paramètres (FFmpeg, Discord…)"
+    >
+      <Wrench class="w-4 h-4" />
+    </button>
+    <Settings bind:open={showAppSettings} />
     <!-- Thème -->
     <button
       type="button"
@@ -302,7 +299,7 @@
     position: fixed;
     inset: 0;
     z-index: 9970;
-    background: rgba(0, 0, 0, 0.10);
+    background: rgba(0, 0, 0, 0.1);
     animation: fade-in 0.15s ease;
   }
 

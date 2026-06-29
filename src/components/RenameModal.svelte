@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { encoder } from "$lib/stores/encoder.svelte";
+  import { encoder, buildOutputName, computeTag } from "$lib/stores/encoder.svelte";
   import type { AppFile, CleanedName} from "$lib/stores/encoder.svelte";
   import { Loader, Pencil, RefreshCw, CircleCheck  } from '@lucide/svelte';
 
@@ -26,6 +26,15 @@
   let initAudioLangs = $derived(audio_langs.filter((l: string) => encoder.selAudio.has(l)));
   let initSubLangs   = $derived(sub_langs.filter((l: string) => encoder.selSubs.has(l)));
 
+  // Nom suggéré recalculé localement (comme le reste de l'app) pour respecter
+  // le format saison/épisode choisi par l'utilisateur — `cleaned.suggested`
+  // (renvoyé par le backend) utilise toujours le format "S01E01" figé.
+  let suggestedName = $derived.by(() => {
+    if (!cleaned) return "";
+    const tag = computeTag(audio_langs, sub_langs, encoder.selAudio, encoder.selSubs);
+    return buildOutputName(cleaned, tag, encoder.seasonEpisodeFormat);
+  });
+
   $effect(() => {
     editValue = file.output_name;
   });
@@ -39,7 +48,8 @@
     })
       .then((r) => {
         cleaned = r;
-        if (r?.suggested) editValue = r.suggested;
+        const tag = computeTag(audio_langs, sub_langs, encoder.selAudio, encoder.selSubs);
+        if (r) editValue = buildOutputName(r, tag, encoder.seasonEpisodeFormat);
       })
       .catch(() => {})
       .finally(() => { loading = false; });
@@ -110,9 +120,9 @@
       <div class="space-y-1.5">
         <div class="flex items-center justify-between">
           <div class="section-label">Nouveau nom</div>
-          {#if cleaned?.suggested && editValue !== cleaned.suggested}
+          {#if suggestedName && editValue !== suggestedName}
             <button
-              onclick={() => applyTag(cleaned!.suggested)}
+              onclick={() => applyTag(suggestedName)}
               class="flex items-center gap-1 text-[10px] transition-colors"
               style="color: var(--color-accent);"
             >
@@ -137,16 +147,16 @@
           <Loader size="4" />
           Analyse du nom en cours…
         </div>
-      {:else if cleaned?.suggested}
+      {:else if suggestedName}
         <button
-          onclick={() => applyTag(cleaned!.suggested)}
+          onclick={() => applyTag(suggestedName)}
           class="w-full text-left text-[11px] px-3 py-2 rounded-[2px] font-mono transition-colors"
-          style="border: 1px solid {editValue === cleaned.suggested ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}; background: {editValue === cleaned.suggested ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-surface)'}; color: {editValue === cleaned.suggested ? 'var(--color-accent)' : 'var(--color-subtext)'};"
+          style="border: 1px solid {editValue === suggestedName ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}; background: {editValue === suggestedName ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-surface)'}; color: {editValue === suggestedName ? 'var(--color-accent)' : 'var(--color-subtext)'};"
           title="Appliquer le nom suggéré"
         >
           <span class="block mb-0.5 text-[9px]" style="color: var(--color-subtext2);">Nom suggéré</span>
-          {cleaned.suggested}
-          {#if editValue === cleaned.suggested}
+          {suggestedName}
+          {#if editValue === suggestedName}
             <span class="ml-2 text-[9px]" style="color: var(--color-success);">✓ appliqué</span>
           {/if}
         </button>

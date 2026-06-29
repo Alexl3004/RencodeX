@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+mod tests;
 mod models;
 mod state;
 mod regex;

@@ -95,6 +95,58 @@ export interface AppFile {
   cleaned?:      CleanedName;
 }
 
+// ─── Format Saison/Épisode ──────────────────────────────────────────────────
+// Le backend renvoie toujours `season_episode` au format canonique
+// "S01E01" (ou "S01E01-E02" pour le multi-épisodes, ou "E07" pour un épisode
+// seul sans saison, ou des tags type "OVA 02" / "SPECIAL"). On reformate
+// côté client selon la préférence choisie par l'utilisateur, sans toucher
+// au backend.
+
+export type SeasonEpisodeFormat = "S01E01" | "S1E01" | "S1 E01" | "1x01";
+
+export const SEASON_EPISODE_FORMATS: { value: SeasonEpisodeFormat; label: string; example: string }[] = [
+  { value: "S01E01", label: "S01E01",  example: "S01E01" },
+  { value: "S1E01",  label: "S1E01",   example: "S1E01" },
+  { value: "S1 E01", label: "S1 E01",  example: "S1 E01" },
+  { value: "1x01",   label: "1x01",    example: "1x01" },
+];
+
+const SE_RANGE_RE = /^S(\d{2,})E(\d{2,})(?:-E(\d{2,}))?$/;
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+/**
+ * Reformate une chaîne `season_episode` déjà normalisée par le backend
+ * (ex: "S01E01", "S02E03-E04") selon le format d'affichage choisi.
+ * Les valeurs qui ne correspondent pas au motif SxxExx (ex: "E07", "OVA 02",
+ * "SPECIAL") sont laissées inchangées, car elles ne contiennent pas de
+ * numéro de saison à reformater.
+ */
+export function formatSeasonEpisode(raw: string, format: SeasonEpisodeFormat): string {
+  if (!raw) return raw;
+
+  const m = raw.match(SE_RANGE_RE);
+  if (!m) return raw;
+
+  const season = parseInt(m[1], 10);
+  const ep1    = parseInt(m[2], 10);
+  const ep2    = m[3] !== undefined ? parseInt(m[3], 10) : null;
+
+  switch (format) {
+    case "S1E01":
+      return ep2 !== null ? `S${season}E${pad2(ep1)}-E${pad2(ep2)}` : `S${season}E${pad2(ep1)}`;
+    case "S1 E01":
+      return ep2 !== null ? `S${season} E${pad2(ep1)}-E${pad2(ep2)}` : `S${season} E${pad2(ep1)}`;
+    case "1x01":
+      return ep2 !== null ? `${season}x${pad2(ep1)}-${pad2(ep2)}` : `${season}x${pad2(ep1)}`;
+    case "S01E01":
+    default:
+      return raw;
+  }
+}
+
 // ─── Lang helpers ─────────────────────────────────────────────────────────────
 
 export const LANG_NAMES: Record<string, string> = {
@@ -139,10 +191,14 @@ export function computeTag(
   }
 }
 
-export function buildOutputName(cleaned: CleanedName, tag: string): string {
+export function buildOutputName(
+  cleaned: CleanedName,
+  tag: string,
+  seFormat: SeasonEpisodeFormat = "S01E01",
+): string {
   return [
     cleaned.title,
-    cleaned.season_episode,
+    formatSeasonEpisode(cleaned.season_episode, seFormat),
     tag,
     cleaned.resolution,
     cleaned.provider,
@@ -151,6 +207,30 @@ export function buildOutputName(cleaned: CleanedName, tag: string): string {
     "10bit",
     "AAC",
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Recalcule le nom d'affichage d'un fichier en appliquant le format
+ * saison/épisode courant. À utiliser dans les templates à la place de
+ * `file.output_name` pour que le rendu soit toujours réactif au format choisi.
+ *
+ * Si le fichier a été renommé manuellement (pas de `cleaned`), on applique
+ * quand même une substitution de pattern sur le nom stocké pour couvrir
+ * les cas courants.
+ */
+export function applySeFormat(file: AppFile, seFormat: SeasonEpisodeFormat): string {
+  if (file.cleaned) {
+    const tag = file.output_name.match(/\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/)?.[1] ?? "";
+    return buildOutputName(file.cleaned, tag, seFormat);
+  }
+  // Renommage manuel : substitution directe du pattern SxxExx dans le nom stocké
+  return file.output_name.replace(
+    /S(\d{1,2})E(\d{2,})(?:-E(\d{2,}))?/gi,
+    (_, s, e1, e2) => {
+      const raw = e2 ? `S${s.padStart(2,"0")}E${e1}-E${e2}` : `S${s.padStart(2,"0")}E${e1}`;
+      return formatSeasonEpisode(raw, seFormat);
+    }
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -212,6 +292,7 @@ function createEncoder() {
 
   let crf    = $state(28);
   let preset = $state("p5");
+  let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
 
   let _unlisten: UnlistenFn[] = [];
 
@@ -225,11 +306,21 @@ function createEncoder() {
     localStorage.setItem("rencodex-preset", value);
   }
 
+  function setSeasonEpisodeFormat(value: SeasonEpisodeFormat) {
+    seasonEpisodeFormat = value;
+    localStorage.setItem("rencodex-se-format", value);
+    refreshOutputNames();
+  }
+
   function loadEncodingSettings() {
-    const savedCrf    = localStorage.getItem("rencodex-crf");
-    const savedPreset = localStorage.getItem("rencodex-preset");
+    const savedCrf      = localStorage.getItem("rencodex-crf");
+    const savedPreset   = localStorage.getItem("rencodex-preset");
+    const savedSeFormat = localStorage.getItem("rencodex-se-format") as SeasonEpisodeFormat | null;
     if (savedCrf)    crf    = parseInt(savedCrf);
     if (savedPreset) preset = savedPreset;
+    if (savedSeFormat && SEASON_EPISODE_FORMATS.some(f => f.value === savedSeFormat)) {
+      seasonEpisodeFormat = savedSeFormat;
+    }
   }
 
   async function init() {
@@ -319,7 +410,7 @@ function createEncoder() {
         });
 
         const tag     = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
-        const outName = buildOutputName(cleaned, tag);
+        const outName = buildOutputName(cleaned, tag, seasonEpisodeFormat);
 
         const updated: AppFile = {
           ...files[idx],
@@ -414,7 +505,7 @@ function createEncoder() {
 
         return {
           input_path:              f.path,
-          output_path:             joinPath(outputDir, `${f.output_name}${f.output_ext}`),
+          output_path:             joinPath(outputDir, `${applySeFormat(f, seasonEpisodeFormat)}${f.output_ext}`),
           audio_langs:             [...selAudio],
           sub_langs:               [...selSubs],
           audio_overrides:         audioOverrides[f.path] ?? {},
@@ -499,7 +590,7 @@ function createEncoder() {
     files = files.map(f => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done") return f;
       const tag  = computeTag(f.audio_langs, f.sub_langs, selAudio, selSubs);
-      const name = buildOutputName(f.cleaned, tag);
+      const name = buildOutputName(f.cleaned, tag, seasonEpisodeFormat);
       return { ...f, output_name: name };
     });
   }
@@ -569,6 +660,7 @@ function createEncoder() {
     selSubs             = new Set(["fre"]);
     crf                 = 28;
     preset              = "p5";
+    seasonEpisodeFormat = "S01E01";
     audioOverrides      = {};
     subOverrides        = {};
     globalCodecOverride = {};
@@ -577,6 +669,7 @@ function createEncoder() {
 
     localStorage.setItem("rencodex-crf",    "28");
     localStorage.setItem("rencodex-preset", "p5");
+    localStorage.setItem("rencodex-se-format", "S01E01");
 
     logs = [];
     log("Interface réinitialisée aux paramètres par défaut", "info");
@@ -602,10 +695,16 @@ function createEncoder() {
     get logs()                { return logs; },
     get crf()                 { return crf; },
     get preset()              { return preset; },
+    get seasonEpisodeFormat() { return seasonEpisodeFormat; },
     get forceUpdateCounter()  { return forceUpdateCounter; },
     get globalCodecOverride() { return globalCodecOverride; },
+    /** Retourne le nom d'affichage en appliquant le format SE courant en temps réel. */
+    getDisplayName(file: AppFile): string {
+      return applySeFormat(file, seasonEpisodeFormat);
+    },
     setCrf,
     setPreset,
+    setSeasonEpisodeFormat,
     init,
     addFiles,
     removeFile,

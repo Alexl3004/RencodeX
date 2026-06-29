@@ -6,7 +6,7 @@
   } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import RenameModal from "$components/RenameModal.svelte";  
-  import { Info, Pencil, X } from '@lucide/svelte';
+  import { Pencil, X } from '@lucide/svelte';
 
 
   let editingFile = $state<AppFile | null>(null);
@@ -210,39 +210,45 @@
     </div>
   {:else}
     <table class="w-full text-[11px] file-table">
+      <colgroup>
+        <col class="col-name" />
+        <col style="width: 76px;" />
+        <col style="width: 72px;" />
+        <col style="width: 90px;" />
+        <col style="width: 72px;" />
+        <col style="width: 80px;" />
+        <col style="width: 36px;" />
+      </colgroup>
       <thead class="sticky top-0 z-10" style="background: var(--color-surface);">
         <tr>
-          <th class="text-left w-[400px]">Fichier de sortie</th>
-          <th class="text-right w-20">Taille</th>
-          <th class="text-center w-24">Audio</th>
-          <th class="text-center w-24">Sous-titres</th>
-          <th class="text-right w-24">Temps</th>
-          <th class="text-center w-24">Statut</th>
-          <th class="w-16"></th>
+          <th class="text-left">Fichier de sortie</th>
+          <th class="text-right">Taille</th>
+          <th class="text-center">Audio</th>
+          <th class="text-center">Sous-titres</th>
+          <th class="text-right">Temps</th>
+          <th class="text-center">Statut</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {#each encoder.files as file (file.path)}
           {@const isCurrentEncoding = isCurrentlyEncoding(file)}
           {@const isFilePending = isPending(file)}
-          <tr class="group transition-colors {isCurrentEncoding ? 'row-encoding' : ''}">
+          {@const canRename = !encoder.encoding && file.status !== 'analysing'}
+          <tr
+            class="group transition-colors {isCurrentEncoding ? 'row-encoding' : ''} row-clickable"
+            onclick={(e) => {
+              if ((e.target as HTMLElement).closest('button')) return;
+              showFileDetails(file);
+            }}
+            title="Cliquer pour voir les infos"
+          >
             <!-- Nom -->
-            <td class="max-w-[400px]">
+            <td class="td-name">
               <div class="flex items-center gap-1.5">
                 <button
-                  onclick={() => showFileDetails(file)}
-                  class="shrink-0 transition-colors"
-                  style="color: var(--color-subtext);"
-                  title="Infos"
-                  aria-label="Informations fichier"
-                  onmouseenter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)'}
-                  onmouseleave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-subtext)'}
-                >
-                  <Info class="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onclick={() => openRename(file)}
-                  disabled={encoder.encoding}
+                  onclick={(e) => { e.stopPropagation(); if (canRename) openRename(file); }}
+                  disabled={!canRename}
                   class="shrink-0 transition-colors disabled:opacity-30"
                   style="color: var(--color-subtext);"
                   title="Renommer"
@@ -315,7 +321,7 @@
               {/if}
             </td>
             <!-- Suppr -->
-            <td class="text-center">
+            <td class="col-delete">
               <button
                 class="row-delete-btn opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[10px] disabled:hidden"
                 onclick={() => encoder.removeFile(file.path)}
@@ -334,11 +340,41 @@
 </div>
 
 <style>
+  .file-table {
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  .col-name {
+    /* Prend tout l'espace restant après les colonnes fixes */
+    width: auto;
+    min-width: 160px;
+  }
+
+  .td-name {
+    max-width: 0; /* force le td à respecter la largeur du colgroup en table-fixed */
+    overflow: hidden;
+  }
+
   .row-encoding td {
     background: color-mix(in srgb, var(--color-accent) 5%, transparent);
   }
 
-  /* Hauteur de ligne fixe : évite qu'une ligne avec 20 pistes audio explose */
+  .row-clickable {
+    cursor: pointer;
+  }
+  .row-clickable:hover td {
+    background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  }
+
+  /* Colonne suppression : toujours réservée, bouton visible au hover */
+  .col-delete {
+    width: 36px;
+    text-align: center;
+    padding: 0 4px;
+  }
+
+  /* Hauteur de ligne fixe */
   tbody tr {
     height: 34px;
     max-height: 34px;

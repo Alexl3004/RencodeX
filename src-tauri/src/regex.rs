@@ -1,11 +1,12 @@
 //! Expressions régulières pré-compilées pour l'analyse de noms de fichiers
 
-pub use regex::Regex;  // Ajout important - exporter Regex publiquement
-
+pub use regex::Regex;
 use once_cell::sync::Lazy;
-use regex::Regex as InnerRegex;  // Renommer pour éviter les conflits
+use regex::Regex as InnerRegex;
 
 // ── Patterns saison/épisode ───────────────────────────────────────────────
+
+/// S01E01 ou S01E01E02 (multi-épisodes)
 pub static S_E: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)[Ss](\d{1,2})[\.\- ]?[Ee](\d{2,})").unwrap()
 );
@@ -21,6 +22,12 @@ pub static SAISON_EP: Lazy<InnerRegex> = Lazy::new(||
 pub static E_LONG: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\bE(\d{2,})\b").unwrap()
 );
+/// Format "S3 - 01" ou "S3 – 01" (saison sans padding + tiret + épisode)
+/// Typique des releases anime fansub : "[Group] Show S3 - 01 [...]"
+pub static S_DASH_EP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bS(\d{1,2})\s*[-–]\s*(\d{2,3})\b").unwrap()
+);
+/// Numéro isolé en fin de titre (ex: " - 12" pour l'épisode 12)
 pub static EP_TRAIL: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)[-\s](\d{1,4})\s*$").unwrap()
 );
@@ -29,56 +36,106 @@ pub static OVA_SPECIAL: Lazy<InnerRegex> = Lazy::new(||
 );
 
 // ── Résolution ────────────────────────────────────────────────────────────
+
+/// Mots-clés standards de résolution (insensible à la casse)
 pub static RESOLUTION: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\b(2160p|4K|UHD|1080p|FHD|720p|HD|480p|SD)\b").unwrap()
 );
+/// Dimensions numériques ex: 1920x1080
 pub static RESOLUTION_NUM: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)(\d{3,4})x(\d{3,4})").unwrap()
 );
 
 // ── Sources vidéo ─────────────────────────────────────────────────────────
-pub static SRC_WEBDL: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bWEB-DL\b").unwrap());
-pub static SRC_WEBRIP: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bWEBRip\b").unwrap());
-pub static SRC_BLURAY: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bBluRay\b").unwrap());
-pub static SRC_BDRIP: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bBDRip\b").unwrap());
-pub static SRC_BRRIP: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bBRRip\b").unwrap());
-pub static SRC_HDTV: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bHDTV\b").unwrap());
-pub static SRC_DVDRIP: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bDVDRip\b").unwrap());
-pub static SRC_HDRIP: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bHDRip\b").unwrap());
-pub static SRC_WEB: Lazy<InnerRegex> = Lazy::new(|| InnerRegex::new(r"(?i)\bWEB\b").unwrap());
+// IMPORTANT : SRC_WEB doit être testé EN DERNIER (score le plus bas) car
+// "\bWEB\b" est très générique et pourrait consommer des titres contenant "Web".
+
+pub static SRC_WEBDL: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bWEB[-\s]?DL\b").unwrap()     // Couvre WEB-DL et WEBDL
+);
+pub static SRC_WEBRIP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bWEB[-\s]?Rip\b").unwrap()    // Couvre WEBRip et WEB-Rip
+);
+pub static SRC_BLURAY: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bBlu[-\s]?Ray\b").unwrap()    // Couvre BluRay, Blu-Ray, Blu Ray
+);
+pub static SRC_BDRIP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bBD[-\s]?Rip\b").unwrap()
+);
+pub static SRC_BRRIP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bBR[-\s]?Rip\b").unwrap()
+);
+/// "BD" seul en tant que source (= BluRay) — Score faible, testé après
+/// SRC_BDRIP/SRC_BLURAY pour éviter de tronquer "BDRip" ou de matcher
+/// dans des tokens type "BDxxx". On exige des bornes espace/début/fin.
+pub static SRC_BD: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)(?:^|[\s._\-\[\(])BD(?:[\s._\-\]\)]|$)").unwrap()
+);
+pub static SRC_HDTV: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bHDTV\b").unwrap()
+);
+pub static SRC_DVDRIP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bDVD[-\s]?Rip\b").unwrap()
+);
+pub static SRC_HDRIP: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)\bHD[-\s]?Rip\b").unwrap()
+);
+/// "WEB" seul en tant que source — Score faible, testé en dernier dans detect_source.
+/// On matche " WEB " ou "^WEB " ou " WEB$" pour éviter "Webmaster", "WEBDL", etc.
+/// La crate `regex` de Rust ne supporte pas les lookahead/lookbehind, donc on
+/// contrôle le contexte via des espaces/début-fin de chaîne.
+pub static SRC_WEB: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)(?:^|\s)WEB(?:\s|$)").unwrap()
+);
 
 // ── HDR ───────────────────────────────────────────────────────────────────
+
+/// Tous les formats HDR courants, y compris Dolby Vision (DV/DoVi)
 pub static HDR: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\b(HDR10\+|HDR10|HDR|DV|DoVi|Dolby[.\s]?Vision|HLG|SDR)\b").unwrap()
+    InnerRegex::new(r"(?i)\b(HDR10\+|HDR10|HDR|DV|DoVi|Dolby[.\s]?Vision|HLG|SDR)(?:[^A-Za-z0-9]|$)").unwrap()
 );
 
 // ── Édition spéciale ─────────────────────────────────────────────────────
+
 pub static EDITION: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\b(Extended(?:[.\s]Cut)?|Director[s']?(?:[.\s]Cut)?|IMAX|Theatrical|Unrated|REMASTERED)\b").unwrap()
+    InnerRegex::new(
+        r"(?i)\b(Extended(?:[.\s]Cut)?|Director[s']?(?:[.\s]Cut)?|IMAX|Theatrical|Unrated|REMASTERED|Criterion|Anniversary(?:[.\s]Edition)?)\b"
+    ).unwrap()
 );
 
 // ── Année ────────────────────────────────────────────────────────────────
+// FIX : couverture étendue jusqu'à 2099 (au lieu de 2029 dans l'original)
+// Exige des word-boundaries pour éviter de matcher dans 1920x1080 etc.
 pub static YEAR: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"\b(19[0-9]{2}|20[0-2][0-9])\b").unwrap()
+    InnerRegex::new(r"\b(19[0-9]{2}|20[0-9]{2})\b").unwrap()
 );
 
 // ── Fournisseurs de streaming ─────────────────────────────────────────────
+
+/// Identifiants connus des plateformes de streaming (sigles)
 pub static PROVIDER: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\b(ADN|WKN|AMZN|NF|CR|DSNP|DNSP|HMAX|PCOK|ATVP|SHO|STAN|BCORE|HULU|PMTP|TVNZ|CRAV|TVING|WOWOW|ABEMA|HIDIVE)\b").unwrap()
+    InnerRegex::new(
+        r"(?i)\b(ADN|WKN|AMZN|NF|CR|DSNP|DNSP|HMAX|PCOK|ATVP|SHO|STAN|BCORE|HULU|PMTP|TVNZ|CRAV|TVING|WOWOW|ABEMA|HIDIVE|DRTV|RTBF|ARTE)\b"
+    ).unwrap()
 );
 
 // ── Codecs audio ─────────────────────────────────────────────────────────
+
+/// AAC avec éventuellement canal (ex: AAC 2.0, AAC5.1)
 pub static AUDIO_CODEC_NUM: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\bAAC[\s._]?\d+(?:[.\s]\d+)?").unwrap()
 );
+/// Dolby Digital (DD/DDP/DD+) avec éventuel canal
 pub static AUDIO_DD: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\bDDP?[\s._]?\d+(?:[.\s]\d+)?|\bDDP?\+").unwrap()
 );
+/// DTS et ses variantes (DTS-HD, DTS-MA, DTS:X)
 pub static AUDIO_DTS: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\bDTS(?:[-\s]?(?:HD|MA|X))?\b").unwrap()
+    InnerRegex::new(r"(?i)\bDTS(?:[-:\s]?(?:HD|MA|X))?\b").unwrap()
 );
 
-// ── H.264 / H.265 ────────────────────────────────────────────────────────
+// ── H.264 / H.265 — espaces parasites ────────────────────────────────────
+
 pub static H264_SPACE: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\bH\s+264\b").unwrap()
 );
@@ -87,49 +144,78 @@ pub static H265_SPACE: Lazy<InnerRegex> = Lazy::new(||
 );
 
 // ── Nettoyage titre ───────────────────────────────────────────────────────
+
+/// Suppression contenu entre crochets/parenthèses (non-greedy pour éviter
+/// de supprimer deux groupes distincts en un seul match).
 pub static BRACKETS: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"[\[\(][^\]\)]*[\]\)]").unwrap()
+    InnerRegex::new(r"[\[\(][^\]\)]*?[\]\)]").unwrap()
 );
+/// Groupe de release en fin de nom (ex: " - SubsPlease" ou " -RARBG")
 pub static TRAIL_GROUP: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\s+-\s*([A-Za-z0-9][A-Za-z0-9_.]{3,})$").unwrap()
+    InnerRegex::new(r"(?i)\s*-\s*([A-Za-z0-9][A-Za-z0-9_.]{2,})\s*$").unwrap()
 );
+/// Tirets/tirets cadratins résiduels en fin de chaîne
 pub static TRAIL_DASH: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"\s*[-–]+\s*$").unwrap()
 );
+/// Espaces multiples consécutifs
 pub static MULTI_SP: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"\s{2,}").unwrap()
 );
+/// Présence du tag MULTI dans le nom original
 pub static MULTI_TAG: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\bMULTI\b").unwrap()
 );
+/// Contexte OVA/Spécial pour ne pas confondre un numéro d'épisode trailing
 pub static OVA_CONTEXT: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\b(Special|OVA|OAD|ONA)\s+\d{1,4}\s*$").unwrap()
 );
+/// Apostrophes typographiques normalisées
+pub static APOSTROPHE: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new("['\u{2018}\u{2019}`\u{00B4}]").unwrap()
+);
+/// Caractères interdits dans les noms de fichiers Windows
+pub static INVALID_CHARS: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r#"[<>:"/\\|?*\x00-\x1F]"#).unwrap()
+);
 
-// ── Tags techniques ───────────────────────────────────────────────────────
+// ── Tags techniques à supprimer ───────────────────────────────────────────
+// FIX : les doublons (sources, providers) ont été retirés — ils sont déjà
+// gérés par leurs propres regex. Cela évite des suppressions prématurées.
+
 pub static TECH_TAGS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
     const TAGS: &[&str] = &[
+        // Langue / multi
         "MULTI", "MULTi", "MULTi4", "MULTi9", "Multi4", "Multi9",
         "VOSTFR", "VOSTKR", "VOSTCH", "VFF", "FRENCH", "TRUEFRENCH",
         "SUBFRENCH", "SUBFR", "VO", "VF", "VF2", "VFi",
+        // Codecs vidéo
         "x264", "x265", "H265", "H264", "H.264", "H.265",
         "HEVC", "AVC", "AV1", "VP9", "VC-1", "XviD", "DivX",
-        "H 264", "H 265", "10BIT",
+        "H 264", "H 265",
+        // Profondeur colorimétrique
+        "10BIT", "10bit", "10bits", "8bit",
+        // Codecs audio
         "E-AC-3", "EAC3", "TrueHD", "Atmos", "Dolby Atmos", "Dolby",
-        "FLAC", "OPUS", "MP3", "MP2", "AC3", "AAC", "5 1", "7 1", "2 0",
-        "WEB-DL", "WEBRip", "BluRay", "BDRip", "HDRip", "HDTV", "DVDRip", "BRRip",
-        "NF", "AMZN", "CR", "ADN",
-        "10bit", "10bits", "8bit",
+        "FLAC", "OPUS", "MP3", "MP2", "AC3", "AAC",
+        // Canaux audio (isolés après suppression des codecs)
+        "5 1", "7 1", "2 0",
+        // Méta release
         "REPACK", "PROPER", "RERIP", "REMUX", "INTERNAL",
-        "FANSUB", "SDR", "END", "Special",
+        "FANSUB", "END", "Special",
+        // SDR (HDR géré séparément)
+        "SDR",
     ];
     TAGS.iter()
         .map(|tag| InnerRegex::new(&format!(r"(?i)\b{}\b", regex::escape(tag))).unwrap())
         .collect()
 });
 
+// ── Groupes de release connus ─────────────────────────────────────────────
+
 pub static KNOWN_GROUPS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
     const GROUPS: &[&str] = &[
+        // Groupes fansub anime
         "Tsundere-Raws", "TsundereRaws", "SubsPlease", "HorribleSubs",
         "Erai-raws", "EraiRaws", "Judas", "GundamGuy", "LostYears",
         "Aoi-Project", "DameDesuYo", "Asenshi", "Commie", "FFF",
@@ -139,6 +225,7 @@ pub static KNOWN_GROUPS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
         "Beatrice-Raws", "SCY", "Reinforce", "Setsugen", "Nyanpasu",
         "Kaleido-Subs", "Aesenshi", "FLan", "ANE", "Licca",
         "PAS", "Pog42", "GST", "Drag", "Crow",
+        // Groupes P2P généralistes
         "YIFY", "YTS", "RARBG", "FGT", "EVO", "SPARKS", "GECKOS",
         "ROVERS", "FLEET", "DRONES", "PSYCHD", "DEFLATE", "CMRG",
         "iFT", "TEPES", "TOMMY", "NTb", "playWEB", "APEX",
