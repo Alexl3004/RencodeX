@@ -5,10 +5,9 @@
     formatDuration,
   } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
-  import RenameModal from "$components/RenameModal.svelte";
-  import BadgeInfoIcon from "@iconify-svelte/lucide/badge-info";
-  import Edit2Icon from "@iconify-svelte/lucide/edit-2";
-  import XIcon from "@iconify-svelte/lucide/x";
+  import RenameModal from "$components/RenameModal.svelte";  
+  import { Info, Pencil, X } from '@lucide/svelte';
+
 
   let editingFile = $state<AppFile | null>(null);
   let selectedFile = $state<AppFile | null>(null);
@@ -30,7 +29,6 @@
     selectedFile = null;
   }
 
-  // Déterminer si un fichier est en cours d'encodage
   function isCurrentlyEncoding(file: AppFile): boolean {
     return (
       file.status === "encoding" &&
@@ -39,19 +37,15 @@
     );
   }
 
-  // Déterminer si un fichier est en attente (dans la file)
   function isPending(file: AppFile): boolean {
     if (!encoder.encoding) return false;
     if (file.status !== "ready") return false;
-
     const currentIndex = encoder.progress?.file_index;
     if (currentIndex === undefined) return false;
-
     const fileIndex = encoder.files.findIndex((f) => f.path === file.path);
     return fileIndex > currentIndex;
   }
 
-  // Nouveaux statuts simplifiés
   function getStatusLabel(file: AppFile): string {
     if (file.status === "analysing") return "Analyse";
     if (file.status === "encoding") return "En cours";
@@ -66,11 +60,11 @@
 
   const STATUS_COLOR: Record<string, string> = {
     analysing: "text-[var(--color-accent)] animate-pulse",
-    encoding: "text-[var(--color-accent)]",
-    ready: "text-[var(--color-success)]",
-    pending: "text-[var(--color-subtext)]",
-    done: "text-[var(--color-success)]",
-    error: "text-[var(--color-danger)]",
+    encoding:  "text-[var(--color-accent)]",
+    ready:     "text-[var(--color-success)]",
+    pending:   "text-[var(--color-subtext)]",
+    done:      "text-[var(--color-success)]",
+    error:     "text-[var(--color-danger)]",
   };
 
   function getStatusColor(file: AppFile): string {
@@ -87,20 +81,136 @@
   />
 {/if}
 
-<div
-  class="border border-[var(--color-border)] rounded-[2px] overflow-auto h-[30vh]"
->
+<!-- File info modal (native overlay) -->
+{#if showFileInfo && selectedFile}
+  <div
+    class="modal-backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Informations fichier"
+    tabindex="-1"
+    onclick={(e) => { if (e.target === e.currentTarget) closeFileInfo(); }}
+    onkeydown={(e) => { if (e.key === 'Escape') closeFileInfo(); }}
+  >
+    <div class="modal-box" style="width: 480px; max-width: 95vw;">
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="flex items-center gap-2">
+          <div class="w-[3px] h-4 rounded-[1px]" style="background: var(--color-accent);"></div>
+          <span class="font-mono text-[12px] font-semibold uppercase tracking-wider" style="color: var(--color-text);">
+            Infos fichier
+          </span>
+        </div>
+        <button onclick={closeFileInfo} class="modal-close-btn" aria-label="Fermer">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body space-y-3">
+        <div>
+          <div class="section-label mb-1">Fichier source</div>
+          <div class="px-3 py-2 rounded-[2px] font-mono text-[11px] break-all"
+               style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text);">
+            {selectedFile.filename}
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label mb-1">Fichier de sortie</div>
+          <div class="px-3 py-2 rounded-[2px] font-mono text-[11px] break-all"
+               style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-success);">
+            {selectedFile.output_name}{selectedFile.output_ext}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+            <div class="section-label mb-1">Taille</div>
+            <div class="font-mono text-[13px]" style="color: var(--color-text);">{formatSize(selectedFile.size_mb)}</div>
+          </div>
+          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+            <div class="section-label mb-1">Durée</div>
+            <div class="font-mono text-[13px]" style="color: var(--color-text);">{formatDuration(selectedFile.duration_secs)}</div>
+          </div>
+          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+            <div class="section-label mb-1">FPS</div>
+            <div class="font-mono text-[13px]" style="color: var(--color-text);">{selectedFile.fps?.toFixed(2) || "—"} fps</div>
+          </div>
+          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+            <div class="section-label mb-1">Statut</div>
+            <div class="font-mono text-[13px]" style="color: var(--color-text);">{getStatusLabel(selectedFile)}</div>
+          </div>
+        </div>
+
+        {#if selectedFile.audio_langs?.length > 0}
+          <div>
+            <div class="section-label mb-1.5">Pistes audio</div>
+            <div class="flex flex-wrap gap-1">
+              {#each selectedFile.audio_langs as lang}
+                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[2px]"
+                      style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext);">
+                  {lang.toUpperCase()}
+                </span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <div>
+          <div class="section-label mb-1.5">Sous-titres</div>
+          <div class="flex flex-wrap gap-1">
+            {#if selectedFile.sub_langs?.length > 0}
+              {#each selectedFile.sub_langs as lang}
+                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[2px]"
+                      style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext);">
+                  {lang.toUpperCase()}
+                </span>
+              {/each}
+            {:else}
+              <span class="text-[11px] italic" style="color: var(--color-subtext);">Aucun</span>
+            {/if}
+          </div>
+        </div>
+
+        {#if selectedFile.streams?.length > 0}
+          <div>
+            <div class="section-label mb-1.5">Flux</div>
+            <div class="space-y-0.5 max-h-32 overflow-y-auto">
+              {#each selectedFile.streams as s}
+                <div class="font-mono text-[10px] py-1 flex gap-2"
+                     style="border-bottom: 1px solid color-mix(in srgb, var(--color-border) 30%, transparent);">
+                  <span style="color: var(--color-accent);">{s.codec_type?.toUpperCase()}</span>
+                  <span style="color: var(--color-subtext);">{s.codec_name}</span>
+                  {#if s.width && s.height}
+                    <span style="color: var(--color-subtext2);">{s.width}×{s.height}</span>
+                  {/if}
+                  <span style="color: var(--color-subtext2);">[{s.language?.toUpperCase() || "und"}]</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer">
+        <button onclick={closeFileInfo} class="btn btn-secondary font-mono text-[11px]">Fermer</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Table -->
+<div class="rounded-[2px] overflow-auto h-full"
+     style="border: 1px solid var(--color-border);">
   {#if encoder.files.length === 0}
     <div class="py-10 text-center flex items-center justify-center h-full">
-      <p
-        class="text-[11px] font-mono text-[var(--color-subtext)] uppercase tracking-widest"
-      >
+      <p class="text-[11px] font-mono uppercase tracking-widest" style="color: var(--color-subtext);">
         Aucun fichier
       </p>
     </div>
   {:else}
     <table class="w-full text-[11px] file-table">
-      <thead class="sticky top-0 bg-[var(--color-surface)] z-10">
+      <thead class="sticky top-0 z-10" style="background: var(--color-surface);">
         <tr>
           <th class="text-left w-[400px]">Fichier de sortie</th>
           <th class="text-right w-20">Taille</th>
@@ -112,82 +222,84 @@
         </tr>
       </thead>
       <tbody>
-        {#each encoder.files as file, index (file.path)}
+        {#each encoder.files as file (file.path)}
           {@const isCurrentEncoding = isCurrentlyEncoding(file)}
           {@const isFilePending = isPending(file)}
-          <tr
-            class="group transition-colors {isCurrentEncoding
-              ? 'bg-[var(--color-accent)]/5'
-              : ''}"
-          >
-            <!-- Nom de sortie -->
+          <tr class="group transition-colors {isCurrentEncoding ? 'row-encoding' : ''}">
+            <!-- Nom -->
             <td class="max-w-[400px]">
               <div class="flex items-center gap-1.5">
                 <button
                   onclick={() => showFileDetails(file)}
-                  class="shrink-0 text-[var(--color-subtext)] hover:text-[var(--color-accent)] transition-colors"
+                  class="shrink-0 transition-colors"
+                  style="color: var(--color-subtext);"
                   title="Infos"
                   aria-label="Informations fichier"
+                  onmouseenter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)'}
+                  onmouseleave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-subtext)'}
                 >
-                  <BadgeInfoIcon height="1em" />
+                  <Info class="w-3.5 h-3.5" />
                 </button>
                 <button
                   onclick={() => openRename(file)}
                   disabled={encoder.encoding}
-                  class="shrink-0 text-[var(--color-subtext)] hover:text-[var(--color-accent)] transition-colors disabled:opacity-30"
+                  class="shrink-0 transition-colors disabled:opacity-30"
+                  style="color: var(--color-subtext);"
                   title="Renommer"
                   aria-label="Renommer le fichier"
+                  onmouseenter={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-accent)'}
+                  onmouseleave={(e) => (e.currentTarget as HTMLElement).style.color = 'var(--color-subtext)'}
                 >
-                  <Edit2Icon height="1em" />
+                  <Pencil class="w-3.5 h-3.5" />
                 </button>
-                <span
-                  class="truncate text-[var(--color-text)] font-mono flex-1 min-w-0"
-                  title={file.output_name + file.output_ext}
-                >
+                <span class="truncate font-mono flex-1 min-w-0" style="color: var(--color-text);"
+                      title={file.output_name + file.output_ext}>
                   {file.output_name}{file.output_ext}
                 </span>
               </div>
             </td>
             <!-- Taille -->
-            <td class="text-right font-mono text-[var(--color-subtext)]">
+            <td class="text-right font-mono" style="color: var(--color-subtext);">
               {file.size_mb > 0 ? formatSize(file.size_mb) : "—"}
             </td>
             <!-- Audio -->
-            <td class="text-center font-mono text-[var(--color-subtext)]">
+            <td class="text-center font-mono" style="color: var(--color-subtext);">
               {#if file.status === "analysing"}
-                <span class="text-[var(--color-accent)] animate-pulse">…</span>
+                <span class="animate-pulse" style="color: var(--color-accent);">…</span>
               {:else}
-                {file.audio_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+                <span
+                  class="inline-block max-w-[88px] truncate align-middle"
+                  title={file.audio_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+                >
+                  {file.audio_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+                </span>
               {/if}
             </td>
             <!-- Subs -->
-            <td class="text-center font-mono text-[var(--color-subtext)]">
-              {file.sub_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+            <td class="text-center font-mono" style="color: var(--color-subtext);">
+              <span
+                class="inline-block max-w-[88px] truncate align-middle"
+                title={file.sub_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+              >
+                {file.sub_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
+              </span>
             </td>
             <!-- Temps -->
-            <td class="text-right font-mono text-[var(--color-subtext)]">
+            <td class="text-right font-mono" style="color: var(--color-subtext);">
               {#if file.status === "done" && file.result?.duration_secs}
-                {Math.floor(file.result.duration_secs / 60)}m{Math.floor(
-                  file.result.duration_secs % 60,
-                )}s
+                {Math.floor(file.result.duration_secs / 60)}m{Math.floor(file.result.duration_secs % 60)}s
               {:else if (file.status === "encoding" || file.status === "ready") && file.duration_secs > 0}
-                {Math.floor(file.duration_secs / 60)}m{Math.floor(
-                  file.duration_secs % 60,
-                )}s
+                {Math.floor(file.duration_secs / 60)}m{Math.floor(file.duration_secs % 60)}s
               {:else}—{/if}
             </td>
             <!-- Statut -->
             <td class="text-center">
               {#if isCurrentEncoding && encoder.progress}
                 <div class="flex flex-col items-center gap-0.5">
-                  <span
-                    class="font-mono text-[10px] text-[var(--color-accent)] font-bold animate-pulse"
-                  >
+                  <span class="font-mono text-[10px] font-bold animate-pulse" style="color: var(--color-accent);">
                     {getStatusLabel(file)}
                   </span>
-                  <span
-                    class="font-mono text-[9px] text-[var(--color-subtext)]"
-                  >
+                  <span class="font-mono text-[9px]" style="color: var(--color-subtext);">
                     {Math.round(encoder.progress.percent)}%
                   </span>
                 </div>
@@ -197,26 +309,21 @@
                 </span>
               {/if}
               {#if file.status === "done" && file.result && !isCurrentEncoding}
-                <div class="text-[var(--color-success)] font-mono text-[10px]">
-                  -{(
-                    ((file.result.original_mb - file.result.encoded_mb) /
-                      file.result.original_mb) *
-                    100
-                  ).toFixed(1)}%
+                <div class="font-mono text-[10px]" style="color: var(--color-success);">
+                  -{(((file.result.original_mb - file.result.encoded_mb) / file.result.original_mb) * 100).toFixed(1)}%
                 </div>
               {/if}
             </td>
             <!-- Suppr -->
             <td class="text-center">
               <button
-                class="opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[10px]
-                             text-[var(--color-subtext)] hover:text-[var(--color-danger)] disabled:hidden"
+                class="row-delete-btn opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[10px] disabled:hidden"
                 onclick={() => encoder.removeFile(file.path)}
                 disabled={encoder.encoding}
                 title="Supprimer"
                 aria-label="Supprimer le fichier"
               >
-                ✕
+                <X class="w-3.5 h-3.5" />
               </button>
             </td>
           </tr>
@@ -226,159 +333,104 @@
   {/if}
 </div>
 
-<!-- Modal info fichier -->
-{#if showFileInfo && selectedFile}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <button
-      type="button"
-      class="absolute inset-0 bg-black/60 cursor-default w-full h-full"
-      onclick={closeFileInfo}
-      tabindex="-1"
-      aria-label="Fermer"
-    ></button>
+<style>
+  .row-encoding td {
+    background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+  }
 
-    <div
-      class="relative w-[480px] max-w-[92vw] bg-[var(--color-panel)] border border-[var(--color-border)]
-                rounded-[2px] shadow-[0_20px_60px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden"
-    >
-      <!-- Header -->
-      <div
-        class="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)] shrink-0"
-      >
-        <div class="flex items-center gap-2">
-          <div class="w-[3px] h-4 rounded-[1px] bg-[var(--color-accent)]"></div>
-          <span class="text-[12px] font-semibold text-[var(--color-text)]"
-            >Infos fichier</span
-          >
-        </div>
-        <button
-          onclick={closeFileInfo}
-          class="text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors p-1"
-          aria-label="Fermer"
-        >
-          <XIcon height="1em" aria-hidden="true" />
-        </button>
-      </div>
-      <!-- Body -->
-      <div class="px-5 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
-        <div>
-          <div class="section-label mb-1">Fichier source</div>
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] px-3 py-2 font-mono text-[11px] break-all text-[var(--color-text)]"
-          >
-            {selectedFile.filename}
-          </div>
-        </div>
+  /* Hauteur de ligne fixe : évite qu'une ligne avec 20 pistes audio explose */
+  tbody tr {
+    height: 34px;
+    max-height: 34px;
+  }
+  tbody td {
+    overflow: hidden;
+    white-space: nowrap;
+  }
 
-        <div>
-          <div class="section-label mb-1">Fichier de sortie</div>
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] px-3 py-2 font-mono text-[11px] break-all text-[var(--color-success)]"
-          >
-            {selectedFile.output_name}{selectedFile.output_ext}
-          </div>
-        </div>
+  .row-delete-btn {
+    color: var(--color-subtext);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.1s;
+  }
+  .row-delete-btn:hover {
+    color: var(--color-danger);
+  }
 
-        <div class="grid grid-cols-2 gap-3">
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] p-3"
-          >
-            <div class="section-label mb-1">Taille</div>
-            <div class="font-mono text-[13px] text-[var(--color-text)]">
-              {formatSize(selectedFile.size_mb)}
-            </div>
-          </div>
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] p-3"
-          >
-            <div class="section-label mb-1">Durée</div>
-            <div class="font-mono text-[13px] text-[var(--color-text)]">
-              {formatDuration(selectedFile.duration_secs)}
-            </div>
-          </div>
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] p-3"
-          >
-            <div class="section-label mb-1">FPS</div>
-            <div class="font-mono text-[13px] text-[var(--color-text)]">
-              {selectedFile.fps?.toFixed(2) || "—"} fps
-            </div>
-          </div>
-          <div
-            class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] p-3"
-          >
-            <div class="section-label mb-1">Statut</div>
-            <div class="font-mono text-[13px] text-[var(--color-text)]">
-              {getStatusLabel(selectedFile)}
-            </div>
-          </div>
-        </div>
+  /* Modal overlay */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+  }
 
-        {#if selectedFile.audio_langs?.length > 0}
-          <div>
-            <div class="section-label mb-1.5">Pistes audio</div>
-            <div class="flex flex-wrap gap-1">
-              {#each selectedFile.audio_langs as lang}
-                <span
-                  class="font-mono text-[10px] border border-[var(--color-border)] px-2 py-0.5 rounded-[2px] bg-[var(--color-surface)] text-[var(--color-subtext)]"
-                  >{lang.toUpperCase()}</span
-                >
-              {/each}
-            </div>
-          </div>
-        {/if}
+  .modal-box {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    max-height: 85vh;
+  }
 
-        <div>
-          <div class="section-label mb-1.5">Sous-titres</div>
-          <div class="flex flex-wrap gap-1">
-            {#if selectedFile.sub_langs?.length > 0}
-              {#each selectedFile.sub_langs as lang}
-                <span
-                  class="font-mono text-[10px] border border-[var(--color-border)] px-2 py-0.5 rounded-[2px] bg-[var(--color-surface)] text-[var(--color-subtext)]"
-                  >{lang.toUpperCase()}</span
-                >
-              {/each}
-            {:else}
-              <span class="text-[11px] text-[var(--color-subtext)] italic"
-                >Aucun</span
-              >
-            {/if}
-          </div>
-        </div>
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-panel);
+    flex-shrink: 0;
+  }
 
-        {#if selectedFile.streams?.length > 0}
-          <div>
-            <div class="section-label mb-1.5">Flux</div>
-            <div class="space-y-0.5 max-h-32 overflow-y-auto">
-              {#each selectedFile.streams as s}
-                <div
-                  class="font-mono text-[10px] py-1 border-b border-[var(--color-border)]/30 flex gap-2"
-                >
-                  <span class="text-[var(--color-accent)]"
-                    >{s.codec_type?.toUpperCase()}</span
-                  >
-                  <span class="text-[var(--color-subtext)]">{s.codec_name}</span
-                  >
-                  {#if s.width && s.height}<span
-                      class="text-[var(--color-subtext2)]"
-                      >{s.width}×{s.height}</span
-                    >{/if}
-                  <span class="text-[var(--color-subtext2)]"
-                    >[{s.language?.toUpperCase() || "und"}]</span
-                  >
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
-      </div>
-      <div
-        class="flex justify-end px-5 py-3 border-t border-[var(--color-border)] shrink-0"
-      >
-        <button onclick={closeFileInfo} class="btn text-[11px] font-mono"
-          >FERMER</button
-        >
-      </div>
-    </div>
-  </div>
-{/if}
+  .modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-panel);
+    flex-shrink: 0;
+  }
+
+  .modal-close-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-subtext);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .modal-close-btn:hover {
+    background: var(--color-panel2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+</style>

@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "RenCodeX",
-        "width": 900,
+        "width": 800,
         "height": 850,
-        "minWidth": 900,
+        "minWidth": 800,
         "minHeight": 700,
         "resizable": true,
         "decorations": true,

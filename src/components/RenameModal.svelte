@@ -1,11 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
-  import type { AppFile, CleanedName } from "$lib/stores/encoder.svelte";
-  import Edit2Icon from "@iconify-svelte/lucide/edit-2";
-  import XIcon from "@iconify-svelte/lucide/x";
-  import RotateCcwIcon from "@iconify-svelte/lucide/rotate-ccw";
-  import CheckIcon from "@iconify-svelte/lucide/check";
+  import type { AppFile, CleanedName} from "$lib/stores/encoder.svelte";
+  import { Loader, Pencil, RefreshCw, CircleCheck  } from '@lucide/svelte';
+
 
   // ── Props ────────────────────────────────────────────────────────────────────
   type Props = {
@@ -14,31 +12,24 @@
     onrename: (newName: string) => void;
   };
 
-  // 1. Réception de la prop réactive à plat
   let { file, onclose, onrename }: Props = $props();
 
-  // 2. Propriétés réactives dérivées de l'objet "file"
   let initFilename  = $derived(file.filename);
   let initOutputExt = $derived(file.output_ext);
   let audio_langs   = $derived(file.audio_langs);
   let sub_langs     = $derived(file.sub_langs);
-  
-  // 3. State local modifiable de la Modal
-  // Utiliser une valeur dérivée pour l'initialisation
+
   let editValue = $state('');
   let loading   = $state(true);
   let cleaned   = $state<CleanedName | null>(null);
 
-  // 4. Filtres réactifs basés sur les changements globaux de sélection (stores)
   let initAudioLangs = $derived(audio_langs.filter((l: string) => encoder.selAudio.has(l)));
   let initSubLangs   = $derived(sub_langs.filter((l: string) => encoder.selSubs.has(l)));
 
-  // ── Initialiser editValue quand le composant s'ouvre ─────────────────────────
   $effect(() => {
     editValue = file.output_name;
   });
 
-  // ── Charger le nom suggéré de manière réactive ───────────────────────────────
   $effect(() => {
     loading = true;
     invoke<CleanedName>("clean_filename", {
@@ -51,12 +42,9 @@
         if (r?.suggested) editValue = r.suggested;
       })
       .catch(() => {})
-      .finally(() => {
-        loading = false;
-      });
+      .finally(() => { loading = false; });
   });
 
-  // ── Actions ──────────────────────────────────────────────────────────────────
   function confirm() {
     const v = editValue.trim();
     if (v) onrename(v);
@@ -75,65 +63,60 @@
 
 <svelte:window
   onkeydown={(e) => {
-    if (e.key === "Enter")   confirm();
+    if (e.key === "Enter")  confirm();
     if (e.key === "Escape") onclose();
   }}
 />
 
-<div class="fixed inset-0 z-50 flex items-center justify-center">
-  <button
-    type="button"
-    class="absolute inset-0 bg-black/50 backdrop-blur-[2px] cursor-default w-full h-full"
-    onclick={onclose}
-    tabindex="-1"
-    aria-label="Fermer le popup"
-  ></button>
+<!-- Overlay backdrop -->
+<div
+  class="modal-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Renommer le fichier"
+  tabindex="-1"
+  onclick={(e) => { if (e.target === e.currentTarget) onclose(); }}
+  onkeydown={(e) => { if (e.key === 'Escape') onclose(); }}
+>
+  <!-- Dialog box -->
+  <div class="modal-box" style="width: 540px; max-width: 95vw;">
 
-  <div
-    class="relative w-[560px] max-w-[92vw] bg-[var(--color-panel)] border border-[var(--color-border)] rounded-[2px]
-           shadow-2xl flex flex-col overflow-hidden"
-    tabindex="-1"
-  >
-    <div class="flex items-center justify-between px-5 py-3.5 border-b border-[var(--color-border)] shrink-0">
+    <!-- Header -->
+    <div class="modal-header">
       <div class="flex items-center gap-2">
-        <Edit2Icon height="1em" class="text-[var(--color-accent)]" />
-        <span class="text-sm font-medium text-[var(--color-text)]">Renommer le fichier</span>
+        <Pencil class="w-4 h-4" style="color: var(--color-accent);" />
+        <span class="font-mono text-[12px] font-semibold" style="color: var(--color-text); text-transform: uppercase; letter-spacing: 0.08em;">
+          Renommer le fichier
+        </span>
       </div>
-      <button
-        onclick={onclose}
-        class="text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors p-1"
-        title="Fermer (Échap)"
-      >
-        <XIcon height="1em" />
-      </button>
+      <button onclick={onclose} class="modal-close-btn" aria-label="Fermer">✕</button>
     </div>
 
-    <div class="px-5 py-4 space-y-4">
+    <!-- Body -->
+    <div class="modal-body space-y-4">
+      <!-- Fichier source -->
       <div class="space-y-1">
-        <div class="text-[10px] text-[var(--color-subtext)] uppercase tracking-wider">
-          Fichier source
-        </div>
+        <div class="section-label">Fichier source</div>
         <div
-          class="text-xs text-[var(--color-subtext)] font-mono bg-[var(--color-surface)] border border-[var(--color-border)]
-                 rounded-[2px] px-3 py-2 truncate"
+          class="font-mono text-[11px] truncate px-3 py-2 rounded-[2px]"
+          style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext);"
           title={initFilename}
         >
           {initFilename}
         </div>
       </div>
 
+      <!-- Nouveau nom -->
       <div class="space-y-1.5">
         <div class="flex items-center justify-between">
-          <div class="text-[10px] text-[var(--color-subtext)] uppercase tracking-wider">
-            Nouveau nom
-          </div>
+          <div class="section-label">Nouveau nom</div>
           {#if cleaned?.suggested && editValue !== cleaned.suggested}
             <button
               onclick={() => applyTag(cleaned!.suggested)}
-              class="text-[10px] text-[var(--color-accent)] hover:text-[var(--color-accent)]/70 transition-colors
-                     flex items-center gap-1"
+              class="flex items-center gap-1 text-[10px] transition-colors"
+              style="color: var(--color-accent);"
             >
-              <RotateCcwIcon height="1em" />
+              <RefreshCw class="w-3 h-3" />
               Réinitialiser au nom suggéré
             </button>
           {/if}
@@ -141,61 +124,129 @@
         <input
           type="text"
           bind:value={editValue}
-          class="w-full bg-[var(--color-surface)] border border-[var(--color-accent)] rounded-[2px] px-3 py-2 text-xs
-                 text-[var(--color-text)] outline-none font-mono transition-colors
-                 focus:ring-1 focus:ring-[var(--color-accent)]/20"
           placeholder="Nom du fichier de sortie…"
           use:focusAndSelect
+          class="w-full px-3 py-2 text-[11px] rounded-[2px]"
+          style="background: var(--color-surface); border: 1px solid var(--color-accent); color: var(--color-text); font-family: 'Geist Mono', monospace; outline: none;"
         />
       </div>
 
+      <!-- Suggestion -->
       {#if loading}
-        <div class="flex items-center gap-2 text-xs text-[var(--color-subtext)]">
-          <span class="inline-block w-3 h-3 border-2 border-subtext/30 border-t-subtext
-                       rounded-full animate-spin"></span>
+        <div class="flex items-center gap-2 text-[11px]" style="color: var(--color-subtext);">
+          <Loader size="4" />
           Analyse du nom en cours…
         </div>
       {:else if cleaned?.suggested}
         <button
           onclick={() => applyTag(cleaned!.suggested)}
-          class="w-full text-left text-[11px] px-3 py-2 border rounded-[2px] font-mono
-                 transition-colors hover:border-[var(--color-accent)]
-                 {editValue === cleaned.suggested
-            ? 'border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-[var(--color-accent)]'
-            : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-subtext)] hover:text-[var(--color-accent)]'}"
+          class="w-full text-left text-[11px] px-3 py-2 rounded-[2px] font-mono transition-colors"
+          style="border: 1px solid {editValue === cleaned.suggested ? 'color-mix(in srgb, var(--color-accent) 40%, transparent)' : 'var(--color-border)'}; background: {editValue === cleaned.suggested ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-surface)'}; color: {editValue === cleaned.suggested ? 'var(--color-accent)' : 'var(--color-subtext)'};"
           title="Appliquer le nom suggéré"
         >
-          <span class="text-[9px] text-[var(--color-subtext2)] block mb-0.5">Nom suggéré</span>
+          <span class="block mb-0.5 text-[9px]" style="color: var(--color-subtext2);">Nom suggéré</span>
           {cleaned.suggested}
           {#if editValue === cleaned.suggested}
-            <span class="ml-2 text-[9px] text-[var(--color-success)]">✓ appliqué</span>
+            <span class="ml-2 text-[9px]" style="color: var(--color-success);">✓ appliqué</span>
           {/if}
         </button>
       {/if}
 
+      <!-- Aperçu -->
       <div class="space-y-1">
-        <div class="text-[10px] text-[var(--color-subtext)] uppercase tracking-wider">
-          Aperçu
-        </div>
+        <div class="section-label">Aperçu</div>
         <div
-          class="text-xs font-mono bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px] px-3 py-2 truncate"
+          class="text-[11px] font-mono px-3 py-2 rounded-[2px] truncate"
+          style="background: var(--color-surface); border: 1px solid var(--color-border);"
           title="{editValue}{initOutputExt}"
         >
-          <span class="text-[var(--color-text)]">{editValue || "…"}</span><span class="text-[var(--color-subtext)]">{initOutputExt}</span>
+          <span style="color: var(--color-text);">{editValue || "…"}</span><span style="color: var(--color-subtext);">{initOutputExt}</span>
         </div>
       </div>
     </div>
 
-    <div class="flex items-center justify-end gap-2 px-5 py-3.5 border-t border-[var(--color-border)] shrink-0">
-      <button onclick={onclose} class="btn text-xs"> Annuler </button>
+    <!-- Footer -->
+    <div class="modal-footer">
+      <button onclick={onclose} class="btn btn-secondary font-mono text-[11px]">Annuler</button>
       <button
         onclick={confirm}
         disabled={!editValue.trim()}
-        class="btn btn-primary text-xs disabled:opacity-40"
+        class="btn btn-primary font-mono text-[11px] flex items-center gap-1.5"
       >
-        <CheckIcon height="1em" />
+        <CircleCheck class="w-3.5 h-3.5" />
         Renommer
       </button>
     </div>
   </div>
 </div>
+
+<style>
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+  }
+
+  .modal-box {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-panel);
+    flex-shrink: 0;
+  }
+
+  .modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-panel);
+    flex-shrink: 0;
+  }
+
+  .modal-close-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-subtext);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+
+  .modal-close-btn:hover {
+    background: var(--color-panel2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+</style>

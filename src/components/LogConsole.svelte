@@ -1,9 +1,10 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { tick } from "svelte";
-  import CheckIcon from "@iconify-svelte/lucide/check";
-  import CopyIcon from "@iconify-svelte/lucide/copy";
-  import Trash2Icon from "@iconify-svelte/lucide/trash-2";
+  import { Checkbox } from "flowbite-svelte";
+  import { CheckOutline, FileCopyOutline, TrashBinOutline, CloseOutline } from "flowbite-svelte-icons";
+  import { Copy, CircleCheck, Trash2, X} from '@lucide/svelte';
+
 
   let { onClose }: { onClose?: () => void } = $props();
 
@@ -75,53 +76,59 @@
       <!-- Filtres -->
       <div class="flex items-center gap-0.5">
         <button type="button" onclick={toggleInfo}
-          class="px-1.5 py-0.5 rounded-[2px] font-mono text-[9px] border transition-all
-                 {showInfo ? 'text-[var(--color-subtext)] bg-[var(--color-surface)] border-[var(--color-border)]' : 'text-[var(--color-subtext2)] border-transparent'}">
+          class="filter-btn font-mono text-[9px] border transition-all
+                 {showInfo ? 'text-[var(--color-subtext)] bg-[var(--color-surface)] border-[var(--color-border)]' : 'text-[var(--color-subtext2)] border-transparent'}"
+          aria-pressed={showInfo} aria-label="Filtre info">
           INFO
         </button>
         <button type="button" onclick={toggleWarn}
-          class="px-1.5 py-0.5 rounded-[2px] font-mono text-[9px] border transition-all
-                 {showWarn ? 'text-[var(--color-warning)] bg-[var(--color-warning)]/10 border-[var(--color-warning)]/30' : 'text-[var(--color-subtext2)] border-transparent'}">
+          class="filter-btn font-mono text-[9px] border transition-all
+                 {showWarn ? 'text-[var(--color-warning)] bg-[var(--color-warning)]/10 border-[var(--color-warning)]/30' : 'text-[var(--color-subtext2)] border-transparent'}"
+          aria-pressed={showWarn} aria-label="Filtre avertissements">
           WARN
         </button>
         <button type="button" onclick={toggleError}
-          class="px-1.5 py-0.5 rounded-[2px] font-mono text-[9px] border transition-all
-                 {showError ? 'text-[var(--color-danger)] bg-[var(--color-danger)]/10 border-[var(--color-danger)]/30' : 'text-[var(--color-subtext2)] border-transparent'}">
+          class="filter-btn font-mono text-[9px] border transition-all
+                 {showError ? 'text-[var(--color-danger)] bg-[var(--color-danger)]/10 border-[var(--color-danger)]/30' : 'text-[var(--color-subtext2)] border-transparent'}"
+          aria-pressed={showError} aria-label="Filtre erreurs">
           ERR
         </button>
         <button type="button" onclick={toggleSuccess}
-          class="px-1.5 py-0.5 rounded-[2px] font-mono text-[9px] border transition-all
-                 {showSuccess ? 'text-[var(--color-success)] bg-[var(--color-success)]/10 border-[var(--color-success)]/30' : 'text-[var(--color-subtext2)] border-transparent'}">
+          class="filter-btn font-mono text-[9px] border transition-all
+                 {showSuccess ? 'text-[var(--color-success)] bg-[var(--color-success)]/10 border-[var(--color-success)]/30' : 'text-[var(--color-subtext2)] border-transparent'}"
+          aria-pressed={showSuccess} aria-label="Filtre succès">
           OK
         </button>
       </div>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
-      <label class="flex items-center gap-1 cursor-pointer font-mono text-[10px] text-[var(--color-subtext)]">
-        <input type="checkbox" bind:checked={autoScroll} class="w-3 h-3 accent-[var(--color-accent)]" />
+      <Checkbox bind:checked={autoScroll} class="font-mono text-[10px] text-[var(--color-subtext)]">
         auto
-      </label>
+      </Checkbox>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
       <button type="button" onclick={copyAll}
-        class="font-mono text-[10px] transition-colors flex items-center gap-1
-               {copied ? 'text-[var(--color-success)]' : 'text-[var(--color-subtext)] hover:text-[var(--color-text)]'}">
+        class="log-action-btn font-mono text-[10px] flex items-center gap-1
+               {copied ? 'text-[var(--color-success)]' : 'text-[var(--color-subtext)]'}"
+        aria-label={copied ? 'Copié' : 'Copier tous les logs'}>
         {#if copied}
-          <CheckIcon height="1em" />
+          <CircleCheck class="w-3.5 h-3.5" />
           COPIÉ
         {:else}
-          <CopyIcon height="1em" />
+          <Copy class="w-3.5 h-3.5" />
           COPY
         {/if}
       </button>
       <button type="button" onclick={() => encoder.clearLogs()}
-        class="font-mono text-[10px] text-[var(--color-subtext)] hover:text-[var(--color-danger)] transition-colors flex items-center gap-1">
-        <Trash2Icon height="1em" />
+        class="log-action-btn font-mono text-[10px] text-[var(--color-subtext)] flex items-center gap-1"
+        aria-label="Effacer les logs">
+        <Trash2 class="w-3.5 h-3.5" />
         CLR
       </button>
       {#if onClose}
         <div class="sep h-3 mx-1" aria-hidden="true"></div>
         <button type="button" onclick={onClose}
-          class="font-mono text-[10px] text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors">
-          ✕
+          class="log-action-btn text-[var(--color-subtext)]"
+          aria-label="Fermer le journal">
+          <X class="w-3.5 h-3.5" />
         </button>
       {/if}
     </div>
@@ -157,3 +164,27 @@
     {/if}
   </div>
 </div>
+<style>
+  .filter-btn {
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: transparent;
+    cursor: pointer;
+    font-family: "Geist Mono", monospace;
+  }
+  .filter-btn:hover {
+    opacity: 0.8;
+  }
+  .log-action-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.1s;
+  }
+  .log-action-btn:hover {
+    color: var(--color-text);
+  }
+</style>

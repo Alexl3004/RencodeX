@@ -2,9 +2,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
-  import ImportIcon from '@iconify-svelte/lucide/import';
-  import FolderIcon from '@iconify-svelte/lucide/folder';
-  import ChevronDownIcon from '@iconify-svelte/lucide/chevron-down';
+  import { Download, Folder, ChevronDown } from '@lucide/svelte';
 
   let dragging = $state(false);
   let scanning = $state(false);
@@ -92,7 +90,7 @@
   <!-- Source -->
   <div class="flex items-center">
     <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <ImportIcon height="1em" />
+      <Download height="1em" />
     </div>
     
     <div class="flex-1 px-3 py-3">
@@ -114,7 +112,7 @@
   <!-- Destination avec historique -->
   <div class="flex items-center relative">
     <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <FolderIcon height="1em" />
+      <Folder height="1em" />
     </div>
 
     <div class="flex-1 relative">
@@ -130,7 +128,7 @@
       >
         {encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}
         {#if history.length > 0}
-          <ChevronDownIcon class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
+          <ChevronDown class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
         {/if}
       </button>
 

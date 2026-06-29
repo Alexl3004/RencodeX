@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { stats } from "./stats.svelte";
+import { toasts } from "$lib/stores/toasts.svelte";
 
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -186,7 +187,6 @@ function joinPath(dir: string, name: string): string {
 
 // ─── Codec helper ─────────────────────────────────────────────────────────────
 
-// Codecs déjà lossy/compressés → copy par défaut, pas de re-encodage inutile
 const COPY_BY_DEFAULT = ["aac", "opus", "ac3", "eac3", "mp3", "flac"];
 
 export function codecDefault(codecName: string): string {
@@ -203,7 +203,6 @@ function createEncoder() {
   let selSubs        = $state<Set<string>>(new Set(["fre"]));
   let audioOverrides = $state<Record<string, Record<string, string>>>({});
   let subOverrides   = $state<Record<string, Record<string, string>>>({});
-  // Override global : clé = codec source (ex: "dts"), valeur = codec cible (ex: "aac")
   let globalCodecOverride = $state<Record<string, string>>({});
   let outputDir      = $state("");
   let encoding       = $state(false);
@@ -211,7 +210,6 @@ function createEncoder() {
   let summary        = $state<EncodeSummary | null>(null);
   let logs           = $state<{ msg: string; level: "info"|"warn"|"error"|"success" }[]>([]);
 
-  // Paramètres d'encodage
   let crf    = $state(28);
   let preset = $state("p5");
 
@@ -404,13 +402,11 @@ function createEncoder() {
     const jobs: EncodeJob[] = files
       .filter(f => f.status === "ready")
       .map(f => {
-        // Construire les overrides codec par stream à partir de globalCodecOverride
         const audioCodecOvr: Record<string, string> = {};
         f.streams
           .filter(s => s.codec_type === "audio")
           .forEach(s => {
             const target = globalCodecOverride[s.codec_name.toLowerCase()];
-            // N'ajouter l'override que s'il diffère du comportement par défaut
             if (target && target !== codecDefault(s.codec_name)) {
               audioCodecOvr[s.index.toString()] = target;
             }
@@ -452,6 +448,7 @@ function createEncoder() {
       const gain = summary.total_original_mb > 0
         ? ((summary.total_original_mb - summary.total_encoded_mb) / summary.total_original_mb * 100).toFixed(1)
         : null;
+      const savedMb = summary.total_original_mb - summary.total_encoded_mb;
       const dur = formatDuration(summary.total_secs);
 
       log(
@@ -463,8 +460,28 @@ function createEncoder() {
         ` ──`,
         errors > 0 && ok === 0 ? "error" : "success"
       );
+
+      // ── Toasts in-app ────────────────────────────────────────────────
+      if (errors > 0 && ok === 0) {
+        toasts.error(`Batch échoué — ${errors}/${jobs.length} erreurs`);
+      } else if (errors > 0 || cancelled > 0) {
+        toasts.warn(
+          `${ok}/${jobs.length} réussis` +
+          (gain ? ` · −${gain}%` : "") +
+          (errors > 0 ? ` · ${errors} erreur${errors > 1 ? "s" : ""}` : "")
+        );
+      } else {
+        toasts.success(
+          `${ok} fichier${ok > 1 ? "s" : ""} encodé${ok > 1 ? "s" : ""}` +
+          (gain ? ` · −${gain}% (${formatMb(savedMb)})` : "") +
+          (dur  ? ` · ${dur}` : ""),
+        );
+      }
+      // ─────────────────────────────────────────────────────────────────
+
     } catch (e) {
       log(`Erreur fatale encodage : ${e}`, "error");
+      toasts.error(`Erreur fatale : ${e}`);
     } finally {
       encoding = false;
       progress = null;
@@ -475,6 +492,7 @@ function createEncoder() {
     await invoke("cancel_encoding");
     encoding = false;
     log("Encodage annulé par l'utilisateur", "warn");
+    toasts.warn("Encodage annulé");
   }
 
   function refreshOutputNames() {
@@ -520,7 +538,6 @@ function createEncoder() {
     log(`Override sous-titre stream ${streamIndex} → ${newLang.toUpperCase()} sur ${name}`, "info");
   }
 
-  // Override global : s'applique à tous les fichiers qui ont ce codec source
   function setGlobalCodecOverride(sourceCodec: string, targetCodec: string) {
     globalCodecOverride = { ...globalCodecOverride, [sourceCodec]: targetCodec };
     log(`Codec audio : toutes les pistes ${sourceCodec.toUpperCase()} → ${targetCodec}`, "info");
@@ -545,8 +562,6 @@ function createEncoder() {
   }
 
   function resetToDefault() {
-    console.log("=== resetToDefault appelée ===");
-
     files               = [];
     audioLangs          = new Set();
     subLangs            = new Set();
@@ -571,7 +586,6 @@ function createEncoder() {
     }, 10);
 
     forceUpdate();
-    console.log("=== resetToDefault terminée ===");
   }
 
   return {

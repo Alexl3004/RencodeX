@@ -1,12 +1,14 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
-  import SettingsIcon from "@iconify-svelte/lucide/settings";
-  import XIcon from "@iconify-svelte/lucide/x";
-  import CheckIcon from "@iconify-svelte/lucide/check";
-  import EyeIcon from "@iconify-svelte/lucide/eye";
-  import EyeOffIcon from "@iconify-svelte/lucide/eye-off";
-  
+  import { fly } from "svelte/transition";
+  import { sineIn } from "svelte/easing";
+  import {
+    CheckOutline,
+    CloseOutline,
+    EyeOutline,
+    EyeSlashOutline,
+  } from "flowbite-svelte-icons";
 
   type EffectiveConfig = {
     ffmpeg_path: string;
@@ -41,12 +43,15 @@
     discord_progress_interval: number;
   };
 
-  let open = $state(false),
-    saving = $state(false),
-    testing = $state(false);
+  let {
+    open = $bindable(false),
+  } = $props();
+
+  let saving    = $state(false),
+    testing   = $state(false);
   let testResult = $state<"ok" | "error" | null>(null);
-  let effective = $state<EffectiveConfig | null>(null);
-  let showToken = $state(false);
+  let effective  = $state<EffectiveConfig | null>(null);
+  let showToken  = $state(false);
 
   let form = $state<SavedConfig>({
     ffmpeg_path: "",
@@ -96,12 +101,7 @@
       await invoke("send_discord_notification", {
         botToken: form.discord_bot_token,
         logChannelId: form.discord_log_channel_id,
-        summary: {
-          files: [],
-          total_original_mb: 10.0,
-          total_encoded_mb: 6.2,
-          total_secs: 42.0,
-        },
+        summary: { files: [], total_original_mb: 10.0, total_encoded_mb: 6.2, total_secs: 42.0 },
       });
       testResult = "ok";
       encoder.log("Test Discord envoyé ✓", "success");
@@ -113,540 +113,357 @@
       setTimeout(() => (testResult = null), 4000);
     }
   }
-  function toggle() {
-    if (!open) loadSettings();
-    open = !open;
-  }
+  $effect(() => {
+    if (open) loadSettings();
+  });
 
   let discordFromEnv = $derived(
     effective?.discord_token_set && !form.discord_bot_token,
   );
+
+  const flyParams = { x: 320, duration: 200, easing: sineIn };
 </script>
 
-<svelte:window
-  onkeydown={(e) => {
-    if (e.key === "Escape" && open) open = false;
-  }}
-/>
-
-<button
-  onclick={toggle}
-  class="btn btn-ghost px-2 py-1 relative"
-  title="Paramètres"
-  aria-label="Paramètres"
->
-  <SettingsIcon height="1em" aria-hidden="true" />
-  {#if effective?.discord_enabled}
-    <span
-      class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--color-success)] border border-[var(--color-panel)]"
-      aria-hidden="true"
-    ></span>
-  {/if}
-</button>
-
 {#if open}
-  <div class="contents" style="isolation: isolate;">
-    <div
-      class="fixed inset-0 z-40 bg-black/50"
-      onclick={() => (open = false)}
-      role="presentation"
-    ></div>
+<!-- Backdrop -->
+<div
+  class="settings-backdrop"
+  role="presentation"
+  onclick={() => (open = false)}
+  onkeydown={(e) => { if (e.key === 'Escape') open = false; }}
+></div>
 
-    <aside
-      class="fixed top-0 right-0 h-full w-[400px] z-50 bg-[var(--color-panel)]
-                  border-l border-[var(--color-border)] flex flex-col shadow-[-20px_0_60px_rgba(0,0,0,0.6)]"
-      aria-label="Panneau de paramètres"
-    >
-    <!-- Header -->
-    <div
-      class="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)] shrink-0"
-    >
-      <div class="flex items-center gap-2">
-        <div class="w-[3px] h-5 rounded-[1px] bg-[var(--color-accent)]"></div>
-        <span
-          class="font-mono text-[12px] font-semibold text-[var(--color-text)] uppercase tracking-wider"
-          >Paramètres</span
-        >
-      </div>
-      <button
-        onclick={() => (open = false)}
-        class="btn btn-ghost p-1.5"
-        title="Fermer"
-        aria-label="Fermer le panneau des paramètres"
-      >
-        <XIcon height="1em" aria-hidden="true" />
-      </button>
+<!-- Panel -->
+<div
+  class="settings-panel"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Panneau de paramètres"
+  tabindex="-1"
+  transition:fly={flyParams}
+>
+  <!-- Header -->
+  <div class="drawer-header">
+    <div class="flex items-center gap-2">
+      <div class="w-[3px] h-5 rounded-[1px]" style="background: var(--color-accent);"></div>
+      <span class="font-mono text-[12px] font-semibold uppercase tracking-wider"
+            style="color: var(--color-text);">Paramètres</span>
     </div>
+    <button onclick={() => (open = false)} class="icon-btn" title="Fermer" aria-label="Fermer le panneau">
+      <CloseOutline class="w-4 h-4" />
+    </button>
+  </div>
 
-    <!-- Body -->
-    <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-      <!-- FFmpeg -->
-      <section class="space-y-3">
-        <div class="section-label border-b border-[var(--color-border)] pb-2">
-          FFmpeg
+  <!-- Body -->
+  <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+
+    <!-- FFmpeg -->
+    <section class="space-y-3">
+      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">FFmpeg</div>
+      <div>
+        <label for="ffmpeg-path" class="field-label">Chemin vers ffmpeg.exe</label>
+        <input
+          id="ffmpeg-path"
+          type="text"
+          bind:value={form.ffmpeg_path}
+          placeholder="C:\Outil\ffmpeg\bin\ffmpeg.exe"
+          class="field-input w-full px-3 py-2"
+        />
+      </div>
+    </section>
+
+    <!-- Discord -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between pb-2" style="border-bottom: 1px solid var(--color-border);">
+        <div class="section-label">Discord</div>
+        <label class="toggle-row">
+          <span class="font-mono text-[10px]" style="color: var(--color-subtext);">Activer</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.discord_enabled}
+            aria-label={form.discord_enabled ? "Désactiver Discord" : "Activer Discord"}
+            onclick={() => (form.discord_enabled = !form.discord_enabled)}
+            class="toggle {form.discord_enabled ? 'on' : ''}"
+          ></button>
+        </label>
+      </div>
+
+      {#if discordFromEnv}
+        <div class="flex items-center gap-2 font-mono text-[10px] px-3 py-2 rounded-[2px]"
+             style="color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);"
+             role="status">
+          <CheckOutline class="w-3.5 h-3.5" aria-hidden="true" />
+          Token actif via variable d'environnement
         </div>
-        <div>
-          <label
-            for="ffmpeg-path"
-            class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-          >
-            Chemin vers ffmpeg.exe
-          </label>
+      {/if}
+
+      <!-- Bot token -->
+      <div>
+        <label for="discord-token" class="field-label">Token du bot</label>
+        <div class="relative">
           <input
-            id="ffmpeg-path"
-            type="text"
-            bind:value={form.ffmpeg_path}
-            placeholder="C:\Outil\ffmpeg\bin\ffmpeg.exe"
-            class="w-full px-3 py-2 text-[11px]"
+            id="discord-token"
+            type={showToken ? "text" : "password"}
+            bind:value={form.discord_bot_token}
+            disabled={discordFromEnv}
+            placeholder="MTEx…"
+            class="field-input w-full px-3 py-2 pr-9"
           />
-        </div>
-      </section>
-
-      <!-- Discord -->
-      <section class="space-y-3">
-        <div
-          class="flex items-center justify-between border-b border-[var(--color-border)] pb-2"
-        >
-          <div class="section-label">Discord</div>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <span class="font-mono text-[10px] text-[var(--color-subtext)]"
-              >Activer</span
-            >
-            <button
-              class="toggle {form.discord_enabled ? 'on' : ''}"
-              onclick={() => (form.discord_enabled = !form.discord_enabled)}
-              role="switch"
-              aria-checked={form.discord_enabled}
-              aria-label={form.discord_enabled
-                ? "Désactiver Discord"
-                : "Activer Discord"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
-        </div>
-
-        {#if discordFromEnv}
-          <div
-            class="flex items-center gap-2 font-mono text-[10px] text-[var(--color-success)] bg-[var(--color-success)]/10 border border-[var(--color-success)]/20 rounded-[2px] px-3 py-2"
-            role="status"
+          <button
+            onclick={() => (showToken = !showToken)}
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 icon-btn-inline"
+            aria-label={showToken ? "Masquer le token" : "Afficher le token"}
           >
-            <CheckIcon height="1em" aria-hidden="true" />
-            Token actif via variable d'environnement
+            {#if showToken}
+              <EyeSlashOutline class="w-3.5 h-3.5" aria-hidden="true" />
+            {:else}
+              <EyeOutline class="w-3.5 h-3.5" aria-hidden="true" />
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      <!-- Channels -->
+      <div>
+        <label for="discord-log-channel" class="field-label">Salon de logs</label>
+        <input id="discord-log-channel" type="text" bind:value={form.discord_log_channel_id}
+               placeholder="ID du salon" class="field-input w-full px-3 py-2" />
+      </div>
+      <div>
+        <label for="discord-cmd-channel" class="field-label">Salon de commandes</label>
+        <input id="discord-cmd-channel" type="text" bind:value={form.discord_cmd_channel_id}
+               placeholder="ID du salon" class="field-input w-full px-3 py-2" />
+      </div>
+
+      <!-- Notifications -->
+      <div class="space-y-0 pt-3" style="border-top: 1px solid var(--color-border);">
+        <div class="section-label mb-2">Notifications</div>
+
+        {#each [
+          { key: 'discord_notify_start',     label: "Début d'encodage",   desc: "Envoi au démarrage" },
+          { key: 'discord_notify_file_done', label: "Fichier terminé",    desc: "Après chaque fichier" },
+          { key: 'discord_notify_progress',  label: "Progression",        desc: "Mise à jour périodique" },
+          { key: 'discord_notify_summary',   label: "Résumé global",      desc: "Bilan de session" },
+          { key: 'discord_notify_error',     label: "Erreur d'encodage",  desc: "En cas d'échec" },
+        ] as row}
+          <div class="flex items-center justify-between py-2"
+               style="border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);">
+            <div>
+              <span class="text-[12px]" style="color: var(--color-text);">{row.label}</span>
+              <p class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">{row.desc}</p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={(form as any)[row.key]}
+              onclick={() => ((form as any)[row.key] = !(form as any)[row.key])}
+              class="toggle {(form as any)[row.key] ? 'on' : ''}"
+              aria-label={row.label}
+            ></button>
           </div>
-        {/if}
-
-        <div>
-          <label
-            for="discord-token"
-            class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-            >Token du bot</label
-          >
-          <div class="relative">
-            <input
-              id="discord-token"
-              type={showToken ? "text" : "password"}
-              bind:value={form.discord_bot_token}
-              disabled={discordFromEnv}
-              placeholder="MTEx…"
-              class="w-full px-3 py-2 text-[11px] pr-9"
-            />
-            <button
-              onclick={() => (showToken = !showToken)}
-              type="button"
-              class="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-subtext)] hover:text-[var(--color-text)] transition-colors"
-              aria-label={showToken ? "Masquer le token" : "Afficher le token"}
-            >
-              {#if showToken}
-                <EyeOffIcon height="1em" aria-hidden="true" />
-              {:else}
-                <EyeIcon height="1em" aria-hidden="true" />
-              {/if}
-            </button>
-          </div>
-        </div>
-
-        <!-- Discord Channels -->
-        <div>
-          <label
-            for="discord-log-channel"
-            class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-            >Salon de logs</label
-          >
-          <input
-            id="discord-log-channel"
-            type="text"
-            bind:value={form.discord_log_channel_id}
-            placeholder="ID du salon"
-            class="w-full px-3 py-2 text-[11px]"
-          />
-        </div>
-
-        <div>
-          <label
-            for="discord-cmd-channel"
-            class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-            >Salon de commandes</label
-          >
-          <input
-            id="discord-cmd-channel"
-            type="text"
-            bind:value={form.discord_cmd_channel_id}
-            placeholder="ID du salon"
-            class="w-full px-3 py-2 text-[11px]"
-          />
-        </div>
-
-        <!-- Notifications -->
-        <div class="space-y-0 border-t border-[var(--color-border)] pt-3">
-          <div class="section-label mb-2">Notifications</div>
-
-          <label
-            class="flex items-center justify-between py-2 cursor-pointer border-b border-[var(--color-border)]/50"
-          >
-            <div>
-              <span class="text-[12px] text-[var(--color-text)]"
-                >Début d'encodage</span
-              >
-              <p
-                class="font-mono text-[9px] text-[var(--color-subtext)] mt-0.5"
-              >
-                Envoi au démarrage
-              </p>
-            </div>
-            <button
-              class="toggle {form.discord_notify_start ? 'on' : ''}"
-              onclick={() =>
-                (form.discord_notify_start = !form.discord_notify_start)}
-              role="switch"
-              aria-checked={form.discord_notify_start}
-              aria-label={form.discord_notify_start
-                ? "Désactiver la notification de début d'encodage"
-                : "Activer la notification de début d'encodage"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
-
-          <label
-            class="flex items-center justify-between py-2 cursor-pointer border-b border-[var(--color-border)]/50"
-          >
-            <div>
-              <span class="text-[12px] text-[var(--color-text)]"
-                >Fichier terminé</span
-              >
-              <p
-                class="font-mono text-[9px] text-[var(--color-subtext)] mt-0.5"
-              >
-                Après chaque fichier
-              </p>
-            </div>
-            <button
-              class="toggle {form.discord_notify_file_done ? 'on' : ''}"
-              onclick={() =>
-                (form.discord_notify_file_done =
-                  !form.discord_notify_file_done)}
-              role="switch"
-              aria-checked={form.discord_notify_file_done}
-              aria-label={form.discord_notify_file_done
-                ? "Désactiver la notification de fichier terminé"
-                : "Activer la notification de fichier terminé"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
-
-          <label
-            class="flex items-center justify-between py-2 cursor-pointer border-b border-[var(--color-border)]/50"
-          >
-            <div>
-              <span class="text-[12px] text-[var(--color-text)]"
-                >Progression</span
-              >
-              <p
-                class="font-mono text-[9px] text-[var(--color-subtext)] mt-0.5"
-              >
-                Mise à jour périodique
-              </p>
-            </div>
-            <button
-              class="toggle {form.discord_notify_progress ? 'on' : ''}"
-              onclick={() =>
-                (form.discord_notify_progress =
-                  !form.discord_notify_progress)}
-              role="switch"
-              aria-checked={form.discord_notify_progress}
-              aria-label={form.discord_notify_progress
-                ? "Désactiver la notification de progression"
-                : "Activer la notification de progression"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
-
-          {#if form.discord_notify_progress}
-            <div class="pb-2">
-              <label
-                for="discord-progress-interval"
-                class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-                >Intervalle (secondes)</label
-              >
+          {#if row.key === 'discord_notify_progress' && form.discord_notify_progress}
+            <div class="pb-2 pt-1">
+              <label for="discord-progress-interval" class="field-label">Intervalle (secondes)</label>
               <input
                 id="discord-progress-interval"
                 type="number"
                 bind:value={form.discord_progress_interval}
-                min="10"
-                max="300"
+                min="10" max="300"
                 placeholder="30"
-                class="w-full px-3 py-2 text-[11px]"
+                class="field-input w-full px-3 py-2"
               />
             </div>
           {/if}
+        {/each}
+      </div>
 
-          <label
-            class="flex items-center justify-between py-2 cursor-pointer border-b border-[var(--color-border)]/50"
-          >
-            <div>
-              <span class="text-[12px] text-[var(--color-text)]"
-                >Résumé global</span
-              >
-              <p
-                class="font-mono text-[9px] text-[var(--color-subtext)] mt-0.5"
-              >
-                Bilan de session
-              </p>
-            </div>
-            <button
-              class="toggle {form.discord_notify_summary ? 'on' : ''}"
-              onclick={() =>
-                (form.discord_notify_summary = !form.discord_notify_summary)}
-              role="switch"
-              aria-checked={form.discord_notify_summary}
-              aria-label={form.discord_notify_summary
-                ? "Désactiver la notification de résumé global"
-                : "Activer la notification de résumé global"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
+      <!-- Test Discord -->
+      <button
+        onclick={testDiscord}
+        disabled={testing || (!form.discord_bot_token && !discordFromEnv) || !form.discord_log_channel_id}
+        class="w-full btn font-mono text-[11px] justify-center"
+        class:btn-primary={testResult === "ok"}
+        class:btn-danger={testResult === "error"}
+        aria-label={testing ? "Test en cours" : testResult === "ok" ? "Test réussi" : testResult === "error" ? "Test échoué" : "Tester la notification Discord"}
+      >
+        {#if testing}
+          <span class="spinner w-3 h-3 border-2 border-current/30 border-t-current shrink-0 rounded-full animate-spin"></span>
+          ENVOI…
+        {:else if testResult === "ok"}✓ TEST ENVOYÉ
+        {:else if testResult === "error"}✗ ÉCHEC
+        {:else}TESTER LA NOTIFICATION{/if}
+      </button>
+    </section>
 
-          <label
-            class="flex items-center justify-between py-2 cursor-pointer border-b border-[var(--color-border)]/50"
-          >
-            <div>
-              <span class="text-[12px] text-[var(--color-text)]"
-                >Erreur d'encodage</span
-              >
-              <p
-                class="font-mono text-[9px] text-[var(--color-subtext)] mt-0.5"
-              >
-                En cas d'échec
-              </p>
-            </div>
-            <button
-              class="toggle {form.discord_notify_error ? 'on' : ''}"
-              onclick={() =>
-                (form.discord_notify_error = !form.discord_notify_error)}
-              role="switch"
-              aria-checked={form.discord_notify_error}
-              aria-label={form.discord_notify_error
-                ? "Désactiver la notification d'erreur"
-                : "Activer la notification d'erreur"}
-              tabindex="0"
-              type="button"
-            ></button>
-          </label>
-        </div>
-
+    <!-- Email -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between pb-2" style="border-bottom: 1px solid var(--color-border);">
+        <div class="section-label">Email</div>
         <button
-          onclick={testDiscord}
-          disabled={testing ||
-            (!form.discord_bot_token && !discordFromEnv) ||
-            !form.discord_log_channel_id}
-          class="w-full btn font-mono text-[11px] justify-center disabled:opacity-40
-                 {testResult === 'ok'
-            ? 'btn-lang-active'
-            : testResult === 'error'
-              ? 'border-[var(--color-danger)] text-[var(--color-danger)]'
-              : 'btn-secondary'}"
-          aria-label={testing
-            ? "Test en cours"
-            : testResult === "ok"
-              ? "Test réussi"
-              : testResult === "error"
-                ? "Test échoué"
-                : "Tester la notification Discord"}
-        >
-          {#if testing}
-            <span
-              class="w-3 h-3 border-2 border-[var(--color-subtext)]/30 border-t-[var(--color-subtext)] rounded-full animate-spin"
-              aria-hidden="true"
-            ></span>
-            ENVOI…
-          {:else if testResult === "ok"}✓ TEST ENVOYÉ
-          {:else if testResult === "error"}✗ ÉCHEC
-          {:else}TESTER LA NOTIFICATION{/if}
-        </button>
-      </section>
-
-      <!-- Email -->
-      <section class="space-y-3">
-        <div
-          class="flex items-center justify-between border-b border-[var(--color-border)] pb-2"
-        >
-          <div class="section-label">Email</div>
-          <button
-            class="toggle {form.send_email ? 'on' : ''}"
-            onclick={() => (form.send_email = !form.send_email)}
-            role="switch"
-            aria-checked={form.send_email}
-            aria-label={form.send_email
-              ? "Désactiver les notifications email"
-              : "Activer les notifications email"}
-            tabindex="0"
-            type="button"
-          ></button>
+          type="button"
+          role="switch"
+          aria-checked={form.send_email}
+          onclick={() => (form.send_email = !form.send_email)}
+          class="toggle {form.send_email ? 'on' : ''}"
+          aria-label={form.send_email ? "Désactiver les notifications email" : "Activer les notifications email"}
+        ></button>
+      </div>
+      {#if form.send_email}
+        <div>
+          <label for="email-to" class="field-label">Email de destination</label>
+          <input id="email-to" type="email" bind:value={form.email_to}
+                 placeholder="moi@exemple.com" class="field-input w-full px-3 py-2" />
         </div>
-        {#if form.send_email}
-          <div>
-            <label
-              for="email-to"
-              class="font-mono text-[10px] text-[var(--color-subtext)] block mb-1"
-              >Email de destination</label
-            >
-            <input
-              id="email-to"
-              type="email"
-              bind:value={form.email_to}
-              placeholder="moi@exemple.com"
-              class="w-full px-3 py-2 text-[11px]"
-            />
-          </div>
-        {/if}
-      </section>
+      {/if}
+    </section>
 
-      <!-- Env vars -->
-      <section class="space-y-3">
-        <div class="section-label border-b border-[var(--color-border)] pb-2">
-          Variables d'environnement
-        </div>
-        <div
-          class="space-y-1"
-          role="list"
-          aria-label="Variables d'environnement actives"
-        >
-          <div
-            class="flex items-center justify-between px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px]"
-            role="listitem"
-          >
-            <span class="font-mono text-[10px] text-[var(--color-subtext)]"
-              >RENCODEX_FFMPEG_PATH</span
-            >
-            <span
-              class="font-mono text-[10px] {effective?.ffmpeg_path !==
-              form.ffmpeg_path
-                ? 'text-[var(--color-success)]'
-                : 'text-[var(--color-subtext2)]'}"
-              aria-label={effective?.ffmpeg_path !== form.ffmpeg_path
-                ? "Variable définie"
-                : "Variable non définie"}
-            >
-              {effective?.ffmpeg_path !== form.ffmpeg_path ? "✓ définie" : "—"}
+    <!-- Variables d'env -->
+    <section class="space-y-3">
+      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Variables d'environnement</div>
+      <div class="space-y-1" role="list" aria-label="Variables d'environnement actives">
+        {#each [
+          { key: 'RENCODEX_FFMPEG_PATH',         active: effective?.ffmpeg_path !== form.ffmpeg_path },
+          { key: 'RENCODEX_DISCORD_TOKEN',        active: effective?.discord_token_set },
+          { key: 'RENCODEX_DISCORD_LOG_CHANNEL',  active: effective?.discord_log_channel_id !== form.discord_log_channel_id },
+          { key: 'RENCODEX_DISCORD_CMD_CHANNEL',  active: effective?.discord_cmd_channel_id !== form.discord_cmd_channel_id },
+        ] as v}
+          <div class="flex items-center justify-between px-3 py-2 rounded-[2px]"
+               style="background: var(--color-surface); border: 1px solid var(--color-border);"
+               role="listitem">
+            <span class="font-mono text-[10px]" style="color: var(--color-subtext);">{v.key}</span>
+            <span class="font-mono text-[10px]"
+                  style="color: {v.active ? 'var(--color-success)' : 'var(--color-subtext2)'};"
+                  aria-label={v.active ? "Variable définie" : "Variable non définie"}>
+              {v.active ? "✓ définie" : "—"}
             </span>
           </div>
-          <div
-            class="flex items-center justify-between px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px]"
-            role="listitem"
-          >
-            <span class="font-mono text-[10px] text-[var(--color-subtext)]"
-              >RENCODEX_DISCORD_TOKEN</span
-            >
-            <span
-              class="font-mono text-[10px] {effective?.discord_token_set
-                ? 'text-[var(--color-success)]'
-                : 'text-[var(--color-subtext2)]'}"
-              aria-label={effective?.discord_token_set
-                ? "Variable définie"
-                : "Variable non définie"}
-            >
-              {effective?.discord_token_set ? "✓ définie" : "—"}
-            </span>
-          </div>
-          <div
-            class="flex items-center justify-between px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px]"
-            role="listitem"
-          >
-            <span class="font-mono text-[10px] text-[var(--color-subtext)]"
-              >RENCODEX_DISCORD_LOG_CHANNEL</span
-            >
-            <span
-              class="font-mono text-[10px] {effective?.discord_log_channel_id !==
-              form.discord_log_channel_id
-                ? 'text-[var(--color-success)]'
-                : 'text-[var(--color-subtext2)]'}"
-              aria-label={effective?.discord_log_channel_id !==
-              form.discord_log_channel_id
-                ? "Variable définie"
-                : "Variable non définie"}
-            >
-              {effective?.discord_log_channel_id !== form.discord_log_channel_id
-                ? "✓ définie"
-                : "—"}
-            </span>
-          </div>
-          <div
-            class="flex items-center justify-between px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[2px]"
-            role="listitem"
-          >
-            <span class="font-mono text-[10px] text-[var(--color-subtext)]"
-              >RENCODEX_DISCORD_CMD_CHANNEL</span
-            >
-            <span
-              class="font-mono text-[10px] {effective?.discord_cmd_channel_id !==
-              form.discord_cmd_channel_id
-                ? 'text-[var(--color-success)]'
-                : 'text-[var(--color-subtext2)]'}"
-              aria-label={effective?.discord_cmd_channel_id !==
-              form.discord_cmd_channel_id
-                ? "Variable définie"
-                : "Variable non définie"}
-            >
-              {effective?.discord_cmd_channel_id !== form.discord_cmd_channel_id
-                ? "✓ définie"
-                : "—"}
-            </span>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- Footer -->
-    <div
-      class="px-5 py-3 border-t border-[var(--color-border)] flex gap-2 shrink-0"
-    >
-      <button
-        onclick={save}
-        disabled={saving}
-        class="btn btn-primary flex-1 justify-center font-mono text-[11px]"
-        aria-label={saving
-          ? "Sauvegarde en cours"
-          : "Sauvegarder les paramètres"}
-      >
-        {#if saving}
-          <span
-            class="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"
-            aria-hidden="true"
-          ></span>SAUVEGARDE…
-        {:else}SAUVEGARDER{/if}
-      </button>
-      <button
-        onclick={() => (open = false)}
-        class="btn font-mono text-[11px]"
-        aria-label="Fermer sans sauvegarder"
-      >
-        FERMER
-      </button>
-    </div>
-  </aside>
+        {/each}
+      </div>
+    </section>
   </div>
+
+  <!-- Footer -->
+  <div class="drawer-footer">
+    <button
+      onclick={save}
+      disabled={saving}
+      class="btn btn-primary flex-1 justify-center font-mono text-[11px]"
+      aria-label={saving ? "Sauvegarde en cours" : "Sauvegarder les paramètres"}
+    >
+      {#if saving}
+        <span class="spinner w-3 h-3 border-2 border-white/30 border-t-white shrink-0 rounded-full animate-spin"></span>
+        SAUVEGARDE…
+      {:else}SAUVEGARDER{/if}
+    </button>
+    <button
+      onclick={() => (open = false)}
+      class="btn btn-secondary font-mono text-[11px]"
+      aria-label="Fermer sans sauvegarder"
+    >
+      FERMER
+    </button>
+  </div>
+</div>
 {/if}
+
+<style>
+  .settings-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9980;
+    background: transparent;
+  }
+
+  .settings-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 400px;
+    z-index: 9981;
+    background: var(--color-panel);
+    border-left: 1px solid var(--color-border);
+    box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    color: var(--color-text);
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .drawer-footer {
+    display: flex;
+    gap: 8px;
+    padding: 10px 20px;
+    border-top: 1px solid var(--color-border);
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .icon-btn:hover {
+    background: var(--color-panel2);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+
+  .icon-btn-inline {
+    color: var(--color-subtext);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.1s;
+  }
+  .icon-btn-inline:hover { color: var(--color-text); }
+
+  .field-label {
+    display: block;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    margin-bottom: 4px;
+  }
+
+  .field-input {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    border-radius: 2px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .field-input:focus { border-color: var(--color-accent); }
+  .field-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+</style>
