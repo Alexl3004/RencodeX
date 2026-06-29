@@ -48,7 +48,7 @@
 <svelte:window ondragover={(e) => e.preventDefault()} onkeydown={closeOnEsc} />
 
 <div class="app-shell">
-  <TopBar bind:showLogs bind:showSettings bind:showDashboard bind:showAppSettings />
+  <TopBar bind:showAppSettings />
 
   <main class="main-content">
     <!-- DropZone : hauteur fixe -->
