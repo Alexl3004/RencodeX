@@ -59,7 +59,7 @@
     align-items: center;
     gap: 5px;
     padding: 4px 10px;
-    border-radius: 5px;
+    border-radius: var(--radius-full);
     border: 1px solid var(--color-border);
     background: var(--color-panel2);
     color: var(--color-subtext);

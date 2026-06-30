@@ -192,7 +192,7 @@
   }
 
   .overlay-panel {
-    border-radius: 4px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   }

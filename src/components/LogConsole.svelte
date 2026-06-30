@@ -2,7 +2,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { tick } from "svelte";
   import { Switch } from "@skeletonlabs/skeleton-svelte";
-  import { Copy, CircleCheck, Trash2, X } from '@lucide/svelte';
+  import { Copy, CircleCheck, Trash2, X, AlertTriangle } from '@lucide/svelte';
 
 
   let { onClose }: { onClose?: () => void } = $props();
@@ -64,7 +64,7 @@
   function toggleSuccess() { showSuccess = !showSuccess; }
 </script>
 
-<div class="border border-[var(--color-border)] rounded-[2px] bg-[var(--color-surface)] flex flex-col h-full">
+<div class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-surface)] flex flex-col h-full">
   <!-- Header -->
   <div class="flex items-center justify-between px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-panel)] select-none">
     <div class="flex items-center gap-2">
@@ -171,14 +171,14 @@
       {#if filteredLogs.length !== encoder.logs.length}<span class="text-[var(--color-subtext2)] ml-1">(filtrées)</span>{/if}
     </span>
     {#if encoder.logs.length >= 400}
-      <span class="text-[var(--color-warning)]">⚠ LIMITE 500</span>
+      <span class="inline-flex items-center gap-1 text-[var(--color-warning)]"><AlertTriangle class="w-3 h-3" />LIMITE 500</span>
     {/if}
   </div>
 </div>
 <style>
   .filter-btn {
     padding: 2px 6px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background: transparent;
     cursor: pointer;
     font-family: "Geist Mono", monospace;

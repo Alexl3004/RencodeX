@@ -44,7 +44,7 @@
     </p>
 
     <!-- Espace économisé -->
-    <div class="px-4 py-3 rounded-[2px]"
+    <div class="px-4 py-3 rounded-[var(--radius-sm)]"
          style="background: color-mix(in srgb, var(--color-success) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);">
       <div class="section-label mb-1">Espace économisé total</div>
       <div class="font-mono text-[24px] font-bold leading-none" style="color: var(--color-success);">
@@ -54,21 +54,21 @@
 
     <!-- Grille -->
     <div class="grid grid-cols-2 gap-3">
-      <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <div class="section-label mb-1.5">Fichiers encodés</div>
         <div class="font-mono text-[18px] font-bold leading-none" style="color: var(--color-text);">{totalFiles}</div>
       </div>
-      <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <div class="section-label mb-1.5">Ratio compression moy.</div>
         <div class="font-mono text-[18px] font-bold leading-none" style="color: var(--color-accent);">
           {avgRatioPct > 0 ? "-" : ""}{avgRatioPct.toFixed(1)}%
         </div>
       </div>
-      <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <div class="section-label mb-1.5">Taille entrée moy.</div>
         <div class="font-mono text-[18px] font-bold leading-none" style="color: var(--color-text);">{formatSize(avgInputMb)}</div>
       </div>
-      <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <div class="section-label mb-1.5">Taille sortie moy.</div>
         <div class="font-mono text-[18px] font-bold leading-none" style="color: var(--color-text);">{formatSize(avgOutputMb)}</div>
       </div>
@@ -77,7 +77,7 @@
     <!-- Barre de ratio -->
     <Progress value={progressVal} max={100} class="relative block">
       <Progress.Track
-        class="h-[20px] rounded-[2px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]"
+        class="h-[20px] rounded-[var(--radius-sm)] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]"
       >
         <Progress.Range class="rounded-[1px] bg-[var(--color-success)] transition-[width] duration-300" />
       </Progress.Track>
@@ -101,7 +101,7 @@
         <Portal>
           <Popover.Positioner>
             <Popover.Content
-              class="w-56 p-3 rounded-[2px] shadow-xl"
+              class="w-56 p-3 rounded-[var(--radius-md)] shadow-xl"
               style="background: var(--color-panel); border: 1px solid var(--color-border);"
             >
               <Popover.Description class="text-[11px] leading-snug" style="color: var(--color-text);">
@@ -130,7 +130,7 @@
   .panel-root {
     background: var(--color-panel);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: var(--radius-lg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -157,7 +157,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);

@@ -2,7 +2,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
-  import { Download, Folder, ChevronDown } from '@lucide/svelte';
+  import { Download, Folder, ChevronDown, Loader2 } from '@lucide/svelte';
 
   let dragging = $state(false);
   let scanning = $state(false);
@@ -86,79 +86,85 @@
   }}
 />
 
-<div class="border border-[var(--color-border)] rounded-[2px] bg-[var(--color-panel)] overflow-visible">
-  <!-- Source -->
-  <div class="flex items-center">
-    <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <Download height="1em" />
-    </div>
-    
-    <div class="flex-1 px-3 py-3">
-      <p class="text-[11px] font-medium text-[var(--color-text)]">Source</p>
-    </div>
+<div class="relative">
+  <div class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-panel)] overflow-hidden">
+    <!-- Source -->
+    <div class="flex items-center">
+      <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
+        <Download height="1em" />
+      </div>
 
-    <div class="flex border-l border-[var(--color-border)]">
-      <button onclick={pickFiles} disabled={encoder.encoding} class="btn btn-ghost px-3 py-2 text-[10px] font-mono">
-        FICHIERS
-      </button>
-      <button onclick={pickFolder} disabled={encoder.encoding || scanning} class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)]">
-        {#if scanning}⏳{:else}DOSSIER{/if}
-      </button>
-    </div>
-  </div>
+      <div class="flex-1 px-3 py-3">
+        <p class="text-[11px] font-medium text-[var(--color-text)]">Source</p>
+      </div>
 
-  <div class="border-t border-[var(--color-border)]"></div>
-
-  <!-- Destination avec historique -->
-  <div class="flex items-center relative">
-    <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
-      <Folder height="1em" />
+      <div class="flex border-l border-[var(--color-border)]">
+        <button onclick={pickFiles} disabled={encoder.encoding} class="btn btn-ghost px-3 py-2 text-[10px] font-mono">
+          FICHIERS
+        </button>
+        <button onclick={pickFolder} disabled={encoder.encoding || scanning} class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)] gap-1.5">
+          {#if scanning}
+            <Loader2 class="w-3 h-3 animate-spin" />
+          {/if}
+          DOSSIER
+        </button>
+      </div>
     </div>
 
-    <div class="flex-1 relative">
+    <div class="border-t border-[var(--color-border)]"></div>
+
+    <!-- Destination -->
+    <div class="flex items-center">
+      <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
+        <Folder height="1em" />
+      </div>
+
+      <div class="flex-1">
+        <button
+          onclick={(e) => {
+            e.stopPropagation();
+            if (history.length > 0) showHistory = !showHistory;
+            else pickOutputDir();
+          }}
+          disabled={encoder.encoding}
+          class="w-full text-left px-3 py-2 text-[10px] font-mono text-[var(--color-text)] truncate"
+          title={encoder.outputDir || "Cliquer pour choisir"}
+        >
+          {encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}
+          {#if history.length > 0}
+            <ChevronDown class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
+          {/if}
+        </button>
+      </div>
+
       <button
-        onclick={(e) => {
-          e.stopPropagation();
-          if (history.length > 0) showHistory = !showHistory;
-          else pickOutputDir();
-        }}
+        onclick={pickOutputDir}
         disabled={encoder.encoding}
-        class="w-full text-left px-3 py-2 text-[10px] font-mono text-[var(--color-text)] truncate"
-        title={encoder.outputDir || "Cliquer pour choisir"}
+        class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)] shrink-0"
       >
-        {encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}
-        {#if history.length > 0}
-          <ChevronDown class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
-        {/if}
+        CHOISIR
       </button>
-
-      {#if showHistory && history.length > 0}
-        <ul class="absolute top-full left-0 w-full min-w-[260px] z-30 bg-[var(--color-panel)] border border-[var(--color-border)] shadow-lg rounded-[2px] py-1">
-          <li class="px-3 py-1 text-[9px] text-[var(--color-subtext)] uppercase font-mono border-b border-[var(--color-border)]">
-            Récents
-          </li>
-          {#each history as dir}
-            <li>
-              <button
-                onclick={() => setOutputDir(dir)}
-                class="w-full text-left px-3 py-2 text-[10px] font-mono truncate hover:bg-[var(--color-panel2)] transition-colors
-                       {dir === encoder.outputDir ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}"
-                title={dir}
-              >
-                {shortPath(dir)}
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {/if}
     </div>
-
-    <button
-      onclick={pickOutputDir}
-      disabled={encoder.encoding}
-      class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)] shrink-0"
-    >
-      CHOISIR
-    </button>
   </div>
+
+  <!-- Historique des dossiers : rendu hors de la carte (overflow-hidden) pour ne pas être rogné -->
+  {#if showHistory && history.length > 0}
+    <ul class="absolute top-full left-0 right-0 mt-1.5 min-w-[260px] z-30 bg-[var(--color-panel)] border border-[var(--color-border)] shadow-lg rounded-[var(--radius-sm)] py-1">
+      <li class="px-3 py-1 text-[9px] text-[var(--color-subtext)] uppercase font-mono border-b border-[var(--color-border)]">
+        Récents
+      </li>
+      {#each history as dir}
+        <li>
+          <button
+            onclick={() => setOutputDir(dir)}
+            class="w-full text-left px-3 py-2 text-[10px] font-mono truncate hover:bg-[var(--color-panel2)] transition-colors
+                   {dir === encoder.outputDir ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}"
+            title={dir}
+          >
+            {shortPath(dir)}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
 </div>

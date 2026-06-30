@@ -101,14 +101,14 @@
             Infos fichier
           </span>
         </div>
-        <button onclick={closeFileInfo} class="modal-close-btn" aria-label="Fermer">✕</button>
+        <button onclick={closeFileInfo} class="modal-close-btn" aria-label="Fermer"><X class="w-4 h-4" /></button>
       </div>
 
       <!-- Body -->
       <div class="modal-body space-y-3">
         <div>
           <div class="section-label mb-1">Fichier source</div>
-          <div class="px-3 py-2 rounded-[2px] font-mono text-[11px] break-all"
+          <div class="px-3 py-2 rounded-[var(--radius-sm)] font-mono text-[11px] break-all"
                style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text);">
             {selectedFile.filename}
           </div>
@@ -116,26 +116,26 @@
 
         <div>
           <div class="section-label mb-1">Fichier de sortie</div>
-          <div class="px-3 py-2 rounded-[2px] font-mono text-[11px] break-all"
+          <div class="px-3 py-2 rounded-[var(--radius-sm)] font-mono text-[11px] break-all"
                style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-success);">
             {selectedFile.output_name}{selectedFile.output_ext}
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
-          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">Taille</div>
             <div class="font-mono text-[13px]" style="color: var(--color-text);">{formatSize(selectedFile.size_mb)}</div>
           </div>
-          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">Durée</div>
             <div class="font-mono text-[13px]" style="color: var(--color-text);">{formatDuration(selectedFile.duration_secs)}</div>
           </div>
-          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">FPS</div>
             <div class="font-mono text-[13px]" style="color: var(--color-text);">{selectedFile.fps?.toFixed(2) || "—"} fps</div>
           </div>
-          <div class="p-3 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-3 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">Statut</div>
             <div class="font-mono text-[13px]" style="color: var(--color-text);">{getStatusLabel(selectedFile)}</div>
           </div>
@@ -146,7 +146,7 @@
             <div class="section-label mb-1.5">Pistes audio</div>
             <div class="flex flex-wrap gap-1">
               {#each selectedFile.audio_langs as lang}
-                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[2px]"
+                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[var(--radius-full)]"
                       style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext);">
                   {lang.toUpperCase()}
                 </span>
@@ -160,7 +160,7 @@
           <div class="flex flex-wrap gap-1">
             {#if selectedFile.sub_langs?.length > 0}
               {#each selectedFile.sub_langs as lang}
-                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[2px]"
+                <span class="font-mono text-[10px] px-2 py-0.5 rounded-[var(--radius-full)]"
                       style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-subtext);">
                   {lang.toUpperCase()}
                 </span>
@@ -200,7 +200,7 @@
 {/if}
 
 <!-- Table -->
-<div class="rounded-[2px] overflow-auto h-full"
+<div class="rounded-[var(--radius-md)] overflow-auto h-full"
      style="border: 1px solid var(--color-border);">
   {#if encoder.files.length === 0}
     <div class="py-10 text-center flex items-center justify-center h-full">
@@ -415,7 +415,7 @@
   .modal-box {
     background: var(--color-panel);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: var(--radius-lg);
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
@@ -456,7 +456,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);

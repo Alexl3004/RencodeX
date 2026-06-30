@@ -65,7 +65,7 @@
     background: var(--color-panel);
     border: 1px solid var(--color-border);
     border-left: 3px solid var(--toast-accent);
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     min-width: 220px;
     max-width: 360px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);

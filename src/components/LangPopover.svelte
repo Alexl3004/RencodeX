@@ -1,7 +1,7 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import LangSelector from "$components/LangSelector.svelte";
-  import { X, Captions } from '@lucide/svelte';
+  import { X, Captions, Headphones, MessageSquare } from '@lucide/svelte';
 
   let open = $state(false);
 
@@ -25,7 +25,7 @@
   <button
     type="button"
     onclick={toggle}
-    class="relative inline-flex items-center justify-center w-7 h-7 rounded border border-transparent bg-transparent text-[var(--color-subtext)] cursor-pointer transition-colors duration-100 flex-shrink-0
+    class="relative inline-flex items-center justify-center w-7 h-7 rounded-[var(--radius-xs)] border border-transparent bg-transparent text-[var(--color-subtext)] cursor-pointer transition-colors duration-100 flex-shrink-0
            hover:bg-[var(--color-panel2)] hover:border-[var(--color-border)] hover:text-[var(--color-text)]
            active:translate-y-px
            {open ? 'bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] border-[color-mix(in_srgb,var(--color-accent)_25%,var(--color-border))] text-[var(--color-accent)]' : ''}"
@@ -51,7 +51,7 @@
 
     <!-- Popover -->
     <div
-      class="absolute top-full right-0 z-[9971] w-[400px] max-w-[calc(100vw-24px)] bg-[var(--color-panel)] border border-[var(--color-border)] rounded shadow-[0_16px_40px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden animate-slide-down origin-top-right"
+      class="absolute top-full right-0 z-[9971] w-[400px] max-w-[calc(100vw-24px)] bg-[var(--color-panel)] border border-[var(--color-border)] rounded-[var(--radius-lg)] shadow-[0_16px_40px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden animate-slide-down origin-top-right"
       role="dialog"
       aria-modal="true"
       aria-label="Pistes audio et sous-titres"
@@ -64,7 +64,7 @@
           <span class="text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--color-subtext)]">Pistes &amp; sous-titres</span>
         </div>
         <div class="flex items-center gap-1">
-          <button onclick={close} class="flex items-center justify-center w-6 h-6 border-none bg-transparent text-[var(--color-subtext)] cursor-pointer rounded-sm hover:bg-[var(--color-panel2)] hover:text-[var(--color-text)] transition-colors" title="Fermer" aria-label="Fermer">
+          <button onclick={close} class="flex items-center justify-center w-6 h-6 border-none bg-transparent text-[var(--color-subtext)] cursor-pointer rounded-[var(--radius-xs)] hover:bg-[var(--color-panel2)] hover:text-[var(--color-text)] transition-colors" title="Fermer" aria-label="Fermer">
             <X size={16} />
           </button>
         </div>
@@ -77,7 +77,7 @@
         <section class="flex flex-col gap-1">
           <div class="flex items-center justify-between py-0.5">
             <span class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--color-subtext)]">
-              <span class="text-sm leading-none opacity-80">🎧</span>
+              <Headphones class="w-3.5 h-3.5 opacity-80" />
               Pistes audio
               <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)] text-[9px] font-mono font-semibold leading-[18px] ml-0.5">
                 {[...encoder.selAudio].filter(l => encoder.audioLangs.has(l)).length}
@@ -95,7 +95,7 @@
         <section class="flex flex-col gap-1">
           <div class="flex items-center justify-between py-0.5">
             <span class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--color-subtext)]">
-              <span class="text-sm leading-none opacity-80">💬</span>
+              <MessageSquare class="w-3.5 h-3.5 opacity-80" />
               Sous-titres
               <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)] text-[9px] font-mono font-semibold leading-[18px] ml-0.5">
                 {[...encoder.selSubs].filter(l => encoder.subLangs.has(l)).length}

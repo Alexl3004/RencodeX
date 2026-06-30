@@ -64,7 +64,7 @@
       </span>
     </div>
     <span
-      class="font-mono text-[10px] px-2 py-[3px] rounded-[2px] tracking-widest leading-none"
+      class="font-mono text-[10px] px-2 py-[3px] rounded-[var(--radius-full)] tracking-widest leading-none"
       style="border: 1px solid var(--color-border); color: var(--color-subtext);"
     >
       H.265 · NVENC
@@ -260,7 +260,7 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);
@@ -316,7 +316,7 @@
     animation: slide-down 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     transform-origin: top right;
     overflow: hidden;
-    border-radius: 4px;
+    border-radius: var(--radius-lg);
   }
 
   @keyframes fade-in {

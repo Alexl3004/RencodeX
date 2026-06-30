@@ -2,7 +2,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatTime, formatSize, gainPct } from "$lib/utils";
   import { Progress } from "@skeletonlabs/skeleton-svelte";
-  import { CircleCheck, TvMinimalPlay, AlertTriangle } from '@lucide/svelte';
+  import { CircleCheck, TvMinimalPlay, AlertTriangle, Zap, Package, FolderOpen } from '@lucide/svelte';
 
   let p = $derived(encoder.progress);
   let s = $derived(encoder.summary);
@@ -42,7 +42,7 @@
   }
 </script>
 
-<div class="border border-[var(--color-border)] rounded-[2px] bg-[var(--color-panel)] h-full flex flex-col overflow-hidden">
+<div class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-panel)] h-full flex flex-col overflow-hidden">
   {#if encoder.encoding}
     <div class="flex items-center gap-2 px-3 py-1 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 shrink-0 text-[11px]">
       <div class="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse"></div>
@@ -51,7 +51,7 @@
         <span class="text-[var(--color-subtext)]">{p.file_index + 1}/{p.file_total}</span>
       {/if}
       <span class="flex-1"></span>
-      <span class="font-mono text-[var(--color-subtext)]">⚡ {p ? p.speed?.toFixed(1) : "—"}x</span>
+      <span class="font-mono text-[var(--color-subtext)] inline-flex items-center gap-1"><Zap class="w-3 h-3" />{p ? p.speed?.toFixed(1) : "—"}x</span>
     </div>
 
     <div class="flex-1 flex items-stretch px-4 py-0 gap-4 overflow-hidden">
@@ -118,8 +118,8 @@
 
           {#if estimatedTotalMb !== null}
             <div class="flex gap-4 text-[10px] text-[var(--color-subtext)] mt-0.5">
-              <span>📦 Estimé {formatSize(estimatedTotalMb)}</span>
-              <span>📁 Original {formatSize(totalOriginalMb)}</span>
+              <span class="inline-flex items-center gap-1"><Package class="w-3 h-3" />Estimé {formatSize(estimatedTotalMb)}</span>
+              <span class="inline-flex items-center gap-1"><FolderOpen class="w-3 h-3" />Original {formatSize(totalOriginalMb)}</span>
             </div>
           {/if}
         </div>
@@ -136,15 +136,15 @@
       
       <div class="w-36 flex flex-col justify-between shrink-0">
         <div class="h-full flex flex-col justify-center gap-1">
-          <div class="py-1 bg-[var(--color-surface)] rounded-[2px] flex justify-between items-center px-2">
+          <div class="py-1 bg-[var(--color-surface)] rounded-[var(--radius-sm)] flex justify-between items-center px-2">
             <div class="text-[9px] text-[var(--color-subtext)] uppercase tracking-wide">Succès</div>
             <div class="text-base font-bold text-[var(--color-text)] font-mono">{s.files.filter(f => f.status === "ok").length}/{s.files.length}</div>
           </div>
-          <div class="py-1 bg-[var(--color-surface)] rounded-[2px] flex justify-between items-center px-2">
+          <div class="py-1 bg-[var(--color-surface)] rounded-[var(--radius-sm)] flex justify-between items-center px-2">
             <div class="text-[9px] text-[var(--color-subtext)] uppercase tracking-wide">Gain</div>
             <div class="text-base font-bold text-[var(--color-success)] font-mono">{gainPct(s.total_original_mb, s.total_encoded_mb)}</div>
           </div>
-          <div class="py-1 bg-[var(--color-surface)] rounded-[2px] flex justify-between items-center px-2">
+          <div class="py-1 bg-[var(--color-surface)] rounded-[var(--radius-sm)] flex justify-between items-center px-2">
             <div class="text-[9px] text-[var(--color-subtext)] uppercase tracking-wide">Durée</div>
             <div class="text-base font-bold text-[var(--color-text)] font-mono">{formatTime(s.total_secs)}</div>
           </div>

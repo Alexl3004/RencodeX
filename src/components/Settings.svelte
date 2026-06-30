@@ -83,7 +83,7 @@
     try {
       await invoke("save_config", { config: form });
       effective = await invoke<EffectiveConfig>("get_effective_config");
-      encoder.log("Configuration sauvegardée ✓", "success");
+      encoder.log("Configuration sauvegardée", "success");
     } catch (e) {
       encoder.log(`Erreur sauvegarde : ${e}`, "error");
     } finally {
@@ -100,7 +100,7 @@
         summary: { files: [], total_original_mb: 10.0, total_encoded_mb: 6.2, total_secs: 42.0 },
       });
       testResult = "ok";
-      encoder.log("Test Discord envoyé ✓", "success");
+      encoder.log("Test Discord envoyé", "success");
     } catch (e) {
       testResult = "error";
       encoder.log(`Erreur Discord : ${e}`, "error");
@@ -186,7 +186,7 @@
       </div>
 
       {#if discordFromEnv}
-        <div class="flex items-center gap-2 font-mono text-[10px] px-3 py-2 rounded-[2px]"
+        <div class="flex items-center gap-2 font-mono text-[10px] px-3 py-2 rounded-[var(--radius-sm)]"
              style="color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);"
              role="status">
           <Check class="w-3.5 h-3.5" aria-hidden="true" />
@@ -287,8 +287,8 @@
         {#if testing}
           <span class="spinner w-3 h-3 border-2 border-current/30 border-t-current shrink-0 rounded-full animate-spin"></span>
           ENVOI…
-        {:else if testResult === "ok"}✓ TEST ENVOYÉ
-        {:else if testResult === "error"}✗ ÉCHEC
+        {:else if testResult === "ok"}<Check class="w-3.5 h-3.5" /> TEST ENVOYÉ
+        {:else if testResult === "error"}<X class="w-3.5 h-3.5" /> ÉCHEC
         {:else}TESTER LA NOTIFICATION{/if}
       </button>
     </section>
@@ -325,14 +325,14 @@
           { key: 'RENCODEX_DISCORD_LOG_CHANNEL',  active: effective?.discord_log_channel_id !== form.discord_log_channel_id },
           { key: 'RENCODEX_DISCORD_CMD_CHANNEL',  active: effective?.discord_cmd_channel_id !== form.discord_cmd_channel_id },
         ] as v}
-          <div class="flex items-center justify-between px-3 py-2 rounded-[2px]"
+          <div class="flex items-center justify-between px-3 py-2 rounded-[var(--radius-sm)]"
                style="background: var(--color-surface); border: 1px solid var(--color-border);"
                role="listitem">
             <span class="font-mono text-[10px]" style="color: var(--color-subtext);">{v.key}</span>
-            <span class="font-mono text-[10px]"
+            <span class="font-mono text-[10px] inline-flex items-center gap-1"
                   style="color: {v.active ? 'var(--color-success)' : 'var(--color-subtext2)'};"
                   aria-label={v.active ? "Variable définie" : "Variable non définie"}>
-              {v.active ? "✓ définie" : "—"}
+              {#if v.active}<Check class="w-3 h-3" />définie{:else}—{/if}
             </span>
           </div>
         {/each}
@@ -381,6 +381,7 @@
     z-index: 9981;
     background: var(--color-panel);
     border-left: 1px solid var(--color-border);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -410,7 +411,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);
@@ -449,7 +450,7 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     color: var(--color-text);
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
     outline: none;
     transition: border-color 0.12s;
   }

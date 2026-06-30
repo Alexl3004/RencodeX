@@ -94,7 +94,7 @@
         <span>Fichier plus petit →</span>
       </div>
 
-      <div class="px-3 py-2.5 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <span class="font-mono text-[11px]" style="color: var(--color-text);">{currentCrfInfo.label}</span>
         <div class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">
           Taille {currentCrfInfo.size} · Qualité {currentCrfInfo.quality}
@@ -114,7 +114,7 @@
           <button
             type="button"
             onclick={() => encoder.setPreset(p)}
-            class="font-mono text-[10px] px-0 py-1.5 rounded-[2px] transition-all preset-btn"
+            class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
             class:preset-btn--active={preset === p}
           >
             {p.toUpperCase()}
@@ -122,11 +122,11 @@
         {/each}
       </div>
 
-      <div class="px-3 py-2.5 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <div class="flex items-center gap-2">
           <span class="font-mono text-[11px]" style="color: var(--color-text);">{presetInfo[preset].speed}</span>
           {#if preset === "p5"}
-            <span class="font-mono text-[9px] px-1.5 py-0.5 rounded-[2px]"
+            <span class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-full)]"
                   style="background: color-mix(in srgb, var(--color-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent); color: var(--color-success);">
               REC.
             </span>
@@ -148,7 +148,7 @@
           <button
             type="button"
             onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-            class="font-mono text-[11px] px-2 py-1.5 rounded-[2px] transition-all preset-btn"
+            class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
             class:preset-btn--active={seFormat === f.value}
           >
             {f.label}
@@ -156,7 +156,7 @@
         {/each}
       </div>
 
-      <div class="px-3 py-2.5 rounded-[2px]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
         <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
         <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
           Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P BluRay H265 10bit AAC
@@ -173,21 +173,21 @@
         </div>
 
         <div class="grid grid-cols-3 gap-2">
-          <div class="p-2.5 rounded-[2px] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">ORIGINAL</div>
             <div class="font-mono text-[12px] font-bold" style="color: var(--color-text);">{formatSize(totalOriginalMb)}</div>
           </div>
-          <div class="p-2.5 rounded-[2px] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">ESTIMÉ</div>
             <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">{formatSize(estimatedTotalMb)}</div>
           </div>
-          <div class="p-2.5 rounded-[2px] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
+          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
             <div class="section-label mb-1">GAIN</div>
             <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">-{estimatedGainPct.toFixed(1)}%</div>
           </div>
         </div>
 
-        <div class="relative rounded-[2px] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
+        <div class="relative rounded-[var(--radius-sm)] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
           <div class="absolute inset-y-0 left-0 rounded-[1px]"
                style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"></div>
           <div class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
@@ -204,7 +204,7 @@
   .panel-root {
     background: var(--color-panel);
     border: 1px solid var(--color-border);
-    border-radius: 4px;
+    border-radius: var(--radius-lg);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -231,7 +231,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);
@@ -250,7 +250,7 @@
     appearance: none;
     width: 100%;
     height: 4px;
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     background: var(--color-border2);
     outline: none;
     cursor: pointer;
