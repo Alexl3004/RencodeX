@@ -212,11 +212,18 @@ pub async fn start_encoding(
             if include {
                 cmd_args.push("-map".into());
                 cmd_args.push(format!("0:{}", stream.index));
-                audio_codec_args.extend([
-                    format!("-c:a:{}", audio_index), "aac".into(),
-                    format!("-b:a:{}", audio_index), "192k".into(),
-                    format!("-metadata:s:a:{}", audio_index), format!("language={}", eff_lang),
-                ]);
+                if job.audio_mode == "copy" {
+                    audio_codec_args.extend([
+                        format!("-c:a:{}", audio_index), "copy".into(),
+                        format!("-metadata:s:a:{}", audio_index), format!("language={}", eff_lang),
+                    ]);
+                } else {
+                    audio_codec_args.extend([
+                        format!("-c:a:{}", audio_index), "aac".into(),
+                        format!("-b:a:{}", audio_index), format!("{}k", job.audio_bitrate),
+                        format!("-metadata:s:a:{}", audio_index), format!("language={}", eff_lang),
+                    ]);
+                }
                 audio_index += 1;
             }
         }
@@ -227,7 +234,11 @@ pub async fn start_encoding(
                 filename_of(&job.input_path)
             );
             cmd_args.extend(["-map".into(), "0:a".into()]);
-            audio_codec_args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), "192k".into()]);
+            if job.audio_mode == "copy" {
+                audio_codec_args.extend(["-c:a".into(), "copy".into()]);
+            } else {
+                audio_codec_args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), format!("{}k", job.audio_bitrate)]);
+            }
         }
 
         let sub_streams = get_streams(&ffprobe, &job.input_path, "s").await;
@@ -258,15 +269,39 @@ pub async fn start_encoding(
             "-preset".into(), job.preset.clone(),
             "-cq".into(), job.crf.to_string(),
         ]);
+
+        // Qualité NVENC avancée : AQ spatiale/temporelle + multipass
+        cmd_args.extend([
+            "-spatial-aq".into(), if job.spatial_aq { "1".into() } else { "0".into() },
+            "-temporal-aq".into(), if job.temporal_aq { "1".into() } else { "0".into() },
+        ]);
+        if job.spatial_aq || job.temporal_aq {
+            cmd_args.extend(["-aq-strength".into(), job.aq_strength.to_string()]);
+        }
+        let multipass_val = match job.multipass.as_str() {
+            "qres" => "qres",
+            "fullres" => "fullres",
+            _ => "disabled",
+        };
+        cmd_args.extend(["-multipass".into(), multipass_val.into()]);
+
         cmd_args.extend(audio_codec_args);
         if !sub_meta.is_empty() {
             cmd_args.extend(sub_meta);
-            cmd_args.extend(["-c:s".into(), "copy".into()]);
+            if job.container == "mp4" {
+                // Le MP4 ne supporte pas la copie directe des sous-titres ASS/SRT
+                cmd_args.extend(["-c:s".into(), "mov_text".into()]);
+            } else {
+                cmd_args.extend(["-c:s".into(), "copy".into()]);
+            }
         }
+
+        // Conteneur de sortie : MKV (matroska) ou MP4
+        let container_fmt = if job.container == "mp4" { "mp4" } else { "matroska" };
         cmd_args.extend([
             "-map_metadata".into(), "0".into(),
             "-map_chapters".into(), "0".into(),
-            "-f".into(), "matroska".into(),
+            "-f".into(), container_fmt.into(),
             "-progress".into(), "pipe:1".into(),
             "-nostats".into(),
             "-stats_period".into(), "1".into(),

@@ -1,12 +1,20 @@
 <script lang="ts">
   import { encoder, SEASON_EPISODE_FORMATS, formatSeasonEpisode } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
-  import { X } from '@lucide/svelte';
+  import { X, ChevronDown } from '@lucide/svelte';
 
   let { onClose }: { onClose?: () => void } = $props();
   let crf    = $derived(encoder.crf);
   let preset = $derived(encoder.preset);
   let seFormat = $derived(encoder.seasonEpisodeFormat);
+
+  let audioMode    = $derived(encoder.audioMode);
+  let audioBitrate = $derived(encoder.audioBitrate);
+  let spatialAq    = $derived(encoder.spatialAq);
+  let temporalAq   = $derived(encoder.temporalAq);
+  let aqStrength   = $derived(encoder.aqStrength);
+  let multipass    = $derived(encoder.multipass);
+  let container    = $derived(encoder.container);
 
   let totalOriginalMb = $derived(
     encoder.files.reduce((s: number, f: any) => s + (f.size_mb || 0), 0),
@@ -48,6 +56,25 @@
   );
 
   let progressVal = $derived(Math.round(100 - estimatedGainPct));
+
+  // --- Accordion state ---
+  // true = ouvert. Tout fermé par défaut sauf CRF (le plus utilisé).
+  let openSections = $state<Record<string, boolean>>({
+    crf: true,
+    preset: false,
+    seFormat: false,
+    audio: false,
+    nvenc: false,
+    container: false,
+    estimate: false,
+  });
+
+  function toggle(key: string) {
+    openSections[key] = !openSections[key];
+  }
+  function chevronClass(open: boolean) {
+    return open ? "acc-chevron acc-chevron--open" : "acc-chevron";
+  }
 </script>
 
 <div class="panel-root">
@@ -65,136 +92,378 @@
   </div>
 
   <!-- Body -->
-  <div class="panel-body space-y-5">
+  <div class="panel-body">
 
     <!-- CRF -->
-    <div class="space-y-3">
-      <div class="flex justify-between items-start">
-        <div>
-          <div class="section-label">Qualité CRF</div>
-          <p class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">Niveau de compression vidéo</p>
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('crf')} aria-expanded={openSections.crf}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Qualité CRF</span>
+          {#if !openSections.crf}
+            <span class="acc-summary">{crf} · {currentCrfInfo.label}</span>
+          {/if}
         </div>
-        <div class="text-right">
-          <span class="font-mono text-[22px] font-bold leading-none" style="color: var(--color-accent);">{crf}</span>
-          <span class="font-mono text-[10px] ml-1" style="color: var(--color-subtext);">/ 35</span>
+        <div class="acc-trigger-right">
+          <span class="acc-value">{crf}</span>
+          <ChevronDown class={chevronClass(openSections.crf)} />
         </div>
-      </div>
+      </button>
 
-      <input
-        type="range"
-        value={crf}
-        oninput={(e: Event) => encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
-        min="18" max="35" step="1"
-        class="crf-range w-full"
-        aria-label="Valeur CRF"
-      />
+      {#if openSections.crf}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Niveau de compression vidéo</p>
 
-      <div class="flex justify-between font-mono text-[9px]" style="color: var(--color-subtext2);">
-        <span>← Meilleure qualité</span>
-        <span>Fichier plus petit →</span>
-      </div>
+          <input
+            type="range"
+            value={crf}
+            oninput={(e: Event) => encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
+            min="18" max="35" step="1"
+            class="crf-range w-full"
+            aria-label="Valeur CRF"
+          />
 
-      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-        <span class="font-mono text-[11px]" style="color: var(--color-text);">{currentCrfInfo.label}</span>
-        <div class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">
-          Taille {currentCrfInfo.size} · Qualité {currentCrfInfo.quality}
+          <div class="flex justify-between font-mono text-[9px]" style="color: var(--color-subtext2);">
+            <span>← Meilleure qualité</span>
+            <span>Fichier plus petit →</span>
+          </div>
+
+          <div class="info-box">
+            <span class="font-mono text-[11px]" style="color: var(--color-text);">{currentCrfInfo.label}</span>
+            <div class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">
+              Taille {currentCrfInfo.size} · Qualité {currentCrfInfo.quality}
+            </div>
+          </div>
         </div>
-      </div>
+      {/if}
     </div>
 
     <!-- Preset -->
-    <div class="space-y-3 pt-1" style="border-top: 1px solid var(--color-border);">
-      <div class="pt-2">
-        <div class="section-label">Vitesse d'encodage</div>
-        <p class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">Vitesse vs taille finale</p>
-      </div>
-
-      <div class="grid grid-cols-7 gap-1">
-        {#each ["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as p}
-          <button
-            type="button"
-            onclick={() => encoder.setPreset(p)}
-            class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
-            class:preset-btn--active={preset === p}
-          >
-            {p.toUpperCase()}
-          </button>
-        {/each}
-      </div>
-
-      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-        <div class="flex items-center gap-2">
-          <span class="font-mono text-[11px]" style="color: var(--color-text);">{presetInfo[preset].speed}</span>
-          {#if preset === "p5"}
-            <span class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-full)]"
-                  style="background: color-mix(in srgb, var(--color-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent); color: var(--color-success);">
-              REC.
-            </span>
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('preset')} aria-expanded={openSections.preset}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Vitesse d'encodage</span>
+          {#if !openSections.preset}
+            <span class="acc-summary">{preset.toUpperCase()} · {presetInfo[preset].speed}</span>
           {/if}
         </div>
-        <div class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">{presetInfo[preset].desc}</div>
-      </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.preset)} />
+        </div>
+      </button>
+
+      {#if openSections.preset}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Vitesse vs taille finale</p>
+
+          <div class="grid grid-cols-7 gap-1">
+            {#each ["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as p}
+              <button
+                type="button"
+                onclick={() => encoder.setPreset(p)}
+                class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+                class:preset-btn--active={preset === p}
+              >
+                {p.toUpperCase()}
+              </button>
+            {/each}
+          </div>
+
+          <div class="info-box">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[11px]" style="color: var(--color-text);">{presetInfo[preset].speed}</span>
+              {#if preset === "p5"}
+                <span class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-full)]"
+                      style="background: color-mix(in srgb, var(--color-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent); color: var(--color-success);">
+                  REC.
+                </span>
+              {/if}
+            </div>
+            <div class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">{presetInfo[preset].desc}</div>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Format Saison/Épisode -->
-    <div class="space-y-3 pt-1" style="border-top: 1px solid var(--color-border);">
-      <div class="pt-2">
-        <div class="section-label">Format saison/épisode</div>
-        <p class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">Affichage dans le nom de sortie</p>
-      </div>
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('seFormat')} aria-expanded={openSections.seFormat}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Format saison/épisode</span>
+          {#if !openSections.seFormat}
+            <span class="acc-summary">{SEASON_EPISODE_FORMATS.find((f: any) => f.value === seFormat)?.label}</span>
+          {/if}
+        </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.seFormat)} />
+        </div>
+      </button>
 
-      <div class="grid grid-cols-2 gap-1.5">
-        {#each SEASON_EPISODE_FORMATS as f}
-          <button
-            type="button"
-            onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-            class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
-            class:preset-btn--active={seFormat === f.value}
-          >
-            {f.label}
-          </button>
-        {/each}
-      </div>
+      {#if openSections.seFormat}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Affichage dans le nom de sortie</p>
 
-      <div class="px-3 py-2.5 rounded-[var(--radius-sm)]" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-        <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
-        <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
-          Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P BluRay H265 10bit AAC
-        </span>
-      </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            {#each SEASON_EPISODE_FORMATS as f}
+              <button
+                type="button"
+                onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
+                class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+                class:preset-btn--active={seFormat === f.value}
+              >
+                {f.label}
+              </button>
+            {/each}
+          </div>
+
+          <div class="info-box">
+            <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
+            <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
+              Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P BluRay H265 10bit AAC
+            </span>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Audio -->
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('audio')} aria-expanded={openSections.audio}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Audio</span>
+          {#if !openSections.audio}
+            <span class="acc-summary">
+              {audioMode === "reencode" ? `AAC ${audioBitrate}k` : "Copie sans perte"}
+            </span>
+          {/if}
+        </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.audio)} />
+        </div>
+      </button>
+
+      {#if openSections.audio}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Réencodage AAC ou copie sans perte</p>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setAudioMode("reencode")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={audioMode === "reencode"}
+            >
+              Réencoder (AAC)
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setAudioMode("copy")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={audioMode === "copy"}
+            >
+              Copier (-c:a copy)
+            </button>
+          </div>
+
+          {#if audioMode === "reencode"}
+            <div class="grid grid-cols-4 gap-1.5">
+              {#each [128, 192, 256, 320] as br}
+                <button
+                  type="button"
+                  onclick={() => encoder.setAudioBitrate(br)}
+                  class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+                  class:preset-btn--active={audioBitrate === br}
+                >
+                  {br}k
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <div class="info-box">
+              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">
+                La piste audio source sera conservée telle quelle, sans perte de qualité supplémentaire.
+              </span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Qualité NVENC avancée -->
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('nvenc')} aria-expanded={openSections.nvenc}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Qualité NVENC avancée</span>
+          {#if !openSections.nvenc}
+            <span class="acc-summary">
+              AQ {spatialAq || temporalAq ? `(${aqStrength})` : "off"} · Multipass {multipass === "disabled" ? "aucun" : multipass === "qres" ? "1/4" : "plein"}
+            </span>
+          {/if}
+        </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.nvenc)} />
+        </div>
+      </button>
+
+      {#if openSections.nvenc}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">AQ adaptative et multipass</p>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setSpatialAq(!spatialAq)}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={spatialAq}
+            >
+              AQ spatiale
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setTemporalAq(!temporalAq)}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={temporalAq}
+            >
+              AQ temporelle
+            </button>
+          </div>
+
+          {#if spatialAq || temporalAq}
+            <div class="flex justify-between items-start">
+              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">Force AQ</span>
+              <span class="font-mono text-[12px] font-bold" style="color: var(--color-accent);">{aqStrength}</span>
+            </div>
+            <input
+              type="range"
+              value={aqStrength}
+              oninput={(e: Event) => encoder.setAqStrength(parseInt((e.target as HTMLInputElement).value))}
+              min="1" max="15" step="1"
+              class="crf-range w-full"
+              aria-label="Force AQ"
+            />
+          {/if}
+
+          <div class="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setMultipass("disabled")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={multipass === "disabled"}
+            >
+              Aucun
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setMultipass("qres")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={multipass === "qres"}
+            >
+              1/4 rés.
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setMultipass("fullres")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={multipass === "fullres"}
+            >
+              Pleine rés.
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Conteneur -->
+    <div class="acc-item">
+      <button type="button" class="acc-trigger" onclick={() => toggle('container')} aria-expanded={openSections.container}>
+        <div class="acc-trigger-left">
+          <span class="section-label">Conteneur de sortie</span>
+          {#if !openSections.container}
+            <span class="acc-summary">{container.toUpperCase()}</span>
+          {/if}
+        </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.container)} />
+        </div>
+      </button>
+
+      {#if openSections.container}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Format du fichier final</p>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setContainer("mkv")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={container === "mkv"}
+            >
+              MKV
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setContainer("mp4")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={container === "mp4"}
+            >
+              MP4
+            </button>
+          </div>
+
+          {#if container === "mp4"}
+            <div class="info-box">
+              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">
+                Sous-titres convertis en mov_text — meilleure compatibilité Apple/mobile, MKV reste recommandé pour l'ASS avancé.
+              </span>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <!-- Estimation -->
     {#if totalOriginalMb > 0}
-      <div class="space-y-3 pt-1" style="border-top: 1px solid var(--color-border);">
-        <div class="pt-2">
-          <div class="section-label">Estimation résultat</div>
-          <p class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">Prévision basée sur les paramètres actuels</p>
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle('estimate')} aria-expanded={openSections.estimate}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Estimation résultat</span>
+            {#if !openSections.estimate}
+              <span class="acc-summary">{formatSize(estimatedTotalMb)} (-{estimatedGainPct.toFixed(1)}%)</span>
+            {/if}
+          </div>
+          <div class="acc-trigger-right">
+            <ChevronDown class={chevronClass(openSections.estimate)} />
+          </div>
+        </button>
 
-        <div class="grid grid-cols-3 gap-2">
-          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-            <div class="section-label mb-1">ORIGINAL</div>
-            <div class="font-mono text-[12px] font-bold" style="color: var(--color-text);">{formatSize(totalOriginalMb)}</div>
-          </div>
-          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-            <div class="section-label mb-1">ESTIMÉ</div>
-            <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">{formatSize(estimatedTotalMb)}</div>
-          </div>
-          <div class="p-2.5 rounded-[var(--radius-sm)] text-center" style="background: var(--color-surface); border: 1px solid var(--color-border);">
-            <div class="section-label mb-1">GAIN</div>
-            <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">-{estimatedGainPct.toFixed(1)}%</div>
-          </div>
-        </div>
+        {#if openSections.estimate}
+          <div class="acc-content space-y-3">
+            <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Prévision basée sur les paramètres actuels</p>
 
-        <div class="relative rounded-[var(--radius-sm)] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
-          <div class="absolute inset-y-0 left-0 rounded-[1px]"
-               style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"></div>
-          <div class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
-               style="color: var(--color-text);">
-            {formatSize(estimatedTotalMb)} / {formatSize(totalOriginalMb)}
+            <div class="grid grid-cols-3 gap-2">
+              <div class="stat-box">
+                <div class="section-label mb-1">ORIGINAL</div>
+                <div class="font-mono text-[12px] font-bold" style="color: var(--color-text);">{formatSize(totalOriginalMb)}</div>
+              </div>
+              <div class="stat-box">
+                <div class="section-label mb-1">ESTIMÉ</div>
+                <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">{formatSize(estimatedTotalMb)}</div>
+              </div>
+              <div class="stat-box">
+                <div class="section-label mb-1">GAIN</div>
+                <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">-{estimatedGainPct.toFixed(1)}%</div>
+              </div>
+            </div>
+
+            <div class="relative rounded-[var(--radius-sm)] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
+              <div class="absolute inset-y-0 left-0 rounded-[1px]"
+                   style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"></div>
+              <div class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
+                   style="color: var(--color-text);">
+                {formatSize(estimatedTotalMb)} / {formatSize(totalOriginalMb)}
+              </div>
+            </div>
           </div>
-        </div>
+        {/if}
       </div>
     {/if}
   </div>
@@ -221,7 +490,7 @@
   }
 
   .panel-body {
-    padding: 16px;
+    padding: 8px 16px 16px;
     overflow-y: auto;
   }
 
@@ -242,6 +511,89 @@
     background: var(--color-panel2);
     border-color: var(--color-border);
     color: var(--color-text);
+  }
+
+  /* Accordion */
+  .acc-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .acc-item:last-child {
+    border-bottom: none;
+  }
+
+  .acc-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 12px 2px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .acc-trigger:hover .section-label {
+    color: var(--color-text);
+  }
+
+  .acc-trigger-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .acc-summary {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .acc-trigger-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .acc-value {
+    font-family: "Geist Mono", monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+
+  :global(.acc-chevron) {
+    width: 14px;
+    height: 14px;
+    color: var(--color-subtext);
+    transition: transform 0.15s ease;
+  }
+  :global(.acc-chevron--open) {
+    transform: rotate(180deg);
+  }
+
+  .acc-content {
+    padding: 0 2px 14px;
+  }
+
+  .info-box {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+  }
+
+  .stat-box {
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
   }
 
   /* Range CRF */

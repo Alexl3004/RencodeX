@@ -35,6 +35,13 @@ pub struct EncodeJob {
     pub fps: f64,
     pub crf:             u32,
     pub preset:          String,
+    pub audio_mode:      String,
+    pub audio_bitrate:   u32,
+    pub spatial_aq:      bool,
+    pub temporal_aq:     bool,
+    pub aq_strength:     u8,
+    pub multipass:       String,
+    pub container:       String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

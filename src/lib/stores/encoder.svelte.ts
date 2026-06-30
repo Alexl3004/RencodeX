@@ -27,6 +27,10 @@ export interface FileAnalysis {
   sub_langs:     string[];
 }
 
+export type AudioMode = "reencode" | "copy";
+export type MultipassMode = "disabled" | "qres" | "fullres";
+export type ContainerFormat = "mkv" | "mp4";
+
 export interface EncodeJob {
   input_path:              string;
   output_path:             string;
@@ -40,6 +44,13 @@ export interface EncodeJob {
   fps:                     number;
   crf:                     number;
   preset:                  string;
+  audio_mode:              AudioMode;
+  audio_bitrate:           number;
+  spatial_aq:              boolean;
+  temporal_aq:             boolean;
+  aq_strength:             number;
+  multipass:               MultipassMode;
+  container:               ContainerFormat;
 }
 
 export interface ProgressEvent {
@@ -195,6 +206,7 @@ export function buildOutputName(
   cleaned: CleanedName,
   tag: string,
   seFormat: SeasonEpisodeFormat = "S01E01",
+  audioTag: string = "AAC",
 ): string {
   return [
     cleaned.title,
@@ -205,8 +217,30 @@ export function buildOutputName(
     cleaned.source,
     "H265",
     "10bit",
-    "AAC",
+    audioTag,
   ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Détermine le tag audio à afficher dans le nom de sortie :
+ * - "AAC" si l'audio est réencodé (mode "reencode")
+ * - le(s) codec(s) source réel(s) si l'audio est copié sans réencodage
+ *   (ex: "EAC3", ou "AAC-FLAC" si plusieurs pistes sélectionnées avec
+ *   des codecs différents)
+ */
+export function computeAudioTag(
+  streams: StreamInfo[],
+  selAudio: Set<string>,
+  audioMode: AudioMode,
+): string {
+  if (audioMode === "reencode") return "AAC";
+  const codecs = new Set(
+    streams
+      .filter(s => s.codec_type === "audio" && selAudio.has(s.language))
+      .map(s => s.codec_name.toUpperCase())
+  );
+  if (codecs.size === 0) return "AAC";
+  return [...codecs].sort().join("-");
 }
 
 /**
@@ -221,7 +255,11 @@ export function buildOutputName(
 export function applySeFormat(file: AppFile, seFormat: SeasonEpisodeFormat): string {
   if (file.cleaned) {
     const tag = file.output_name.match(/\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/)?.[1] ?? "";
-    return buildOutputName(file.cleaned, tag, seFormat);
+    // Le tag audio (AAC, EAC3, etc.) est toujours le dernier token du nom déjà
+    // construit — on le préserve tel quel ici plutôt que de le re-hardcoder,
+    // car cette fonction n'a pas accès au mode audio courant du store.
+    const audioTag = file.output_name.trim().split(/\s+/).pop() ?? "AAC";
+    return buildOutputName(file.cleaned, tag, seFormat, audioTag);
   }
   // Renommage manuel : substitution directe du pattern SxxExx dans le nom stocké
   return file.output_name.replace(
@@ -294,6 +332,15 @@ function createEncoder() {
   let preset = $state("p5");
   let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
 
+  // ─── Réglages avancés (audio / NVENC / conteneur) ──────────────────────
+  let audioMode    = $state<AudioMode>("reencode");
+  let audioBitrate = $state(192);
+  let spatialAq    = $state(false);
+  let temporalAq   = $state(false);
+  let aqStrength   = $state(8);
+  let multipass    = $state<MultipassMode>("disabled");
+  let container    = $state<ContainerFormat>("mkv");
+
   let _unlisten: UnlistenFn[] = [];
 
   function setCrf(value: number) {
@@ -312,6 +359,42 @@ function createEncoder() {
     refreshOutputNames();
   }
 
+  function setAudioMode(value: AudioMode) {
+    audioMode = value;
+    localStorage.setItem("rencodex-audio-mode", value);
+    refreshOutputNames();
+  }
+
+  function setAudioBitrate(value: number) {
+    audioBitrate = value;
+    localStorage.setItem("rencodex-audio-bitrate", value.toString());
+  }
+
+  function setSpatialAq(value: boolean) {
+    spatialAq = value;
+    localStorage.setItem("rencodex-spatial-aq", value.toString());
+  }
+
+  function setTemporalAq(value: boolean) {
+    temporalAq = value;
+    localStorage.setItem("rencodex-temporal-aq", value.toString());
+  }
+
+  function setAqStrength(value: number) {
+    aqStrength = value;
+    localStorage.setItem("rencodex-aq-strength", value.toString());
+  }
+
+  function setMultipass(value: MultipassMode) {
+    multipass = value;
+    localStorage.setItem("rencodex-multipass", value);
+  }
+
+  function setContainer(value: ContainerFormat) {
+    container = value;
+    localStorage.setItem("rencodex-container", value);
+  }
+
   function loadEncodingSettings() {
     const savedCrf      = localStorage.getItem("rencodex-crf");
     const savedPreset   = localStorage.getItem("rencodex-preset");
@@ -321,6 +404,22 @@ function createEncoder() {
     if (savedSeFormat && SEASON_EPISODE_FORMATS.some(f => f.value === savedSeFormat)) {
       seasonEpisodeFormat = savedSeFormat;
     }
+
+    const savedAudioMode    = localStorage.getItem("rencodex-audio-mode") as AudioMode | null;
+    const savedAudioBitrate = localStorage.getItem("rencodex-audio-bitrate");
+    const savedSpatialAq    = localStorage.getItem("rencodex-spatial-aq");
+    const savedTemporalAq   = localStorage.getItem("rencodex-temporal-aq");
+    const savedAqStrength   = localStorage.getItem("rencodex-aq-strength");
+    const savedMultipass    = localStorage.getItem("rencodex-multipass") as MultipassMode | null;
+    const savedContainer    = localStorage.getItem("rencodex-container") as ContainerFormat | null;
+
+    if (savedAudioMode === "reencode" || savedAudioMode === "copy") audioMode = savedAudioMode;
+    if (savedAudioBitrate)  audioBitrate = parseInt(savedAudioBitrate);
+    if (savedSpatialAq)     spatialAq    = savedSpatialAq === "true";
+    if (savedTemporalAq)    temporalAq   = savedTemporalAq === "true";
+    if (savedAqStrength)    aqStrength   = parseInt(savedAqStrength);
+    if (savedMultipass === "disabled" || savedMultipass === "qres" || savedMultipass === "fullres") multipass = savedMultipass;
+    if (savedContainer === "mkv" || savedContainer === "mp4") container = savedContainer;
   }
 
   async function init() {
@@ -409,8 +508,9 @@ function createEncoder() {
           subLangs:   analysis.sub_langs,
         });
 
-        const tag     = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
-        const outName = buildOutputName(cleaned, tag, seasonEpisodeFormat);
+        const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
+        const audioTag = computeAudioTag(analysis.streams, selAudio, audioMode);
+        const outName  = buildOutputName(cleaned, tag, seasonEpisodeFormat, audioTag);
 
         const updated: AppFile = {
           ...files[idx],
@@ -503,9 +603,11 @@ function createEncoder() {
             }
           });
 
+        const outExt = container === "mp4" ? ".mp4" : ".mkv";
+
         return {
           input_path:              f.path,
-          output_path:             joinPath(outputDir, `${applySeFormat(f, seasonEpisodeFormat)}${f.output_ext}`),
+          output_path:             joinPath(outputDir, `${applySeFormat(f, seasonEpisodeFormat)}${outExt}`),
           audio_langs:             [...selAudio],
           sub_langs:               [...selSubs],
           audio_overrides:         audioOverrides[f.path] ?? {},
@@ -516,6 +618,13 @@ function createEncoder() {
           fps:                     f.fps ?? 25,
           crf,
           preset,
+          audio_mode:              audioMode,
+          audio_bitrate:           audioBitrate,
+          spatial_aq:              spatialAq,
+          temporal_aq:             temporalAq,
+          aq_strength:             aqStrength,
+          multipass,
+          container,
         };
       });
 
@@ -589,8 +698,9 @@ function createEncoder() {
   function refreshOutputNames() {
     files = files.map(f => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done") return f;
-      const tag  = computeTag(f.audio_langs, f.sub_langs, selAudio, selSubs);
-      const name = buildOutputName(f.cleaned, tag, seasonEpisodeFormat);
+      const tag      = computeTag(f.audio_langs, f.sub_langs, selAudio, selSubs);
+      const audioTag = computeAudioTag(f.streams, selAudio, audioMode);
+      const name     = buildOutputName(f.cleaned, tag, seasonEpisodeFormat, audioTag);
       return { ...f, output_name: name };
     });
   }
@@ -666,10 +776,24 @@ function createEncoder() {
     globalCodecOverride = {};
     summary             = null;
     progress            = null;
+    audioMode           = "reencode";
+    audioBitrate        = 192;
+    spatialAq           = false;
+    temporalAq          = false;
+    aqStrength          = 8;
+    multipass           = "disabled";
+    container           = "mkv";
 
     localStorage.setItem("rencodex-crf",    "28");
     localStorage.setItem("rencodex-preset", "p5");
     localStorage.setItem("rencodex-se-format", "S01E01");
+    localStorage.setItem("rencodex-audio-mode", "reencode");
+    localStorage.setItem("rencodex-audio-bitrate", "192");
+    localStorage.setItem("rencodex-spatial-aq", "false");
+    localStorage.setItem("rencodex-temporal-aq", "false");
+    localStorage.setItem("rencodex-aq-strength", "8");
+    localStorage.setItem("rencodex-multipass", "disabled");
+    localStorage.setItem("rencodex-container", "mkv");
 
     logs = [];
     log("Interface réinitialisée aux paramètres par défaut", "info");
@@ -696,6 +820,13 @@ function createEncoder() {
     get crf()                 { return crf; },
     get preset()              { return preset; },
     get seasonEpisodeFormat() { return seasonEpisodeFormat; },
+    get audioMode()           { return audioMode; },
+    get audioBitrate()        { return audioBitrate; },
+    get spatialAq()           { return spatialAq; },
+    get temporalAq()          { return temporalAq; },
+    get aqStrength()          { return aqStrength; },
+    get multipass()           { return multipass; },
+    get container()           { return container; },
     get forceUpdateCounter()  { return forceUpdateCounter; },
     get globalCodecOverride() { return globalCodecOverride; },
     /** Retourne le nom d'affichage en appliquant le format SE courant en temps réel. */
@@ -705,6 +836,13 @@ function createEncoder() {
     setCrf,
     setPreset,
     setSeasonEpisodeFormat,
+    setAudioMode,
+    setAudioBitrate,
+    setSpatialAq,
+    setTemporalAq,
+    setAqStrength,
+    setMultipass,
+    setContainer,
     init,
     addFiles,
     removeFile,
