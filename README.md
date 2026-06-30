@@ -1,6 +1,6 @@
 # RenCodeX — Tauri 2 + Svelte 5 + Rust
 
-Encodeur vidéo desktop **H265/HEVC NVENC** pour Windows, avec nettoyage intelligent de noms de fichiers, notifications Discord, rapports email et scan de dossiers.
+Encodeur vidéo desktop **H265/HEVC NVENC** pour Windows, avec nettoyage intelligent de noms de fichiers (entièrement personnalisable), notifications Discord, rapports email et scan de dossiers.
 
 ---
 
@@ -77,7 +77,7 @@ RenCodeX/
 ├── src-tauri/                   # Backend Rust
 │   ├── src/
 │   │   ├── main.rs              # Point d'entrée Tauri + démarrage bot Discord
-│   │   ├── models.rs            # Structs partagées (AppConfig, EncodeJob, etc.)
+│   │   ├── models.rs            # Structs partagées (AppConfig, EncodingPrefs, EncodeJob…)
 │   │   ├── state.rs             # État global de l'encodeur (Mutex partagé)
 │   │   ├── regex.rs             # Regex pré-compilées (Once_cell) pour noms de fichiers
 │   │   ├── utils.rs             # Utilitaires : chemins, langues, config, resolve_config
@@ -98,16 +98,20 @@ RenCodeX/
 │   │   ├── DropZone.svelte
 │   │   ├── FileTable.svelte
 │   │   ├── LangSelector.svelte
+│   │   ├── EncodingSettings.svelte # Paramètres d'encodage (CRF, preset, ordre des tags, team…)
+│   │   ├── RenameModal.svelte      # Renommage assisté d'un fichier
 │   │   ├── ProgressPanel.svelte
 │   │   ├── LogConsole.svelte
 │   │   ├── OutputDirPicker.svelte
+│   │   ├── Settings.svelte         # Préférences générales (ffmpeg, Discord, email)
 │   │   └── ControlBar.svelte
 │   ├── lib/
 │   │   ├── stores/
-│   │   │   ├── encoder.svelte.ts   # Store Svelte 5 runes (état encodeur)
+│   │   │   ├── encoder.svelte.ts   # Store Svelte 5 runes (état encodeur, ordre des tags…)
+│   │   │   ├── stats.svelte.ts     # Statistiques cumulées
 │   │   │   └── theme.svelte.ts     # Store thème dark/light
-│   │   └── utils.ts               # Formatage durée / taille
-│   └── app.css                    # Variables CSS thème
+│   │   └── utils.ts                # Formatage durée / taille
+│   └── app.css                     # Variables CSS thème
 │
 ├── package.json
 ├── svelte.config.js
@@ -126,16 +130,52 @@ RenCodeX/
 | Analyse ffprobe async (streams, langues, durée, FPS) | ✅ |
 | Détection langues audio & sous-titres | ✅ |
 | Sélection des pistes à conserver | ✅ |
-| Encodage H265 NVENC (cq=28, main10, p010le) | ✅ |
+| Encodage H265 NVENC (CRF configurable, main10, p010le) | ✅ |
 | Progression temps-réel (vitesse, temps restant) | ✅ |
 | Annulation propre (suppression du fichier partiel) | ✅ |
 | Nettoyage intelligent de noms de fichiers (regex) | ✅ |
-| Renommage double-clic dans la file | ✅ |
+| **Ordre des tags du nom de sortie 100% personnalisable** | ✅ |
+| **Tag "team" insérable où l'on veut dans le nom** | ✅ |
+| Renommage double-clic / assisté dans la file | ✅ |
 | Dark / Light mode | ✅ |
-| Config persistante JSON (`%APPDATA%\RenCodeX\`) | ✅ |
+| Préférences d'encodage persistantes (`%APPDATA%\RenCodeX\encoding_prefs.json`) | ✅ |
+| Config générale persistante (`%APPDATA%\RenCodeX\config.json`) | ✅ |
 | Notifications Discord (bot + embeds rich) | ✅ |
 | Bot Discord avec commandes à distance | ✅ |
 | Rapport email (SMTP / lettre) | ✅ |
+
+---
+
+## Personnalisation du nom de sortie
+
+Le panneau **Paramètres d'encodage → Ordre des tags & team** permet d'adapter entièrement le nom généré pour chaque fichier, sans toucher au code.
+
+### Tags disponibles
+
+| Id | Description | Exemple |
+|---|---|---|
+| `title` | Titre nettoyé | `Jujutsu Kaisen` |
+| `se` | Saison/Épisode (format choisi dans la section dédiée) | `S03E01` |
+| `audio` | Tag audio/langue détecté | `VOSTFR`, `VF`, `MULTI`… |
+| `resolution` | Résolution vidéo | `1080P` |
+| `provider` | Provider détecté dans le nom source | `AMZN` |
+| `source` | Source vidéo | `BluRay`, `WEB-DL`… |
+| `codec` | Codec vidéo de sortie | `H265` |
+| `bitdepth` | Profondeur de couleur | `10bit` |
+| `audioCodec` | Codec audio de sortie | `AAC`, `EAC3`… |
+| `team` | Tag libre, vide par défaut | `MaTeam` |
+
+### Réordonner
+
+Chaque tag dispose de boutons ↑ / ↓ pour le déplacer à la position voulue. Le tag `team` reste ignoré (pas inséré dans le nom) tant qu'aucun texte n'est saisi dans le champ correspondant.
+
+**Exemple** avec l'ordre par défaut et la team `MaTeam` ajoutée en fin :
+
+```
+Jujutsu Kaisen S03E01 VOSTFR 1080P BluRay H265 10bit AAC MaTeam
+```
+
+Ces réglages (CRF, preset, format saison/épisode, ordre des tags, team, mode audio, AQ, multipass, conteneur) sont sauvegardés automatiquement dans `%APPDATA%\RenCodeX\encoding_prefs.json` et rechargés à chaque démarrage.
 
 ---
 
@@ -190,7 +230,21 @@ Dans `src-tauri/src/media.rs`, la fonction `start_encoding` construit la command
 "-preset".into(), "p5".into(), // Vitesse NVENC (p1=lent/qualité ↔ p7=rapide)
 ```
 
+Le CRF et le preset sont également réglables directement depuis l'UI (panneau Paramètres d'encodage), sans recompiler.
+
 Pour encoder en CPU (sans GPU NVIDIA), remplacer `hevc_nvenc` par `libx265` dans la commande FFmpeg.
+
+---
+
+## Stockage des préférences
+
+| Fichier | Contenu |
+|---|---|
+| `%APPDATA%\RenCodeX\config.json` | Chemin FFmpeg, thème, config Discord/email |
+| `%APPDATA%\RenCodeX\encoding_prefs.json` | CRF, preset, format S/E, ordre des tags, team, réglages audio/NVENC/conteneur |
+| `%APPDATA%\RenCodeX\stats.json` | Statistiques cumulées d'encodage |
+
+Ces fichiers sont séparés volontairement : sauvegarder les Settings généraux n'écrase jamais les préférences d'encodage, et inversement.
 
 ---
 
@@ -198,4 +252,4 @@ Pour encoder en CPU (sans GPU NVIDIA), remplacer `hevc_nvenc` par `libx265` dans
 
 - **NVENC uniquement par défaut** : le codec utilisé est `hevc_nvenc`. Un GPU NVIDIA Kepler+ est requis. Pour un encodage CPU, substituer `libx265` dans `media.rs`.
 - **Pause/Reprise** : non implémentée nativement (SIGSTOP non supporté proprement sur Windows). L'annulation supprime le fichier de sortie partiel. Une vraie pause via `CREATE_SUSPENDED` est envisageable.
-- **Fichier de config** : stocké dans `%APPDATA%\RenCodeX\config.json`. Aucun credential sensible (token, mot de passe) n'est sauvegardé dans ce fichier — ils sont fournis à chaque session via l'UI ou des variables d'environnement.
+- **Fichiers de préférences** : stockés dans `%APPDATA%\RenCodeX\`. Aucun credential sensible (token, mot de passe) n'est sauvegardé dans ces fichiers — ils sont fournis à chaque session via l'UI ou des variables d'environnement.
