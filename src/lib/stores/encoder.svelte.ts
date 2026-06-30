@@ -202,23 +202,61 @@ export function computeTag(
   }
 }
 
+// ─── Ordre des tags (personnalisable) ──────────────────────────────────────
+// Chaque tag du nom de sortie est identifié par un id stable. L'utilisateur
+// peut réordonner ces ids (et insérer "team" où il veut) depuis les
+// Paramètres d'encodage ; `buildOutputName` se contente de mapper chaque id
+// vers sa valeur courante puis de filtrer les vides.
+
+export type TagId =
+  | "title" | "se" | "audio" | "resolution" | "provider"
+  | "source" | "codec" | "bitdepth" | "audioCodec" | "team";
+
+export const DEFAULT_TAG_ORDER: TagId[] = [
+  "title", "se", "audio", "resolution", "provider", "source",
+  "codec", "bitdepth", "audioCodec", "team",
+];
+
+export const TAG_LABELS: Record<TagId, string> = {
+  title:      "Titre",
+  se:         "Saison/Épisode",
+  audio:      "Tag audio (VOSTFR, VF…)",
+  resolution: "Résolution",
+  provider:   "Provider",
+  source:     "Source (BluRay, WEB-DL…)",
+  codec:      "Codec vidéo (H265)",
+  bitdepth:   "Profondeur (10bit)",
+  audioCodec: "Codec audio (AAC…)",
+  team:       "Team",
+};
+
 export function buildOutputName(
   cleaned: CleanedName,
   tag: string,
   seFormat: SeasonEpisodeFormat = "S01E01",
   audioTag: string = "AAC",
+  tagOrder: TagId[] = DEFAULT_TAG_ORDER,
+  team: string = "",
 ): string {
-  return [
-    cleaned.title,
-    formatSeasonEpisode(cleaned.season_episode, seFormat),
-    tag,
-    cleaned.resolution,
-    cleaned.provider,
-    cleaned.source,
-    "H265",
-    "10bit",
-    audioTag,
-  ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  const values: Record<TagId, string> = {
+    title:      cleaned.title,
+    se:         formatSeasonEpisode(cleaned.season_episode, seFormat),
+    audio:      tag,
+    resolution: cleaned.resolution,
+    provider:   cleaned.provider,
+    source:     cleaned.source,
+    codec:      "H265",
+    bitdepth:   "10bit",
+    audioCodec: audioTag,
+    team:       team.trim(),
+  };
+
+  return tagOrder
+    .map((id) => values[id])
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -252,14 +290,19 @@ export function computeAudioTag(
  * quand même une substitution de pattern sur le nom stocké pour couvrir
  * les cas courants.
  */
-export function applySeFormat(file: AppFile, seFormat: SeasonEpisodeFormat): string {
+export function applySeFormat(
+  file: AppFile,
+  seFormat: SeasonEpisodeFormat,
+  tagOrder: TagId[] = DEFAULT_TAG_ORDER,
+  team: string = "",
+): string {
   if (file.cleaned) {
     const tag = file.output_name.match(/\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/)?.[1] ?? "";
     // Le tag audio (AAC, EAC3, etc.) est toujours le dernier token du nom déjà
     // construit — on le préserve tel quel ici plutôt que de le re-hardcoder,
     // car cette fonction n'a pas accès au mode audio courant du store.
     const audioTag = file.output_name.trim().split(/\s+/).pop() ?? "AAC";
-    return buildOutputName(file.cleaned, tag, seFormat, audioTag);
+    return buildOutputName(file.cleaned, tag, seFormat, audioTag, tagOrder, team);
   }
   // Renommage manuel : substitution directe du pattern SxxExx dans le nom stocké
   return file.output_name.replace(
@@ -331,6 +374,8 @@ function createEncoder() {
   let crf    = $state(28);
   let preset = $state("p5");
   let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
+  let tagOrder = $state<TagId[]>([...DEFAULT_TAG_ORDER]);
+  let team     = $state("");
 
   // ─── Réglages avancés (audio / NVENC / conteneur) ──────────────────────
   let audioMode    = $state<AudioMode>("reencode");
@@ -345,89 +390,165 @@ function createEncoder() {
 
   function setCrf(value: number) {
     crf = value;
-    localStorage.setItem("rencodex-crf", value.toString());
+    persistPrefs();
   }
 
   function setPreset(value: string) {
     preset = value;
-    localStorage.setItem("rencodex-preset", value);
+    persistPrefs();
   }
 
   function setSeasonEpisodeFormat(value: SeasonEpisodeFormat) {
     seasonEpisodeFormat = value;
-    localStorage.setItem("rencodex-se-format", value);
+    persistPrefs();
+    refreshOutputNames();
+  }
+
+  function setTagOrder(value: TagId[]) {
+    tagOrder = value;
+    persistPrefs();
+    refreshOutputNames();
+  }
+
+  /** Déplace le tag `id` d'une position vers le haut (-1) ou le bas (+1). */
+  function moveTag(id: TagId, dir: -1 | 1) {
+    const idx = tagOrder.indexOf(id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= tagOrder.length) return;
+    const next = [...tagOrder];
+    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+    setTagOrder(next);
+  }
+
+  function setTeam(value: string) {
+    team = value;
+    persistPrefs();
     refreshOutputNames();
   }
 
   function setAudioMode(value: AudioMode) {
     audioMode = value;
-    localStorage.setItem("rencodex-audio-mode", value);
+    persistPrefs();
     refreshOutputNames();
   }
 
   function setAudioBitrate(value: number) {
     audioBitrate = value;
-    localStorage.setItem("rencodex-audio-bitrate", value.toString());
+    persistPrefs();
   }
 
   function setSpatialAq(value: boolean) {
     spatialAq = value;
-    localStorage.setItem("rencodex-spatial-aq", value.toString());
+    persistPrefs();
   }
 
   function setTemporalAq(value: boolean) {
     temporalAq = value;
-    localStorage.setItem("rencodex-temporal-aq", value.toString());
+    persistPrefs();
   }
 
   function setAqStrength(value: number) {
     aqStrength = value;
-    localStorage.setItem("rencodex-aq-strength", value.toString());
+    persistPrefs();
   }
 
   function setMultipass(value: MultipassMode) {
     multipass = value;
-    localStorage.setItem("rencodex-multipass", value);
+    persistPrefs();
   }
 
   function setContainer(value: ContainerFormat) {
     container = value;
-    localStorage.setItem("rencodex-container", value);
+    persistPrefs();
   }
 
-  function loadEncodingSettings() {
-    const savedCrf      = localStorage.getItem("rencodex-crf");
-    const savedPreset   = localStorage.getItem("rencodex-preset");
-    const savedSeFormat = localStorage.getItem("rencodex-se-format") as SeasonEpisodeFormat | null;
-    if (savedCrf)    crf    = parseInt(savedCrf);
-    if (savedPreset) preset = savedPreset;
-    if (savedSeFormat && SEASON_EPISODE_FORMATS.some(f => f.value === savedSeFormat)) {
-      seasonEpisodeFormat = savedSeFormat;
+  // ─── Persistance des préférences d'encodage (fichier disque, via Rust) ───
+  // On utilise un petit débounce pour éviter une écriture disque à chaque
+  // pixel glissé sur un slider, tout en garantissant que la dernière valeur
+  // est bien écrite avant la fermeture de l'app (cf. flushPrefs côté init).
+  let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function currentPrefs() {
+    return {
+      crf,
+      preset,
+      se_format: seasonEpisodeFormat,
+      tag_order: tagOrder,
+      team,
+      audio_mode: audioMode,
+      audio_bitrate: audioBitrate,
+      spatial_aq: spatialAq,
+      temporal_aq: temporalAq,
+      aq_strength: aqStrength,
+      multipass,
+      container,
+    };
+  }
+
+  async function flushPrefs() {
+    if (_persistTimer) {
+      clearTimeout(_persistTimer);
+      _persistTimer = null;
     }
+    try {
+      await invoke("save_encoding_prefs", { prefs: currentPrefs() });
+    } catch (e) {
+      log(`Erreur sauvegarde préférences d'encodage : ${e}`, "error");
+    }
+  }
 
-    const savedAudioMode    = localStorage.getItem("rencodex-audio-mode") as AudioMode | null;
-    const savedAudioBitrate = localStorage.getItem("rencodex-audio-bitrate");
-    const savedSpatialAq    = localStorage.getItem("rencodex-spatial-aq");
-    const savedTemporalAq   = localStorage.getItem("rencodex-temporal-aq");
-    const savedAqStrength   = localStorage.getItem("rencodex-aq-strength");
-    const savedMultipass    = localStorage.getItem("rencodex-multipass") as MultipassMode | null;
-    const savedContainer    = localStorage.getItem("rencodex-container") as ContainerFormat | null;
+  function persistPrefs() {
+    if (_persistTimer) clearTimeout(_persistTimer);
+    _persistTimer = setTimeout(() => { flushPrefs(); }, 300);
+  }
 
-    if (savedAudioMode === "reencode" || savedAudioMode === "copy") audioMode = savedAudioMode;
-    if (savedAudioBitrate)  audioBitrate = parseInt(savedAudioBitrate);
-    if (savedSpatialAq)     spatialAq    = savedSpatialAq === "true";
-    if (savedTemporalAq)    temporalAq   = savedTemporalAq === "true";
-    if (savedAqStrength)    aqStrength   = parseInt(savedAqStrength);
-    if (savedMultipass === "disabled" || savedMultipass === "qres" || savedMultipass === "fullres") multipass = savedMultipass;
-    if (savedContainer === "mkv" || savedContainer === "mp4") container = savedContainer;
+  async function loadEncodingSettings() {
+    try {
+      const prefs = await invoke<{
+        crf: number; preset: string; se_format: string; tag_order: string[]; team: string;
+        audio_mode: string; audio_bitrate: number; spatial_aq: boolean; temporal_aq: boolean;
+        aq_strength: number; multipass: string; container: string;
+      }>("load_encoding_prefs");
+
+      if (typeof prefs.crf === "number") crf = prefs.crf;
+      if (prefs.preset) preset = prefs.preset;
+      if (prefs.se_format && SEASON_EPISODE_FORMATS.some(f => f.value === prefs.se_format)) {
+        seasonEpisodeFormat = prefs.se_format as SeasonEpisodeFormat;
+      }
+
+      const parsedOrder = prefs.tag_order as TagId[] | undefined;
+      const isValidOrder = Array.isArray(parsedOrder)
+        && parsedOrder.length === DEFAULT_TAG_ORDER.length
+        && DEFAULT_TAG_ORDER.every(id => parsedOrder.includes(id));
+      if (isValidOrder) tagOrder = parsedOrder!;
+
+      if (typeof prefs.team === "string") team = prefs.team;
+
+      if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy") audioMode = prefs.audio_mode;
+      if (typeof prefs.audio_bitrate === "number") audioBitrate = prefs.audio_bitrate;
+      if (typeof prefs.spatial_aq === "boolean") spatialAq = prefs.spatial_aq;
+      if (typeof prefs.temporal_aq === "boolean") temporalAq = prefs.temporal_aq;
+      if (typeof prefs.aq_strength === "number") aqStrength = prefs.aq_strength;
+      if (prefs.multipass === "disabled" || prefs.multipass === "qres" || prefs.multipass === "fullres") {
+        multipass = prefs.multipass;
+      }
+      if (prefs.container === "mkv" || prefs.container === "mp4") container = prefs.container;
+    } catch (e) {
+      log(`Erreur chargement préférences d'encodage : ${e}`, "error");
+    }
   }
 
   async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
-    loadEncodingSettings();
+    await loadEncodingSettings();
     await stats.init();
     log(`Dossier de sortie : ${outputDir}`, "info");
     await listenEvents();
+
+    // S'assure que les préférences en attente (debounce) sont bien écrites
+    // sur disque avant que l'application ne se ferme.
+    window.addEventListener("beforeunload", () => { flushPrefs(); });
   }
 
   async function listenEvents() {
@@ -510,7 +631,7 @@ function createEncoder() {
 
         const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
         const audioTag = computeAudioTag(analysis.streams, selAudio, audioMode);
-        const outName  = buildOutputName(cleaned, tag, seasonEpisodeFormat, audioTag);
+        const outName  = buildOutputName(cleaned, tag, seasonEpisodeFormat, audioTag, tagOrder, team);
 
         const updated: AppFile = {
           ...files[idx],
@@ -700,7 +821,7 @@ function createEncoder() {
       if (!f.cleaned || f.status === "encoding" || f.status === "done") return f;
       const tag      = computeTag(f.audio_langs, f.sub_langs, selAudio, selSubs);
       const audioTag = computeAudioTag(f.streams, selAudio, audioMode);
-      const name     = buildOutputName(f.cleaned, tag, seasonEpisodeFormat, audioTag);
+      const name     = buildOutputName(f.cleaned, tag, seasonEpisodeFormat, audioTag, tagOrder, team);
       return { ...f, output_name: name };
     });
   }
@@ -771,6 +892,8 @@ function createEncoder() {
     crf                 = 28;
     preset              = "p5";
     seasonEpisodeFormat = "S01E01";
+    tagOrder            = [...DEFAULT_TAG_ORDER];
+    team                = "";
     audioOverrides      = {};
     subOverrides        = {};
     globalCodecOverride = {};
@@ -784,16 +907,7 @@ function createEncoder() {
     multipass           = "disabled";
     container           = "mkv";
 
-    localStorage.setItem("rencodex-crf",    "28");
-    localStorage.setItem("rencodex-preset", "p5");
-    localStorage.setItem("rencodex-se-format", "S01E01");
-    localStorage.setItem("rencodex-audio-mode", "reencode");
-    localStorage.setItem("rencodex-audio-bitrate", "192");
-    localStorage.setItem("rencodex-spatial-aq", "false");
-    localStorage.setItem("rencodex-temporal-aq", "false");
-    localStorage.setItem("rencodex-aq-strength", "8");
-    localStorage.setItem("rencodex-multipass", "disabled");
-    localStorage.setItem("rencodex-container", "mkv");
+    flushPrefs();
 
     logs = [];
     log("Interface réinitialisée aux paramètres par défaut", "info");
@@ -820,6 +934,8 @@ function createEncoder() {
     get crf()                 { return crf; },
     get preset()              { return preset; },
     get seasonEpisodeFormat() { return seasonEpisodeFormat; },
+    get tagOrder()            { return tagOrder; },
+    get team()                { return team; },
     get audioMode()           { return audioMode; },
     get audioBitrate()        { return audioBitrate; },
     get spatialAq()           { return spatialAq; },
@@ -831,11 +947,14 @@ function createEncoder() {
     get globalCodecOverride() { return globalCodecOverride; },
     /** Retourne le nom d'affichage en appliquant le format SE courant en temps réel. */
     getDisplayName(file: AppFile): string {
-      return applySeFormat(file, seasonEpisodeFormat);
+      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team);
     },
     setCrf,
     setPreset,
     setSeasonEpisodeFormat,
+    setTagOrder,
+    moveTag,
+    setTeam,
     setAudioMode,
     setAudioBitrate,
     setSpatialAq,

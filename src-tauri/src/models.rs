@@ -114,6 +114,68 @@ impl Default for AppConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EncodingPrefs {
+    #[serde(default = "default_crf")]
+    pub crf: u32,
+    #[serde(default = "default_preset")]
+    pub preset: String,
+    #[serde(default = "default_se_format")]
+    pub se_format: String,
+    #[serde(default = "default_tag_order")]
+    pub tag_order: Vec<String>,
+    #[serde(default)]
+    pub team: String,
+    #[serde(default = "default_audio_mode")]
+    pub audio_mode: String,
+    #[serde(default = "default_audio_bitrate")]
+    pub audio_bitrate: u32,
+    #[serde(default)]
+    pub spatial_aq: bool,
+    #[serde(default)]
+    pub temporal_aq: bool,
+    #[serde(default = "default_aq_strength")]
+    pub aq_strength: u32,
+    #[serde(default = "default_multipass")]
+    pub multipass: String,
+    #[serde(default = "default_container")]
+    pub container: String,
+}
+
+fn default_crf() -> u32 { 28 }
+fn default_preset() -> String { "p5".to_string() }
+fn default_se_format() -> String { "S01E01".to_string() }
+fn default_tag_order() -> Vec<String> {
+    vec![
+        "title", "se", "audio", "resolution", "provider", "source",
+        "codec", "bitdepth", "audioCodec", "team",
+    ].into_iter().map(String::from).collect()
+}
+fn default_audio_mode() -> String { "reencode".to_string() }
+fn default_audio_bitrate() -> u32 { 192 }
+fn default_aq_strength() -> u32 { 8 }
+fn default_multipass() -> String { "disabled".to_string() }
+fn default_container() -> String { "mkv".to_string() }
+
+impl Default for EncodingPrefs {
+    fn default() -> Self {
+        Self {
+            crf: default_crf(),
+            preset: default_preset(),
+            se_format: default_se_format(),
+            tag_order: default_tag_order(),
+            team: String::new(),
+            audio_mode: default_audio_mode(),
+            audio_bitrate: default_audio_bitrate(),
+            spatial_aq: false,
+            temporal_aq: false,
+            aq_strength: default_aq_strength(),
+            multipass: default_multipass(),
+            container: default_container(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CleanedName {
     pub title: String,
     pub year: String,

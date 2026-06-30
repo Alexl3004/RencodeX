@@ -42,6 +42,8 @@ fn main() {
             commands::get_default_output_dir,
             commands::load_config,
             commands::save_config,
+            commands::load_encoding_prefs,
+            commands::save_encoding_prefs,
             commands::get_effective_config,
             commands::send_discord_notification,
             commands::send_discord_start_notification,
