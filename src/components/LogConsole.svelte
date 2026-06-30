@@ -1,9 +1,8 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { tick } from "svelte";
-  import { Checkbox } from "flowbite-svelte";
-  import { CheckOutline, FileCopyOutline, TrashBinOutline, CloseOutline } from "flowbite-svelte-icons";
-  import { Copy, CircleCheck, Trash2, X} from '@lucide/svelte';
+  import { Switch } from "@skeletonlabs/skeleton-svelte";
+  import { Copy, CircleCheck, Trash2, X } from '@lucide/svelte';
 
 
   let { onClose }: { onClose?: () => void } = $props();
@@ -101,9 +100,21 @@
         </button>
       </div>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
-      <Checkbox bind:checked={autoScroll} class="font-mono text-[10px] text-[var(--color-subtext)]">
-        auto
-      </Checkbox>
+      <Switch
+        checked={autoScroll}
+        onCheckedChange={(details) => (autoScroll = details.checked)}
+        class="flex items-center gap-1.5"
+      >
+        <Switch.Control
+          class="h-[15px] w-[28px] rounded-full border border-[var(--color-border2)] bg-[var(--color-muted)] transition-colors data-[state=checked]:border-[var(--color-accent2)] data-[state=checked]:bg-[var(--color-accent)]"
+        >
+          <Switch.Thumb
+            class="h-[11px] w-[11px] translate-x-[2px] rounded-full bg-white transition-transform data-[state=checked]:translate-x-[15px]"
+          />
+        </Switch.Control>
+        <Switch.Label class="font-mono text-[10px] text-[var(--color-subtext)]">auto</Switch.Label>
+        <Switch.HiddenInput />
+      </Switch>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
       <button type="button" onclick={copyAll}
         class="log-action-btn font-mono text-[10px] flex items-center gap-1

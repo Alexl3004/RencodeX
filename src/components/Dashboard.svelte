@@ -2,6 +2,7 @@
   import { stats } from "$lib/stores/stats.svelte";
   import { formatSize } from "$lib/utils";
   import { X } from '@lucide/svelte';
+  import { Progress, Popover, Portal } from "@skeletonlabs/skeleton-svelte";
 
   let { onClose }: { onClose?: () => void } = $props();
 
@@ -12,23 +13,11 @@
   let avgRatioPct  = $derived(stats.avgRatioPct);
   let lastUpdated  = $derived(stats.lastUpdated);
 
-  let confirmReset = $state(false);
-
   function formattedDate(iso: string | null): string {
     if (!iso) return "--";
     const d = new Date(iso);
     return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) +
       " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function handleReset() {
-    if (!confirmReset) {
-      confirmReset = true;
-      setTimeout(() => (confirmReset = false), 3000);
-      return;
-    }
-    stats.reset();
-    confirmReset = false;
   }
 
   let progressVal = $derived(Math.max(0, 100 - avgRatioPct));
@@ -86,28 +75,53 @@
     </div>
 
     <!-- Barre de ratio -->
-    <div class="relative rounded-[2px] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
-      <div class="absolute inset-y-0 left-0 rounded-[1px]"
-           style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"></div>
-      <div class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
-           style="color: var(--color-text);">
+    <Progress value={progressVal} max={100} class="relative block">
+      <Progress.Track
+        class="h-[20px] rounded-[2px] overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)]"
+      >
+        <Progress.Range class="rounded-[1px] bg-[var(--color-success)] transition-[width] duration-300" />
+      </Progress.Track>
+      <div
+        class="pointer-events-none absolute inset-0 flex items-center justify-center font-mono text-[10px]"
+        style="color: var(--color-text);"
+      >
         {formatSize(avgOutputMb)} / {formatSize(avgInputMb)} en moyenne
       </div>
-    </div>
+    </Progress>
 
     <!-- Footer -->
     <div class="flex items-center justify-between pt-1" style="border-top: 1px solid var(--color-border);">
       <span class="font-mono text-[9px] pt-2" style="color: var(--color-subtext2);">
         Dernière mise à jour : {formattedDate(lastUpdated)}
       </span>
-      <button
-        type="button"
-        onclick={handleReset}
-        class="btn font-mono text-[9px] px-2 py-1 mt-1"
-        class:btn-danger={confirmReset}
-      >
-        {confirmReset ? "Confirmer ?" : "Réinitialiser"}
-      </button>
+      <Popover positioning={{ placement: "top-end" }}>
+        <Popover.Trigger class="btn font-mono text-[9px] px-2 py-1 mt-1">
+          Réinitialiser
+        </Popover.Trigger>
+        <Portal>
+          <Popover.Positioner>
+            <Popover.Content
+              class="w-56 p-3 rounded-[2px] shadow-xl"
+              style="background: var(--color-panel); border: 1px solid var(--color-border);"
+            >
+              <Popover.Description class="text-[11px] leading-snug" style="color: var(--color-text);">
+                Réinitialiser toutes les statistiques cumulées ?
+              </Popover.Description>
+              <div class="flex gap-2 mt-3">
+                <Popover.CloseTrigger
+                  onclick={() => stats.reset()}
+                  class="btn btn-danger flex-1 justify-center font-mono text-[9px]"
+                >
+                  Confirmer
+                </Popover.CloseTrigger>
+                <Popover.CloseTrigger class="btn btn-secondary flex-1 justify-center font-mono text-[9px]">
+                  Annuler
+                </Popover.CloseTrigger>
+              </div>
+            </Popover.Content>
+          </Popover.Positioner>
+        </Portal>
+      </Popover>
     </div>
   </div>
 </div>

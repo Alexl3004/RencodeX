@@ -1,7 +1,7 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatTime, formatSize, gainPct } from "$lib/utils";
-  import { Progressbar } from "flowbite-svelte";
+  import { Progress } from "@skeletonlabs/skeleton-svelte";
   import { CircleCheck, TvMinimalPlay, AlertTriangle } from '@lucide/svelte';
 
   let p = $derived(encoder.progress);
@@ -106,8 +106,13 @@
                 <span>Progression globale</span>
                 <span>{totalPercent.toFixed(0)}%</span>
               </div>
-              <Progressbar progress={totalPercent.toString()} color="primary" size="h-2" labelInside={false}
-                class="border border-[var(--color-border)] rounded-full bg-[var(--color-surface)] opacity-40" />
+              <Progress value={totalPercent} max={100}>
+                <Progress.Track
+                  class="h-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] opacity-40"
+                >
+                  <Progress.Range class="rounded-full bg-[var(--color-accent)]" />
+                </Progress.Track>
+              </Progress>
             </div>
           {/if}
 

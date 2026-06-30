@@ -3,12 +3,8 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { fly } from "svelte/transition";
   import { sineIn } from "svelte/easing";
-  import {
-    CheckOutline,
-    CloseOutline,
-    EyeOutline,
-    EyeSlashOutline,
-  } from "flowbite-svelte-icons";
+  import { Eye, EyeOff, X, Check } from '@lucide/svelte';
+
 
   type EffectiveConfig = {
     ffmpeg_path: string;
@@ -150,7 +146,7 @@
             style="color: var(--color-text);">Paramètres</span>
     </div>
     <button onclick={() => (open = false)} class="icon-btn" title="Fermer" aria-label="Fermer le panneau">
-      <CloseOutline class="w-4 h-4" />
+      <X class="w-4 h-4" />
     </button>
   </div>
 
@@ -193,7 +189,7 @@
         <div class="flex items-center gap-2 font-mono text-[10px] px-3 py-2 rounded-[2px]"
              style="color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);"
              role="status">
-          <CheckOutline class="w-3.5 h-3.5" aria-hidden="true" />
+          <Check class="w-3.5 h-3.5" aria-hidden="true" />
           Token actif via variable d'environnement
         </div>
       {/if}
@@ -217,9 +213,9 @@
             aria-label={showToken ? "Masquer le token" : "Afficher le token"}
           >
             {#if showToken}
-              <EyeSlashOutline class="w-3.5 h-3.5" aria-hidden="true" />
+              <EyeOff class="w-3.5 h-3.5" aria-hidden="true" />
             {:else}
-              <EyeOutline class="w-3.5 h-3.5" aria-hidden="true" />
+              <Eye class="w-3.5 h-3.5" aria-hidden="true" />
             {/if}
           </button>
         </div>

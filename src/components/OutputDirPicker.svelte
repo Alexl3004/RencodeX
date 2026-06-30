@@ -2,7 +2,6 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { toasts } from "$lib/stores/toasts.svelte";
-  import { Button } from "flowbite-svelte";
 
   async function pick() {
     const dir = await open({ directory: true, defaultPath: encoder.outputDir });
@@ -20,15 +19,15 @@
   );
 </script>
 
-<Button
+<button
+  type="button"
   onclick={pick}
   disabled={encoder.encoding}
-  color="alternative"
-  class="max-w-full"
+  class="btn btn-secondary max-w-full justify-start"
   title={encoder.outputDir}
 >
-  <span class="truncate text-subtext">
-    Destination : <span class="text-text font-mono">{shortPath || "Non défini"}</span>
+  <span class="truncate text-[var(--color-subtext)]">
+    Destination : <span class="text-[var(--color-text)] font-mono">{shortPath || "Non défini"}</span>
   </span>
-  <span class="text-subtext ml-1">…</span>
-</Button>
+  <span class="text-[var(--color-subtext)] ml-1">…</span>
+</button>
