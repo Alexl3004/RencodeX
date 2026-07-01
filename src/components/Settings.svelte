@@ -3,7 +3,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { fly } from "svelte/transition";
   import { sineIn } from "svelte/easing";
-  import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight } from '@lucide/svelte';
+  import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw } from '@lucide/svelte';
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -59,6 +59,7 @@
   let testResult = $state<"ok" | "error" | null>(null);
   let effective  = $state<EffectiveConfig | null>(null);
   let showToken  = $state(false);
+  let confirmReset = $state(false);
 
   /** Catalogue reçu du backend : { notifType -> FieldDef[] } */
   let catalog = $state<Record<string, FieldDef[]>>({});
@@ -98,6 +99,20 @@
     { key: "discord_notify_summary",   notifType: "summary",   label: "Résumé global",     desc: "Bilan de session" },
     { key: "discord_notify_error",     notifType: "error",     label: "Erreur d'encodage", desc: "En cas d'échec" },
   ];
+
+  // ── Réinitialisation ───────────────────────────────────────────────────────
+
+  function handleReset() {
+    if (!confirmReset) {
+      confirmReset = true;
+      setTimeout(() => (confirmReset = false), 3000);
+      return;
+    }
+    confirmReset = false;
+    open = false;
+    encoder.resetToDefault();
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
+  }
 
   // ── Chargement ─────────────────────────────────────────────────────────────
 
@@ -293,6 +308,21 @@
 
   <!-- Body -->
   <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+
+    <!-- Interface -->
+    <section class="space-y-3">
+      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Interface</div>
+      <button
+        onclick={handleReset}
+        disabled={encoder.encoding || encoder.extractingSubs}
+        class="w-full btn font-mono text-[11px] justify-center gap-1.5"
+        class:btn-danger={confirmReset}
+        aria-label={confirmReset ? "Confirmer la réinitialisation" : "Réinitialiser aux valeurs par défaut"}
+      >
+        <RotateCcw class="w-3.5 h-3.5 shrink-0" />
+        {confirmReset ? "CONFIRMER LA RÉINITIALISATION ?" : "RÉINITIALISER LES PARAMÈTRES"}
+      </button>
+    </section>
 
     <!-- FFmpeg -->
     <section class="space-y-3">

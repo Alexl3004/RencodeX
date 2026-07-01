@@ -14,6 +14,7 @@
     Wrench,
     SlidersHorizontal,
     Logs,
+    RefreshCw,
   } from "@lucide/svelte";
 
   let { showAppSettings = $bindable(false) } = $props();
@@ -25,6 +26,10 @@
   }
   function close() {
     openPanel = null;
+  }
+
+  function handleRefresh() {
+    encoder.clearSession();
   }
 
   let totalSize = $derived(
@@ -234,6 +239,16 @@
       <Wrench class="w-4 h-4" />
     </button>
     <Settings bind:open={showAppSettings} />
+    <!-- Rafraîchir -->
+    <button
+      type="button"
+      onclick={handleRefresh}
+      class="topbar-btn"
+      aria-label="Rafraîchir l'interface"
+      title="Rafraîchir l'interface"
+    >
+      <RefreshCw class="w-4 h-4" />
+    </button>
     <!-- Thème -->
     <button
       type="button"

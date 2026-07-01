@@ -1230,6 +1230,23 @@ function createEncoder() {
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
     forceUpdate();
   }
+    function clearSession() {
+    files = [];
+    audioLangs = new Set();
+    subLangs = new Set();
+    audioOverrides = {};
+    subOverrides = {};
+    globalCodecOverride = {};
+    summary = null;
+    progress = null;
+    extractingSubs = false;
+    subExtractProgress = null;
+    cancelExtraction = false;
+    logs = [];
+    log("Session réinitialisée", "info");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
+    forceUpdate();
+  }
 
   // ─── Exports ──────────────────────────────────────────────────────────────
 
@@ -1371,6 +1388,7 @@ function createEncoder() {
     renameFile,
     log,
     resetToDefault,
+    clearSession,
   };
 }
 

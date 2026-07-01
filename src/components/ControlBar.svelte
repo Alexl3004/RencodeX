@@ -1,11 +1,6 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { X, Play, FileDown } from "@lucide/svelte";
-
-  function handleReset() {
-    encoder.resetToDefault();
-    setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
-  }
 </script>
 
 <div
@@ -72,12 +67,4 @@
     </button>
   {/if}
 
-  <!-- RÉINITIALISER -->
-  <button
-    onclick={handleReset}
-    disabled={encoder.encoding || encoder.extractingSubs}
-    class="btn font-mono text-[11px] px-4 py-1.5 ml-auto"
-  >
-    RÉINITIALISER
-  </button>
 </div>
