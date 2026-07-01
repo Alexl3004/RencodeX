@@ -90,6 +90,8 @@ pub struct AppConfig {
     pub discord_notify_error:     bool,
     pub discord_notify_progress:  bool,
     pub discord_progress_interval: u64,
+    #[serde(default)]
+    pub discord_fields: HashMap<String, Vec<String>>,
 }
 
 impl Default for AppConfig {
@@ -109,6 +111,7 @@ impl Default for AppConfig {
             discord_notify_error:     true,
             discord_notify_progress:  false,
             discord_progress_interval: 30,
+            discord_fields: HashMap::new(),
         }
     }
 }

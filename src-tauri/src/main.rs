@@ -8,6 +8,7 @@ mod filename;
 mod media;
 mod notify;
 mod commands;
+mod discord_fields;
 
 use crate::utils::resolve_config;
 use crate::commands::load_config;
@@ -45,6 +46,7 @@ fn main() {
             commands::load_encoding_prefs,
             commands::save_encoding_prefs,
             commands::get_effective_config,
+            commands::get_discord_field_catalog,
             commands::send_discord_notification,
             commands::send_discord_start_notification,
             commands::send_discord_file_done_notification,

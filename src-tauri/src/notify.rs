@@ -67,13 +67,18 @@ fn thumbnail_for(color: u32) -> &'static str {
     }
 }
 
-pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSummary) {
+/// Notification de résumé de fin de session.
+///
+/// `enabled_fields` contrôle quels champs sont inclus dans l'embed Discord.
+/// Champs disponibles : `files`, `gain`, `duration`, `saved`, `detail`.
+/// Si `enabled_fields` est vide, tous les champs sont affichés (comportement rétrocompatible).
+pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSummary, enabled_fields: &[String]) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
-    let success = summary.files.iter().filter(|f| f.status == "ok").count();
+    let success   = summary.files.iter().filter(|f| f.status == "ok").count();
     let cancelled = summary.files.iter().filter(|f| f.status == "cancelled").count();
-    let errors = summary.files.iter().filter(|f| f.status == "error").count();
-    let total = summary.files.len();
+    let errors    = summary.files.iter().filter(|f| f.status == "error").count();
+    let total     = summary.files.len();
 
     let gain_pct = if summary.total_original_mb > 0.0 {
         100.0 * (summary.total_original_mb - summary.total_encoded_mb) / summary.total_original_mb
@@ -88,58 +93,90 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
     let saved_mb = summary.total_original_mb - summary.total_encoded_mb;
     let saved_gb = saved_mb / 1024.0;
 
-    let mut detail = String::new();
-    for f in summary.files.iter().take(10) {
-        let icon = match f.status.as_str() {
-            "ok" => "✅",
-            "error" => "❌",
-            "cancelled" => "⏹",
-            _ => "•",
-        };
-        let gain = if f.status == "ok" && f.original_mb > 0.0 {
-            format!(" `−{:.1}%`", 100.0 * (f.original_mb - f.encoded_mb) / f.original_mb)
-        } else { String::new() };
-        let size_info = if f.status == "ok" {
-            format!(" `{:.1}MB`", f.encoded_mb)
-        } else { String::new() };
-        detail.push_str(&format!("{} `{}`{}{}\n", icon, f.name, gain, size_info));
-    }
-    if total > 10 {
-        detail.push_str(&format!("… et {} autres fichiers\n", total - 10));
-    }
+    // Si enabled_fields est vide, tout est affiché (rétrocompat).
+    let all = enabled_fields.is_empty();
+    let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
 
-    let mut embed = serde_json::json!({
-        "title": if errors > 0 && success == 0 { "❌ Encodage échoué" } else if errors > 0 { "⚠️ Encodage partiel" } else { "✅ Encodage terminé" },
-        "color": color,
-        "thumbnail": { "url": thumbnail_for(color) },
-        "fields": [
-            { "name": "📁 Fichiers", "value": format!("`{}/{}` réussis", success, total), "inline": true },
-            { "name": "📊 Gain total", "value": format!("`{:.1}%`", gain_pct), "inline": true },
-            { "name": "⏱️ Durée", "value": format!("`{}`", duration_to_str(elapsed)), "inline": true },
-        ],
-        "footer": { "text": "RenCodeX · H.265 NVENC", "icon_url": "https://i.imgur.com/xxx.png" },
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    });
+    // ── Champs fixes (toujours présents quand activés) ───────────────────
+    let mut fields: Vec<serde_json::Value> = Vec::new();
 
-    if saved_mb > 0.0 {
+    if has("files") {
+        fields.push(serde_json::json!({
+            "name": "📁 Fichiers",
+            "value": format!("`{}/{}` réussis", success, total),
+            "inline": true
+        }));
+    }
+    if has("gain") {
+        fields.push(serde_json::json!({
+            "name": "📊 Gain total",
+            "value": format!("`{:.1}%`", gain_pct),
+            "inline": true
+        }));
+    }
+    if has("duration") {
+        fields.push(serde_json::json!({
+            "name": "⏱️ Durée",
+            "value": format!("`{}`", duration_to_str(elapsed)),
+            "inline": true
+        }));
+    }
+    if has("saved") && saved_mb > 0.0 {
         let gain_str = if saved_gb >= 1.0 {
             format!("{:.2} GB", saved_gb)
         } else {
             format!("{:.0} MB", saved_mb)
         };
-        embed["fields"].as_array_mut().unwrap().push(
-            serde_json::json!({ "name": "💾 Espace libéré", "value": format!("`{}`", gain_str), "inline": true })
-        );
+        fields.push(serde_json::json!({
+            "name": "💾 Espace libéré",
+            "value": format!("`{}`", gain_str),
+            "inline": true
+        }));
     }
 
-    if !detail.is_empty() {
-        let detail_value = if detail.len() > 1000 {
-            format!("{}…", &detail[..997])
-        } else { detail };
-        embed["fields"].as_array_mut().unwrap().push(
-            serde_json::json!({ "name": "📋 Détail", "value": detail_value, "inline": false })
-        );
+    // ── Détail par fichier ───────────────────────────────────────────────
+    if has("detail") {
+        let mut detail = String::new();
+        for f in summary.files.iter().take(10) {
+            let icon = match f.status.as_str() {
+                "ok"        => "✅",
+                "error"     => "❌",
+                "cancelled" => "⏹",
+                _           => "•",
+            };
+            let gain = if f.status == "ok" && f.original_mb > 0.0 {
+                format!(" `−{:.1}%`", 100.0 * (f.original_mb - f.encoded_mb) / f.original_mb)
+            } else { String::new() };
+            let size_info = if f.status == "ok" {
+                format!(" `{:.1}MB`", f.encoded_mb)
+            } else { String::new() };
+            detail.push_str(&format!("{} `{}`{}{}\n", icon, f.name, gain, size_info));
+        }
+        if total > 10 {
+            detail.push_str(&format!("… et {} autres fichiers\n", total - 10));
+        }
+        if !detail.is_empty() {
+            let detail_value = if detail.len() > 1000 {
+                format!("{}…", &detail[..997])
+            } else { detail };
+            fields.push(serde_json::json!({
+                "name": "📋 Détail",
+                "value": detail_value,
+                "inline": false
+            }));
+        }
     }
+
+    let embed = serde_json::json!({
+        "title": if errors > 0 && success == 0 { "❌ Encodage échoué" }
+                 else if errors > 0 { "⚠️ Encodage partiel" }
+                 else { "✅ Encodage terminé" },
+        "color": color,
+        "thumbnail": { "url": thumbnail_for(color) },
+        "fields": fields,
+        "footer": { "text": "RenCodeX · H.265 NVENC", "icon_url": "https://i.imgur.com/xxx.png" },
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    });
 
     let content = if errors > 0 && success > 0 {
         Some("⚠️ Certains fichiers ont échoué. Consultez les logs pour plus d'informations.")
@@ -156,7 +193,6 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
         "embeds": [embed],
         "allowed_mentions": { "parse": [] }
     });
-
     if let Some(msg) = content {
         payload["content"] = serde_json::json!(msg);
     }
@@ -164,7 +200,10 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
     send_discord_message(token, channel_id, &payload).await;
 }
 
-pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str) {
+/// Notification de démarrage d'encodage.
+///
+/// `enabled_fields` : `files`, `size`, `crf`, `preset`, `codec`, `audio`.
+pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str, enabled_fields: &[String]) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let total_size_str = if total_size_mb >= 1024.0 {
@@ -173,20 +212,24 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
         format!("{:.0} MB", total_size_mb)
     };
 
+    let all = enabled_fields.is_empty();
+    let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
+
+    let mut fields: Vec<serde_json::Value> = Vec::new();
+    if has("files")  { fields.push(serde_json::json!({ "name": "📁 Fichiers",      "value": format!("`{}` fichiers", total_files),            "inline": true })); }
+    if has("size")   { fields.push(serde_json::json!({ "name": "💾 Taille totale", "value": format!("`{}`", total_size_str),                   "inline": true })); }
+    if has("crf")    { fields.push(serde_json::json!({ "name": "🎚️ CRF",           "value": format!("`{}`", crf),                             "inline": true })); }
+    if has("preset") { fields.push(serde_json::json!({ "name": "⚡ Preset",         "value": format!("`{}`", preset.to_uppercase()),           "inline": true })); }
+    if has("codec")  { fields.push(serde_json::json!({ "name": "🎨 Codec",          "value": "`H.265 NVENC`",                                  "inline": true })); }
+    if has("audio")  { fields.push(serde_json::json!({ "name": "🔊 Audio",          "value": "`AAC 192k`",                                     "inline": true })); }
+
     let payload = serde_json::json!({
         "username": "RenCodeX",
         "embeds": [{
             "title": "🎬 Encodage démarré",
             "color": 0x3498DB,
             "thumbnail": { "url": thumbnail_for(0x3498DB) },
-            "fields": [
-                { "name": "📁 Fichiers", "value": format!("`{}` fichiers", total_files), "inline": true },
-                { "name": "💾 Taille totale", "value": format!("`{}`", total_size_str), "inline": true },
-                { "name": "🎚️ CRF", "value": format!("`{}`", crf), "inline": true },
-                { "name": "⚡ Preset", "value": format!("`{}`", preset.to_uppercase()), "inline": true },
-                { "name": "🎨 Codec", "value": "`H.265 NVENC`", "inline": true },
-                { "name": "🔊 Audio", "value": "`AAC 192k`", "inline": true },
-            ],
+            "fields": fields,
             "footer": { "text": "RenCodeX · Encodage en cours" },
             "timestamp": chrono::Utc::now().to_rfc3339()
         }]
@@ -195,7 +238,10 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
     send_discord_message(token, channel_id, &payload).await;
 }
 
-pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str, error_msg: &str) {
+/// Notification d'erreur d'encodage.
+///
+/// `enabled_fields` : `file`, `error`.
+pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str, error_msg: &str, enabled_fields: &[String]) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let truncated_error = if error_msg.len() > 500 {
@@ -204,16 +250,20 @@ pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str
         error_msg.to_string()
     };
 
+    let all = enabled_fields.is_empty();
+    let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
+
+    let mut fields: Vec<serde_json::Value> = Vec::new();
+    if has("file")  { fields.push(serde_json::json!({ "name": "📁 Fichier", "value": format!("`{}`", file_name),                    "inline": false })); }
+    if has("error") { fields.push(serde_json::json!({ "name": "🐛 Erreur",  "value": format!("```{}```", truncated_error),          "inline": false })); }
+
     let payload = serde_json::json!({
         "username": "RenCodeX",
         "embeds": [{
             "title": "❌ Erreur d'encodage",
             "color": 0xE74C3C,
             "thumbnail": { "url": thumbnail_for(0xE74C3C) },
-            "fields": [
-                { "name": "📁 Fichier", "value": format!("`{}`", file_name), "inline": false },
-                { "name": "🐛 Erreur", "value": format!("```{}```", truncated_error), "inline": false }
-            ],
+            "fields": fields,
             "footer": { "text": "RenCodeX · Action requise" },
             "timestamp": chrono::Utc::now().to_rfc3339()
         }],
@@ -223,6 +273,9 @@ pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str
     send_discord_message(token, channel_id, &payload).await;
 }
 
+/// Notification de fin de fichier individuel.
+///
+/// `enabled_fields` : `file`, `size`, `gain`, `duration`, `crf`, `preset`.
 pub async fn discord_notify_file_done(
     token: &str,
     channel_id: &str,
@@ -230,6 +283,9 @@ pub async fn discord_notify_file_done(
     original_mb: f64,
     encoded_mb: f64,
     duration_secs: f64,
+    crf: u32,
+    preset: &str,
+    enabled_fields: &[String],
 ) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
@@ -247,18 +303,24 @@ pub async fn discord_notify_file_done(
     let emoji = if gain_pct > 50.0 { "🚀" } else if gain_pct > 30.0 { "📦" } else { "✅" };
     let duration_str = duration_to_str(duration_secs as u64);
 
+    let all = enabled_fields.is_empty();
+    let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
+
+    let mut fields: Vec<serde_json::Value> = Vec::new();
+    if has("file")     { fields.push(serde_json::json!({ "name": "📁 Fichier", "value": format!("`{}`", file_name),                                      "inline": false })); }
+    if has("size")     { fields.push(serde_json::json!({ "name": "💾 Taille",  "value": format!("`{:.1} MB` → `{:.1} MB`", original_mb, encoded_mb),     "inline": true  })); }
+    if has("gain")     { fields.push(serde_json::json!({ "name": "📊 Gain",    "value": format!("`{:.1}%` (`{}`)", gain_pct, saved_str),                  "inline": true  })); }
+    if has("duration") { fields.push(serde_json::json!({ "name": "⏱️ Temps",   "value": format!("`{}`", duration_str),                                    "inline": true  })); }
+    if has("crf")      { fields.push(serde_json::json!({ "name": "🎚️ CRF",    "value": format!("`{}`", crf),                                             "inline": true  })); }
+    if has("preset")   { fields.push(serde_json::json!({ "name": "⚡ Preset",  "value": format!("`{}`", preset.to_uppercase()),                           "inline": true  })); }
+
     let payload = serde_json::json!({
         "username": "RenCodeX",
         "embeds": [{
             "title": format!("{} Fichier encodé", emoji),
             "color": 0x2ECC71,
             "thumbnail": { "url": thumbnail_for(0x2ECC71) },
-            "fields": [
-                { "name": "📁 Fichier", "value": format!("`{}`", file_name), "inline": false },
-                { "name": "💾 Taille", "value": format!("`{:.1} MB` → `{:.1} MB`", original_mb, encoded_mb), "inline": true },
-                { "name": "📊 Gain", "value": format!("`{:.1}%` (`{}`)", gain_pct, saved_str), "inline": true },
-                { "name": "⏱️ Temps", "value": format!("`{}`", duration_str), "inline": true }
-            ],
+            "fields": fields,
             "footer": { "text": "RenCodeX · Fichier terminé" },
             "timestamp": chrono::Utc::now().to_rfc3339()
         }]
@@ -267,6 +329,7 @@ pub async fn discord_notify_file_done(
     send_discord_message(token, channel_id, &payload).await;
 }
 
+/// Notification de statistiques globales cumulées (non filtrée par champs).
 pub async fn discord_notify_stats(
     token: &str,
     channel_id: &str,
@@ -300,10 +363,10 @@ pub async fn discord_notify_stats(
             "color": 0x9B59B6,
             "thumbnail": { "url": thumbnail_for(0x9B59B6) },
             "fields": [
-                { "name": "📁 Fichiers encodés", "value": format!("`{}`", total_files), "inline": true },
-                { "name": "💾 Espace libéré", "value": format!("`{}` (`{:.1}%`)", saved_str, gain_pct), "inline": true },
-                { "name": "⏱️ Temps total", "value": format!("`{}`", total_duration_str), "inline": true },
-                { "name": "⚡ Temps moyen/fichier", "value": format!("`{}`", avg_file_duration), "inline": true },
+                { "name": "📁 Fichiers encodés",    "value": format!("`{}`", total_files),                            "inline": true },
+                { "name": "💾 Espace libéré",        "value": format!("`{}` (`{:.1}%`)", saved_str, gain_pct),        "inline": true },
+                { "name": "⏱️ Temps total",          "value": format!("`{}`", total_duration_str),                    "inline": true },
+                { "name": "⚡ Temps moyen/fichier",  "value": format!("`{}`", avg_file_duration),                     "inline": true },
             ],
             "footer": { "text": "RenCodeX · Période" },
             "timestamp": chrono::Utc::now().to_rfc3339()
@@ -313,6 +376,9 @@ pub async fn discord_notify_stats(
     send_discord_message(token, channel_id, &payload).await;
 }
 
+/// Notification de progression périodique.
+///
+/// `enabled_fields` : `file`, `bar`, `speed`, `remaining`, `started`.
 pub async fn discord_notify_progress(
     token: &str,
     channel_id: &str,
@@ -323,14 +389,54 @@ pub async fn discord_notify_progress(
     speed: f64,
     remaining_secs: f64,
     _elapsed_secs: f64,
+    enabled_fields: &[String],
 ) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let filled = (percent / 100.0 * 15.0) as usize;
     let bar = format!("{}{}", "█".repeat(filled), "░".repeat(15usize.saturating_sub(filled)));
-
     let remaining_str = duration_to_str(remaining_secs as u64);
     let ts = unix_timestamp();
+
+    let all = enabled_fields.is_empty();
+    let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
+
+    let mut fields: Vec<serde_json::Value> = Vec::new();
+    if has("file") {
+        fields.push(serde_json::json!({
+            "name": "📁 Fichier",
+            "value": format!("`{}` ({}/{})", file_name, file_index + 1, file_total),
+            "inline": false
+        }));
+    }
+    if has("bar") {
+        fields.push(serde_json::json!({
+            "name": "📊 Progression",
+            "value": format!("{} **{:.1}%**", bar, percent),
+            "inline": false
+        }));
+    }
+    if has("speed") {
+        fields.push(serde_json::json!({
+            "name": "⚡ Vitesse",
+            "value": format!("`{:.2}x`", speed),
+            "inline": true
+        }));
+    }
+    if has("remaining") {
+        fields.push(serde_json::json!({
+            "name": "⏱️ Restant",
+            "value": format!("`{}`", remaining_str),
+            "inline": true
+        }));
+    }
+    if has("started") {
+        fields.push(serde_json::json!({
+            "name": "⌛ Démarré",
+            "value": format!("<t:{}:R>", ts),
+            "inline": true
+        }));
+    }
 
     let payload = serde_json::json!({
         "username": "RenCodeX",
@@ -338,13 +444,7 @@ pub async fn discord_notify_progress(
             "title": "📈 Encodage en cours",
             "color": 0x3498DB,
             "thumbnail": { "url": thumbnail_for(0x3498DB) },
-            "fields": [
-                { "name": "📁 Fichier", "value": format!("`{}` ({}/{})", file_name, file_index + 1, file_total), "inline": false },
-                { "name": "📊 Progression", "value": format!("{} **{:.1}%**", bar, percent), "inline": false },
-                { "name": "⚡ Vitesse", "value": format!("`{:.2}x`", speed), "inline": true },
-                { "name": "⏱️ Restant", "value": format!("`{}`", remaining_str), "inline": true },
-                { "name": "⌛ Démarré", "value": format!("<t:{}:R>", ts), "inline": true },
-            ],
+            "fields": fields,
             "footer": { "text": "RenCodeX · Mise à jour progression" },
             "timestamp": chrono::Utc::now().to_rfc3339()
         }]
@@ -429,9 +529,9 @@ pub mod discord_bot {
 
             let content = msg.content.trim().to_lowercase();
             let reply = match content.as_str() {
-                "!help" => format_help(),
+                "!help"   => format_help(),
                 "!status" => format_status(),
-                "!queue" => format_queue(),
+                "!queue"  => format_queue(),
                 "!skip" => {
                     let (encoding, pid_opt) = {
                         let s = lock_encoder();

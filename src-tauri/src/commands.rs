@@ -7,16 +7,16 @@ use std::os::windows::process::CommandExt;
 use std::time::Duration;
 
 use crate::models::{
-    AppConfig, CleanedName, EncodeJob, EncodeSummary, EmailConfig, EncodingPrefs, FileAnalysis, Stats,
+    AppConfig, CleanedName, EncodeJob, EncodeSummary, EncodingPrefs, EmailConfig, FileAnalysis, Stats,
 };
 use crate::state::lock_encoder;
 use crate::utils::{
-    config_path, delete_partial_output, encoding_prefs_path, filename_of, resolve_config, stats_path,
+    config_path, delete_partial_output, filename_of, resolve_config, stats_path,
 };
 use crate::filename::clean_filename as clean_filename_impl;
 use crate::media::{analyze_file as analyze_file_impl, start_encoding as start_encoding_impl};
 use crate::notify::{
-    discord_notify, 
+    discord_notify,
     discord_notify_start,
     discord_notify_file_done,
     discord_notify_error,
@@ -25,7 +25,17 @@ use crate::notify::{
     send_email_report as send_email_report_impl
 };
 
-// Configuration
+// ── Chemin du fichier encoding_prefs.json ────────────────────────────────────
+
+fn encoding_prefs_path() -> std::path::PathBuf {
+    config_path()
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("encoding_prefs.json")
+}
+
+// ── Configuration générale ────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn load_config() -> AppConfig {
     if let Ok(data) = std::fs::read_to_string(config_path()) {
@@ -43,9 +53,8 @@ pub fn save_config(config: AppConfig) -> Result<(), String> {
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
 
-// Préférences d'encodage (CRF, preset, ordre des tags, team…)
-// Stockées dans un fichier séparé du reste de la config pour ne pas être
-// écrasées par les sauvegardes faites depuis la page Settings.
+// ── Préférences d'encodage ────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn load_encoding_prefs() -> EncodingPrefs {
     if let Ok(data) = std::fs::read_to_string(encoding_prefs_path()) {
@@ -58,10 +67,14 @@ pub fn load_encoding_prefs() -> EncodingPrefs {
 #[tauri::command]
 pub fn save_encoding_prefs(prefs: EncodingPrefs) -> Result<(), String> {
     let path = encoding_prefs_path();
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     let json = serde_json::to_string_pretty(&prefs).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn load_stats() -> Stats {
@@ -90,6 +103,8 @@ pub fn save_stats(stats: Stats) -> Result<(), String> {
     std::fs::write(path, json).map_err(|e| e.to_string())
 }
 
+// ── Config effective (résumé pour le frontend) ────────────────────────────────
+
 #[tauri::command]
 pub fn get_effective_config() -> serde_json::Value {
     let cfg = resolve_config(load_config());
@@ -111,13 +126,20 @@ pub fn get_effective_config() -> serde_json::Value {
     })
 }
 
-// Analyse média
+#[tauri::command]
+pub fn get_discord_field_catalog() -> serde_json::Value {
+    serde_json::to_value(crate::discord_fields::full_catalog()).unwrap_or_default()
+}
+
+// ── Analyse média ─────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub async fn analyze_file(path: String) -> Result<FileAnalysis, String> {
     analyze_file_impl(path).await
 }
 
-// Nettoyage de nom
+// ── Nettoyage de nom ──────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn clean_filename(
     raw: String,
@@ -127,7 +149,8 @@ pub fn clean_filename(
     clean_filename_impl(raw, audio_langs, sub_langs)
 }
 
-// Encodage
+// ── Encodage ──────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub async fn start_encoding(
     app: AppHandle,
@@ -171,7 +194,8 @@ pub fn cancel_encoding(app: AppHandle) {
         .show();
 }
 
-// Utilitaires
+// ── Utilitaires ───────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn get_default_output_dir() -> String {
     dirs::download_dir()
@@ -181,7 +205,8 @@ pub fn get_default_output_dir() -> String {
         .to_string()
 }
 
-// Scan de dossier
+// ── Scan de dossier ───────────────────────────────────────────────────────────
+
 const MAX_SCAN_DEPTH: usize = 32;
 
 fn scan_dir_recursive(dir: &str, exts: &[String], results: &mut Vec<String>, depth: usize) {
@@ -222,25 +247,44 @@ pub fn scan_folder(folder: String, extensions: Vec<String>) -> Vec<String> {
     results
 }
 
-// Notifications Discord améliorées
+// ── Helpers internes ──────────────────────────────────────────────────────────
+
+/// Résout token + channel depuis les paramètres ou les variables d'env.
+fn resolve_discord_creds(bot_token: String, log_channel_id: String) -> Result<(String, String), String> {
+    let token = if !bot_token.is_empty() { bot_token }
+        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
+    let chan = if !log_channel_id.is_empty() { log_channel_id }
+        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
+    if token.is_empty() || chan.is_empty() {
+        return Err("Token ou log_channel_id manquant".to_string());
+    }
+    Ok((token, chan))
+}
+
+fn fields_for(notif_type: &str) -> Vec<String> {
+    let cfg = load_config();
+    cfg.discord_fields
+        .get(notif_type)
+        .cloned()
+        .unwrap_or_else(|| crate::discord_fields::default_fields(notif_type))
+}
+
+// ── Commandes de notification Discord ────────────────────────────────────────
+
+/// Notification de résumé de session (fin de file complète).
 #[tauri::command]
 pub async fn send_discord_notification(
     bot_token: String,
     log_channel_id: String,
     summary: EncodeSummary,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
-    discord_notify(&token, &chan, &summary).await;
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
+    let fields = fields_for("summary");
+    discord_notify(&token, &chan, &summary, &fields).await;
     Ok(())
 }
 
+/// Notification de démarrage d'encodage.
 #[tauri::command]
 pub async fn send_discord_start_notification(
     bot_token: String,
@@ -250,18 +294,13 @@ pub async fn send_discord_start_notification(
     crf: u32,
     preset: String,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
-    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset).await;
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
+    let fields = fields_for("start");
+    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &fields).await;
     Ok(())
 }
 
+/// Notification de fin de fichier individuel.
 #[tauri::command]
 pub async fn send_discord_file_done_notification(
     bot_token: String,
@@ -270,19 +309,20 @@ pub async fn send_discord_file_done_notification(
     original_mb: f64,
     encoded_mb: f64,
     duration_secs: f64,
+    crf: u32,
+    preset: String,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
-    discord_notify_file_done(&token, &chan, &file_name, original_mb, encoded_mb, duration_secs).await;
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
+    let fields = fields_for("file_done");
+    discord_notify_file_done(
+        &token, &chan, &file_name,
+        original_mb, encoded_mb, duration_secs,
+        crf, &preset, &fields,
+    ).await;
     Ok(())
 }
 
+/// Notification d'erreur d'encodage.
 #[tauri::command]
 pub async fn send_discord_error_notification(
     bot_token: String,
@@ -290,18 +330,13 @@ pub async fn send_discord_error_notification(
     file_name: String,
     error_msg: String,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
-    discord_notify_error(&token, &chan, &file_name, &error_msg).await;
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
+    let fields = fields_for("error");
+    discord_notify_error(&token, &chan, &file_name, &error_msg, &fields).await;
     Ok(())
 }
 
+/// Notification de progression (mise à jour périodique).
 #[tauri::command]
 pub async fn send_discord_progress_notification(
     bot_token: String,
@@ -314,18 +349,18 @@ pub async fn send_discord_progress_notification(
     remaining_secs: f64,
     elapsed_secs: f64,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
-    discord_notify_progress(&token, &chan, &file_name, file_index, file_total, percent, speed, remaining_secs, elapsed_secs).await;
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
+    let fields = fields_for("progress");
+    discord_notify_progress(
+        &token, &chan,
+        &file_name, file_index, file_total,
+        percent, speed, remaining_secs, elapsed_secs,
+        &fields,
+    ).await;
     Ok(())
 }
 
+/// Notification de statistiques globales cumulées.
 #[tauri::command]
 pub async fn send_discord_stats_notification(
     bot_token: String,
@@ -335,14 +370,7 @@ pub async fn send_discord_stats_notification(
     total_encoded_mb: f64,
     total_duration_secs: f64,
 ) -> Result<(), String> {
-    let token = if !bot_token.is_empty() { bot_token }
-        else { std::env::var("RENCODEX_DISCORD_TOKEN").unwrap_or_default() };
-    let chan = if !log_channel_id.is_empty() { log_channel_id }
-        else { std::env::var("RENCODEX_DISCORD_LOG_CHANNEL").unwrap_or_default() };
-
-    if token.is_empty() || chan.is_empty() {
-        return Err("Token ou log_channel_id manquant".to_string());
-    }
+    let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     discord_notify_stats(&token, &chan, total_files, total_original_mb, total_encoded_mb, total_duration_secs).await;
     Ok(())
 }
