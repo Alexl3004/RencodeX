@@ -2,7 +2,15 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
-  import { Download, Folder, ChevronDown, Loader2, FilePlus2, FolderOpen } from '@lucide/svelte';
+  import {
+    Download,
+    Folder,
+    ChevronDown,
+    Loader2,
+    FileInput ,
+    FolderInput,
+    FolderOutput ,
+  } from "@lucide/svelte";
   import { Popover, Portal } from "@skeletonlabs/skeleton-svelte";
 
   let dragging = $state(false);
@@ -19,7 +27,10 @@
     }
   }
   function saveHistory(dir: string) {
-    const h = [dir, ...loadHistory().filter((d) => d !== dir)].slice(0, MAX_HISTORY);
+    const h = [dir, ...loadHistory().filter((d) => d !== dir)].slice(
+      0,
+      MAX_HISTORY,
+    );
     localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
   }
 
@@ -35,7 +46,9 @@
   async function pickFiles() {
     const result = await open({
       multiple: true,
-      filters: [{ name: "Vidéo", extensions: ["mp4", "mkv", "avi", "mov", "flv"] }],
+      filters: [
+        { name: "Vidéo", extensions: ["mp4", "mkv", "avi", "mov", "flv"] },
+      ],
     });
     if (!result) return;
     await encoder.addFiles(Array.isArray(result) ? result : [result]);
@@ -76,10 +89,14 @@
 </script>
 
 <div class="relative">
-  <div class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-panel)] overflow-hidden">
+  <div
+    class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-panel)] overflow-hidden"
+  >
     <!-- Source -->
     <div class="flex items-center">
-      <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
+      <div
+        class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]"
+      >
         <Download height="1em" />
       </div>
 
@@ -95,7 +112,7 @@
           title="Ajouter des fichiers"
           aria-label="Ajouter des fichiers"
         >
-          <FilePlus2 class="w-4 h-4" />
+          <FileInput  class="w-4 h-4" />
         </button>
         <button
           onclick={pickFolder}
@@ -107,7 +124,7 @@
           {#if scanning}
             <Loader2 class="w-4 h-4 animate-spin" />
           {:else}
-            <FolderOpen class="w-4 h-4" />
+            <FolderInput  class="w-4 h-4" />
           {/if}
         </button>
       </div>
@@ -117,7 +134,9 @@
 
     <!-- Destination -->
     <div class="flex items-center">
-      <div class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]">
+      <div
+        class="flex items-center justify-center w-10 shrink-0 border-r border-[var(--color-border)] text-[var(--color-subtext)]"
+      >
         <Folder height="1em" />
       </div>
 
@@ -129,8 +148,15 @@
               class="w-full text-left px-3 py-2 text-[10px] font-mono text-[var(--color-text)] truncate flex items-center gap-1"
               title={encoder.outputDir || "Cliquer pour choisir"}
             >
-              <span class="truncate">{encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}</span>
-              <ChevronDown class="shrink-0 text-[var(--color-subtext)]" height="1em" />
+              <span class="truncate"
+                >{encoder.outputDir
+                  ? shortPath(encoder.outputDir)
+                  : "Choisir dossier"}</span
+              >
+              <ChevronDown
+                class="shrink-0 text-[var(--color-subtext)]"
+                height="1em"
+              />
             </Popover.Trigger>
             <Portal>
               <Popover.Positioner>
@@ -138,13 +164,19 @@
                   class="min-w-[260px] z-30 rounded-[var(--radius-sm)] shadow-lg py-1"
                   style="background: var(--color-panel); border: 1px solid var(--color-border);"
                 >
-                  <p class="px-3 py-1 text-[9px] uppercase font-mono border-b border-[var(--color-border)]"
-                     style="color: var(--color-subtext);">Récents</p>
+                  <p
+                    class="px-3 py-1 text-[9px] uppercase font-mono border-b border-[var(--color-border)]"
+                    style="color: var(--color-subtext);"
+                  >
+                    Récents
+                  </p>
                   {#each history as dir}
                     <Popover.CloseTrigger
                       onclick={() => setOutputDir(dir)}
                       class="w-full text-left px-3 py-2 text-[10px] font-mono truncate block hover:bg-[var(--color-panel2)] transition-colors
-                             {dir === encoder.outputDir ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}"
+                             {dir === encoder.outputDir
+                        ? 'text-[var(--color-accent)]'
+                        : 'text-[var(--color-text)]'}"
                       title={dir}
                     >
                       {shortPath(dir)}
@@ -170,10 +202,11 @@
         onclick={pickOutputDir}
         disabled={encoder.encoding}
         class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)] shrink-0"
+        title="Dossier de sortie"
+        aria-label="Dossier de sortie"
       >
-        CHOISIR
+        <FolderOutput  class="w-4 h-4" />
       </button>
     </div>
   </div>
-
 </div>
