@@ -99,7 +99,7 @@ export interface AppFile {
   audio_langs:   string[];
   sub_langs:     string[];
   streams:       StreamInfo[];
-  status:        "pending" | "analysing" | "ready" | "encoding" | "done" | "error";
+  status:        "pending" | "analysing" | "ready" | "queued" | "encoding" | "done" | "error";
   output_name:   string;
   output_ext:    string;
   result?:       FileResult;
@@ -554,6 +554,14 @@ function createEncoder() {
   async function listenEvents() {
     const u1 = await listen<ProgressEvent>("encode-progress", (e) => {
       progress = e.payload;
+      // Seul le fichier actif bascule en "encoding", les autres restent "queued"
+      const activeIdx = e.payload.file_index;
+      files = files.map((f, i) => {
+        if (f.status === "queued" || f.status === "encoding") {
+          return { ...f, status: i === activeIdx ? "encoding" : "queued" };
+        }
+        return f;
+      });
     });
 
     const u2 = await listen<any>("encode-file-done", (e) => {
@@ -752,11 +760,13 @@ function createEncoder() {
     const totalSize = formatMb(files.filter(f => f.status === "ready").reduce((s, f) => s + f.size_mb, 0));
     log(`── Démarrage de l'encodage — ${jobs.length} fichier${jobs.length > 1 ? "s" : ""} (${totalSize}) ──`, "info");
 
-    files = files.map(f => f.status === "ready" ? {...f, status: "encoding"} : f);
+    // Tous les fichiers prêts passent en file d'attente.
+    // Le statut "encoding" est mis à jour fichier par fichier via encode-progress.
+    files = files.map(f => f.status === "ready" ? {...f, status: "queued"} : f);
 
     jobs.forEach((j, i) => {
       const name = j.input_path.split(/[\\/]/).pop() ?? j.input_path;
-      log(`  [${i+1}/${jobs.length}] En attente : ${name}`, "info");
+      log(`  [${i+1}/${jobs.length}] En file : ${name}`, "info");
     });
 
     try {

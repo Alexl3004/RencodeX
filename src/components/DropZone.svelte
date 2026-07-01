@@ -2,11 +2,11 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
-  import { Download, Folder, ChevronDown, Loader2 } from '@lucide/svelte';
+  import { Download, Folder, ChevronDown, Loader2, FilePlus2, FolderOpen } from '@lucide/svelte';
+  import { Popover, Portal } from "@skeletonlabs/skeleton-svelte";
 
   let dragging = $state(false);
   let scanning = $state(false);
-  let showHistory = $state(false);
 
   const HISTORY_KEY = "rencodex-output-history";
   const MAX_HISTORY = 5;
@@ -63,7 +63,6 @@
   }
 
   async function pickOutputDir() {
-    showHistory = false;
     const dir = await open({ directory: true, defaultPath: encoder.outputDir });
     if (dir && typeof dir === "string") setOutputDir(dir);
   }
@@ -73,18 +72,8 @@
     encoder.log(`Dossier de sortie : ${dir}`, "info");
     saveHistory(dir);
     history = loadHistory();
-    showHistory = false;
   }
 </script>
-
-<svelte:window
-  onclick={() => {
-    if (showHistory) showHistory = false;
-  }}
-  onkeydown={(e) => {
-    if (e.key === "Escape") showHistory = false;
-  }}
-/>
 
 <div class="relative">
   <div class="border border-[var(--color-border)] rounded-[var(--radius-md)] bg-[var(--color-panel)] overflow-hidden">
@@ -99,14 +88,27 @@
       </div>
 
       <div class="flex border-l border-[var(--color-border)]">
-        <button onclick={pickFiles} disabled={encoder.encoding} class="btn btn-ghost px-3 py-2 text-[10px] font-mono">
-          FICHIERS
+        <button
+          onclick={pickFiles}
+          disabled={encoder.encoding}
+          class="btn btn-ghost px-3 py-2"
+          title="Ajouter des fichiers"
+          aria-label="Ajouter des fichiers"
+        >
+          <FilePlus2 class="w-4 h-4" />
         </button>
-        <button onclick={pickFolder} disabled={encoder.encoding || scanning} class="btn btn-ghost px-3 py-2 text-[10px] font-mono border-l border-[var(--color-border)] gap-1.5">
+        <button
+          onclick={pickFolder}
+          disabled={encoder.encoding || scanning}
+          class="btn btn-ghost px-3 py-2 border-l border-[var(--color-border)]"
+          title="Ajouter un dossier"
+          aria-label="Ajouter un dossier"
+        >
           {#if scanning}
-            <Loader2 class="w-3 h-3 animate-spin" />
+            <Loader2 class="w-4 h-4 animate-spin" />
+          {:else}
+            <FolderOpen class="w-4 h-4" />
           {/if}
-          DOSSIER
         </button>
       </div>
     </div>
@@ -119,22 +121,49 @@
         <Folder height="1em" />
       </div>
 
-      <div class="flex-1">
-        <button
-          onclick={(e) => {
-            e.stopPropagation();
-            if (history.length > 0) showHistory = !showHistory;
-            else pickOutputDir();
-          }}
-          disabled={encoder.encoding}
-          class="w-full text-left px-3 py-2 text-[10px] font-mono text-[var(--color-text)] truncate"
-          title={encoder.outputDir || "Cliquer pour choisir"}
-        >
-          {encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}
-          {#if history.length > 0}
-            <ChevronDown class="inline-block ml-1 text-[var(--color-subtext)]" height="1em" />
-          {/if}
-        </button>
+      <div class="flex-1 min-w-0">
+        {#if history.length > 0}
+          <Popover positioning={{ placement: "bottom-start" }}>
+            <Popover.Trigger
+              disabled={encoder.encoding}
+              class="w-full text-left px-3 py-2 text-[10px] font-mono text-[var(--color-text)] truncate flex items-center gap-1"
+              title={encoder.outputDir || "Cliquer pour choisir"}
+            >
+              <span class="truncate">{encoder.outputDir ? shortPath(encoder.outputDir) : "Choisir dossier"}</span>
+              <ChevronDown class="shrink-0 text-[var(--color-subtext)]" height="1em" />
+            </Popover.Trigger>
+            <Portal>
+              <Popover.Positioner>
+                <Popover.Content
+                  class="min-w-[260px] z-30 rounded-[var(--radius-sm)] shadow-lg py-1"
+                  style="background: var(--color-panel); border: 1px solid var(--color-border);"
+                >
+                  <p class="px-3 py-1 text-[9px] uppercase font-mono border-b border-[var(--color-border)]"
+                     style="color: var(--color-subtext);">Récents</p>
+                  {#each history as dir}
+                    <Popover.CloseTrigger
+                      onclick={() => setOutputDir(dir)}
+                      class="w-full text-left px-3 py-2 text-[10px] font-mono truncate block hover:bg-[var(--color-panel2)] transition-colors
+                             {dir === encoder.outputDir ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}"
+                      title={dir}
+                    >
+                      {shortPath(dir)}
+                    </Popover.CloseTrigger>
+                  {/each}
+                </Popover.Content>
+              </Popover.Positioner>
+            </Portal>
+          </Popover>
+        {:else}
+          <button
+            onclick={pickOutputDir}
+            disabled={encoder.encoding}
+            class="w-full text-left px-3 py-2 text-[10px] font-mono truncate"
+            style="color: var(--color-subtext);"
+          >
+            Choisir dossier…
+          </button>
+        {/if}
       </div>
 
       <button
@@ -147,24 +176,4 @@
     </div>
   </div>
 
-  <!-- Historique des dossiers : rendu hors de la carte (overflow-hidden) pour ne pas être rogné -->
-  {#if showHistory && history.length > 0}
-    <ul class="absolute top-full left-0 right-0 mt-1.5 min-w-[260px] z-30 bg-[var(--color-panel)] border border-[var(--color-border)] shadow-lg rounded-[var(--radius-sm)] py-1">
-      <li class="px-3 py-1 text-[9px] text-[var(--color-subtext)] uppercase font-mono border-b border-[var(--color-border)]">
-        Récents
-      </li>
-      {#each history as dir}
-        <li>
-          <button
-            onclick={() => setOutputDir(dir)}
-            class="w-full text-left px-3 py-2 text-[10px] font-mono truncate hover:bg-[var(--color-panel2)] transition-colors
-                   {dir === encoder.outputDir ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}"
-            title={dir}
-          >
-            {shortPath(dir)}
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
 </div>

@@ -60,9 +60,8 @@
   let progressVal = $derived(Math.round(100 - estimatedGainPct));
 
   // --- Accordion state ---
-  // true = ouvert. Tout fermé par défaut sauf CRF (le plus utilisé).
   let openSections = $state<Record<string, boolean>>({
-    crf: true,
+    crf: false,
     preset: false,
     seFormat: false,
     tagOrder: false,
