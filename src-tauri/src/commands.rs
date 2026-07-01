@@ -382,3 +382,86 @@ pub async fn send_email_report(
 ) -> Result<(), String> {
     send_email_report_impl(summary, email_cfg).await
 }
+
+// ── Extraction de sous-titres ─────────────────────────────────────────────────
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct SubtitleTrack {
+    pub index: u32,       // index de flux ffmpeg (ex: 0:s:0)
+    pub stream_index: u32, // index global dans le fichier
+    pub language: String,
+    pub title: String,
+    pub codec: String,    // "subrip", "ass", "hdmv_pgs_subtitle", etc.
+}
+
+#[tauri::command]
+pub async fn list_subtitle_tracks(path: String) -> Result<Vec<SubtitleTrack>, String> {
+    let cfg = resolve_config(load_config());
+    let ffprobe = std::path::Path::new(&cfg.ffmpeg_path)
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new(""))
+        .join("ffprobe");
+
+    let output = tokio::process::Command::new(&ffprobe)
+        .args([
+            "-v", "quiet",
+            "-print_format", "json",
+            "-show_streams",
+            "-select_streams", "s",
+            &path,
+        ])
+        .creation_flags(0x08000000)
+        .output()
+        .await
+        .map_err(|e| format!("ffprobe introuvable : {}", e))?;
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|e| format!("Erreur parsing ffprobe : {}", e))?;
+
+    let streams = json["streams"].as_array().cloned().unwrap_or_default();
+    let mut tracks = Vec::new();
+    for (i, s) in streams.iter().enumerate() {
+        let codec = s["codec_name"].as_str().unwrap_or("unknown").to_string();
+        let lang = s["tags"]["language"].as_str().unwrap_or("und").to_string();
+        let title = s["tags"]["title"].as_str().unwrap_or("").to_string();
+        let stream_index = s["index"].as_u64().unwrap_or(0) as u32;
+        tracks.push(SubtitleTrack {
+            index: i as u32,
+            stream_index,
+            language: lang,
+            title,
+            codec,
+        });
+    }
+    Ok(tracks)
+}
+
+#[tauri::command]
+pub async fn extract_subtitles(
+    source_path: String,
+    track_index: u32,  
+    output_path: String, 
+) -> Result<(), String> {
+    let cfg = resolve_config(load_config());
+
+    let status = tokio::process::Command::new(&cfg.ffmpeg_path)
+        .args([
+            "-y",
+            "-i", &source_path,
+            "-map", &format!("0:s:{}", track_index),
+            &output_path,
+        ])
+        .creation_flags(0x08000000)
+        .status()
+        .await
+        .map_err(|e| format!("Erreur lancement ffmpeg : {}", e))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "ffmpeg a échoué (code {})",
+            status.code().unwrap_or(-1)
+        ))
+    }
+}

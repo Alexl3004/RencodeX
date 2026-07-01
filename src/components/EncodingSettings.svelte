@@ -1,22 +1,36 @@
 <script lang="ts">
-  import { encoder, SEASON_EPISODE_FORMATS, formatSeasonEpisode, TAG_LABELS, type TagId } from "$lib/stores/encoder.svelte";
+  import {
+    encoder,
+    SEASON_EPISODE_FORMATS,
+    formatSeasonEpisode,
+    TAG_LABELS,
+    type TagId,
+  } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
-  import { X, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from '@lucide/svelte';
+  import {
+    X,
+    ChevronDown,
+    ChevronUp,
+    ArrowUp,
+    ArrowDown,
+    FolderOpen,
+  } from "@lucide/svelte";
 
   let { onClose }: { onClose?: () => void } = $props();
-  let crf    = $derived(encoder.crf);
+
+  let crf = $derived(encoder.crf);
   let preset = $derived(encoder.preset);
   let seFormat = $derived(encoder.seasonEpisodeFormat);
   let tagOrder = $derived(encoder.tagOrder);
-  let team     = $derived(encoder.team);
+  let team = $derived(encoder.team);
 
-  let audioMode    = $derived(encoder.audioMode);
+  let audioMode = $derived(encoder.audioMode);
   let audioBitrate = $derived(encoder.audioBitrate);
-  let spatialAq    = $derived(encoder.spatialAq);
-  let temporalAq   = $derived(encoder.temporalAq);
-  let aqStrength   = $derived(encoder.aqStrength);
-  let multipass    = $derived(encoder.multipass);
-  let container    = $derived(encoder.container);
+  let spatialAq = $derived(encoder.spatialAq);
+  let temporalAq = $derived(encoder.temporalAq);
+  let aqStrength = $derived(encoder.aqStrength);
+  let multipass = $derived(encoder.multipass);
+  let container = $derived(encoder.container);
 
   let totalOriginalMb = $derived(
     encoder.files.reduce((s: number, f: any) => s + (f.size_mb || 0), 0),
@@ -25,32 +39,87 @@
   let estimatedRatio = $derived.by(() => {
     const crfBase = 0.25 + (28 - crf) * 0.025;
     const pf: Record<string, number> = {
-      p1: 1.3, p2: 1.2, p3: 1.1, p4: 1.05, p5: 1.0, p6: 0.92, p7: 0.85,
+      p1: 1.3,
+      p2: 1.2,
+      p3: 1.1,
+      p4: 1.05,
+      p5: 1.0,
+      p6: 0.92,
+      p7: 0.85,
     };
     return Math.min(0.7, crfBase * (pf[preset] || 1.0));
   });
 
   let estimatedTotalMb = $derived(totalOriginalMb * estimatedRatio);
   let estimatedGainPct = $derived(
-    totalOriginalMb > 0 ? ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100 : 0,
+    totalOriginalMb > 0
+      ? ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100
+      : 0,
   );
 
-  const presetInfo: Record<string, { speed: string; gain: string; desc: string }> = {
-    p1: { speed: "Ultra rapide", gain: "Gain faible",    desc: "Encodage très rapide, fichier plus gros" },
-    p2: { speed: "Très rapide",  gain: "Gain faible+",   desc: "Rapide, bon compromis" },
-    p3: { speed: "Rapide",       gain: "Gain moyen",     desc: "Rapide, bonne qualité" },
-    p4: { speed: "Normal+",      gain: "Bon gain",       desc: "Bon équilibre vitesse/qualité" },
-    p5: { speed: "Normal",       gain: "Excellent gain", desc: "Meilleur compromis (recommandé)" },
-    p6: { speed: "Lent",         gain: "Gain supérieur", desc: "Lent, fichier plus petit" },
-    p7: { speed: "Très lent",    gain: "Gain maximal",   desc: "Très lent, fichier très petit" },
+  const presetInfo: Record<
+    string,
+    { speed: string; gain: string; desc: string }
+  > = {
+    p1: {
+      speed: "Ultra rapide",
+      gain: "Gain faible",
+      desc: "Encodage très rapide, fichier plus gros",
+    },
+    p2: {
+      speed: "Très rapide",
+      gain: "Gain faible+",
+      desc: "Rapide, bon compromis",
+    },
+    p3: { speed: "Rapide", gain: "Gain moyen", desc: "Rapide, bonne qualité" },
+    p4: {
+      speed: "Normal+",
+      gain: "Bon gain",
+      desc: "Bon équilibre vitesse/qualité",
+    },
+    p5: {
+      speed: "Normal",
+      gain: "Excellent gain",
+      desc: "Meilleur compromis (recommandé)",
+    },
+    p6: {
+      speed: "Lent",
+      gain: "Gain supérieur",
+      desc: "Lent, fichier plus petit",
+    },
+    p7: {
+      speed: "Très lent",
+      gain: "Gain maximal",
+      desc: "Très lent, fichier très petit",
+    },
   };
 
   const crfGuide = [
-    { range: [18, 20], label: "Archivage",    size: "Très gros",    quality: "Parfaite" },
-    { range: [21, 23], label: "Home cinéma",  size: "Gros",         quality: "Excellente" },
-    { range: [24, 26], label: "Usage général",size: "Moyen",        quality: "Très bonne" },
-    { range: [27, 29], label: "Web / Mobile", size: "Raisonnable",  quality: "Bonne" },
-    { range: [30, 35], label: "Compact",      size: "Petit",        quality: "Correcte" },
+    {
+      range: [18, 20],
+      label: "Archivage",
+      size: "Très gros",
+      quality: "Parfaite",
+    },
+    {
+      range: [21, 23],
+      label: "Home cinéma",
+      size: "Gros",
+      quality: "Excellente",
+    },
+    {
+      range: [24, 26],
+      label: "Usage général",
+      size: "Moyen",
+      quality: "Très bonne",
+    },
+    {
+      range: [27, 29],
+      label: "Web / Mobile",
+      size: "Raisonnable",
+      quality: "Bonne",
+    },
+    { range: [30, 35], label: "Compact", size: "Petit", quality: "Correcte" },
   ];
 
   let currentCrfInfo = $derived(
@@ -68,22 +137,26 @@
     audio: false,
     nvenc: false,
     container: false,
+    subtitles: false,
     estimate: false,
   });
 
   function toggle(key: string) {
     openSections[key] = !openSections[key];
   }
+
   function chevronClass(open: boolean) {
     return open ? "acc-chevron acc-chevron--open" : "acc-chevron";
   }
 </script>
 
 <div class="panel-root">
-  <!-- Header -->
   <div class="panel-header">
     <div class="flex items-center gap-2">
-      <div class="w-[3px] h-4 rounded-[1px]" style="background: var(--color-accent);"></div>
+      <div
+        class="w-[3px] h-4 rounded-[1px]"
+        style="background: var(--color-accent);"
+      ></div>
       <span class="section-label">Paramètres d'encodage</span>
     </div>
     {#if onClose}
@@ -93,12 +166,14 @@
     {/if}
   </div>
 
-  <!-- Body -->
   <div class="panel-body">
-
-    <!-- CRF -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('crf')} aria-expanded={openSections.crf}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("crf")}
+        aria-expanded={openSections.crf}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Qualité CRF</span>
           {#if !openSections.crf}
@@ -113,25 +188,39 @@
 
       {#if openSections.crf}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Niveau de compression vidéo</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Niveau de compression vidéo
+          </p>
 
           <input
             type="range"
             value={crf}
-            oninput={(e: Event) => encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
-            min="18" max="35" step="1"
+            oninput={(e: Event) =>
+              encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
+            min="18"
+            max="35"
+            step="1"
             class="crf-range w-full"
             aria-label="Valeur CRF"
           />
 
-          <div class="flex justify-between font-mono text-[9px]" style="color: var(--color-subtext2);">
+          <div
+            class="flex justify-between font-mono text-[9px]"
+            style="color: var(--color-subtext2);"
+          >
             <span>← Meilleure qualité</span>
             <span>Fichier plus petit →</span>
           </div>
 
           <div class="info-box">
-            <span class="font-mono text-[11px]" style="color: var(--color-text);">{currentCrfInfo.label}</span>
-            <div class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">
+            <span
+              class="font-mono text-[11px]"
+              style="color: var(--color-text);">{currentCrfInfo.label}</span
+            >
+            <div
+              class="font-mono text-[9px] mt-0.5"
+              style="color: var(--color-subtext);"
+            >
               Taille {currentCrfInfo.size} · Qualité {currentCrfInfo.quality}
             </div>
           </div>
@@ -139,13 +228,19 @@
       {/if}
     </div>
 
-    <!-- Preset -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('preset')} aria-expanded={openSections.preset}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("preset")}
+        aria-expanded={openSections.preset}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Vitesse d'encodage</span>
           {#if !openSections.preset}
-            <span class="acc-summary">{preset.toUpperCase()} · {presetInfo[preset].speed}</span>
+            <span class="acc-summary"
+              >{preset.toUpperCase()} · {presetInfo[preset].speed}</span
+            >
           {/if}
         </div>
         <div class="acc-trigger-right">
@@ -155,7 +250,9 @@
 
       {#if openSections.preset}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Vitesse vs taille finale</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Vitesse vs taille finale
+          </p>
 
           <div class="grid grid-cols-7 gap-1">
             {#each ["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as p}
@@ -172,27 +269,45 @@
 
           <div class="info-box">
             <div class="flex items-center gap-2">
-              <span class="font-mono text-[11px]" style="color: var(--color-text);">{presetInfo[preset].speed}</span>
+              <span
+                class="font-mono text-[11px]"
+                style="color: var(--color-text);"
+                >{presetInfo[preset].speed}</span
+              >
               {#if preset === "p5"}
-                <span class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-full)]"
-                      style="background: color-mix(in srgb, var(--color-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent); color: var(--color-success);">
+                <span
+                  class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-full)]"
+                  style="background: color-mix(in srgb, var(--color-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent); color: var(--color-success);"
+                >
                   REC.
                 </span>
               {/if}
             </div>
-            <div class="font-mono text-[10px] mt-0.5" style="color: var(--color-subtext);">{presetInfo[preset].desc}</div>
+            <div
+              class="font-mono text-[10px] mt-0.5"
+              style="color: var(--color-subtext);"
+            >
+              {presetInfo[preset].desc}
+            </div>
           </div>
         </div>
       {/if}
     </div>
 
-    <!-- Format Saison/Épisode -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('seFormat')} aria-expanded={openSections.seFormat}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("seFormat")}
+        aria-expanded={openSections.seFormat}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Format saison/épisode</span>
           {#if !openSections.seFormat}
-            <span class="acc-summary">{SEASON_EPISODE_FORMATS.find((f: any) => f.value === seFormat)?.label}</span>
+            <span class="acc-summary"
+              >{SEASON_EPISODE_FORMATS.find((f: any) => f.value === seFormat)
+                ?.label}</span
+            >
           {/if}
         </div>
         <div class="acc-trigger-right">
@@ -202,7 +317,9 @@
 
       {#if openSections.seFormat}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Affichage dans le nom de sortie</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Affichage dans le nom de sortie
+          </p>
 
           <div class="grid grid-cols-2 gap-1.5">
             {#each SEASON_EPISODE_FORMATS as f}
@@ -218,22 +335,35 @@
           </div>
 
           <div class="info-box">
-            <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
-            <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
-              Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P BluRay H265 10bit AAC
+            <span
+              class="font-mono text-[9px]"
+              style="color: var(--color-subtext);">Exemple :</span
+            >
+            <span
+              class="font-mono text-[11px] ml-1.5"
+              style="color: var(--color-text);"
+            >
+              Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P
+              BluRay H265 10bit AAC
             </span>
           </div>
         </div>
       {/if}
     </div>
 
-    <!-- Ordre des tags / Team -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('tagOrder')} aria-expanded={openSections.tagOrder}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("tagOrder")}
+        aria-expanded={openSections.tagOrder}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Ordre des tags &amp; team</span>
           {#if !openSections.tagOrder}
-            <span class="acc-summary">{team ? `Team : ${team}` : "Ordre par défaut"}</span>
+            <span class="acc-summary"
+              >{team ? `Team : ${team}` : "Ordre par défaut"}</span
+            >
           {/if}
         </div>
         <div class="acc-trigger-right">
@@ -244,13 +374,15 @@
       {#if openSections.tagOrder}
         <div class="acc-content space-y-3">
           <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
-            Réorganisez les éléments du nom de sortie. Renseignez un nom de team pour l'ajouter où vous voulez.
+            Réorganisez les éléments du nom de sortie. Renseignez un nom de team
+            pour l'ajouter où vous voulez.
           </p>
 
           <input
             type="text"
             value={team}
-            oninput={(e: Event) => encoder.setTeam((e.target as HTMLInputElement).value)}
+            oninput={(e: Event) =>
+              encoder.setTeam((e.target as HTMLInputElement).value)}
             placeholder="Nom de la team (optionnel)"
             class="w-full font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)]"
             style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text);"
@@ -259,8 +391,14 @@
           <div class="space-y-1">
             {#each tagOrder as id, i (id)}
               <div class="tag-row">
-                <span class="font-mono text-[11px]" style="color: {id === 'team' && !team ? 'var(--color-subtext2)' : 'var(--color-text)'};">
-                  {TAG_LABELS[id]}{#if id === 'team' && !team} (vide — ignoré tant qu'aucun nom n'est saisi){/if}
+                <span
+                  class="font-mono text-[11px]"
+                  style="color: {id === 'team' && !team
+                    ? 'var(--color-subtext2)'
+                    : 'var(--color-text)'};"
+                >
+                  {TAG_LABELS[id]}{#if id === "team" && !team}
+                    (vide — ignoré tant qu'aucun nom n'est saisi){/if}
                 </span>
                 <div class="tag-row-actions">
                   <button
@@ -287,17 +425,36 @@
           </div>
 
           <div class="info-box">
-            <span class="font-mono text-[9px]" style="color: var(--color-subtext);">Exemple :</span>
-            <span class="font-mono text-[11px] ml-1.5" style="color: var(--color-text);">
+            <span
+              class="font-mono text-[9px]"
+              style="color: var(--color-subtext);">Exemple :</span
+            >
+            <span
+              class="font-mono text-[11px] ml-1.5"
+              style="color: var(--color-text);"
+            >
               {encoder.getDisplayName({
                 cleaned: {
-                  title: "Jujutsu Kaisen", season_episode: "S03E01",
-                  resolution: "1080P", source: "BluRay", provider: "",
-                  audio_tags: "VOSTFR", suggested: "",
+                  title: "Jujutsu Kaisen",
+                  season_episode: "S03E01",
+                  resolution: "1080P",
+                  source: "BluRay",
+                  provider: "",
+                  audio_tags: "VOSTFR",
+                  suggested: "",
                 },
                 output_name: "VOSTFR AAC",
-                path: "", filename: "", size_mb: 0, duration_secs: 0, fps: 0,
-                audio_langs: [], sub_langs: [], streams: [], status: "ready", output_ext: ".mkv",
+                path: "",
+                filename: "",
+                size_mb: 0,
+                duration_secs: 0,
+                fps: 0,
+                audio_langs: [],
+                sub_langs: [],
+                streams: [],
+                status: "ready",
+                output_ext: ".mkv",
+                sub_extract_status: "none",
               })}
             </span>
           </div>
@@ -305,14 +462,20 @@
       {/if}
     </div>
 
-    <!-- Audio -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('audio')} aria-expanded={openSections.audio}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("audio")}
+        aria-expanded={openSections.audio}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Audio</span>
           {#if !openSections.audio}
             <span class="acc-summary">
-              {audioMode === "reencode" ? `AAC ${audioBitrate}k` : "Copie sans perte"}
+              {audioMode === "reencode"
+                ? `AAC ${audioBitrate}k`
+                : "Copie sans perte"}
             </span>
           {/if}
         </div>
@@ -323,7 +486,9 @@
 
       {#if openSections.audio}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Réencodage AAC ou copie sans perte</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Réencodage AAC ou copie sans perte
+          </p>
 
           <div class="grid grid-cols-2 gap-1.5">
             <button
@@ -359,8 +524,12 @@
             </div>
           {:else}
             <div class="info-box">
-              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">
-                La piste audio source sera conservée telle quelle, sans perte de qualité supplémentaire.
+              <span
+                class="font-mono text-[10px]"
+                style="color: var(--color-subtext);"
+              >
+                La piste audio source sera conservée telle quelle, sans perte de
+                qualité supplémentaire.
               </span>
             </div>
           {/if}
@@ -368,14 +537,23 @@
       {/if}
     </div>
 
-    <!-- Qualité NVENC avancée -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('nvenc')} aria-expanded={openSections.nvenc}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("nvenc")}
+        aria-expanded={openSections.nvenc}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Qualité NVENC avancée</span>
           {#if !openSections.nvenc}
             <span class="acc-summary">
-              AQ {spatialAq || temporalAq ? `(${aqStrength})` : "off"} · Multipass {multipass === "disabled" ? "aucun" : multipass === "qres" ? "1/4" : "plein"}
+              AQ {spatialAq || temporalAq ? `(${aqStrength})` : "off"} · Multipass
+              {multipass === "disabled"
+                ? "aucun"
+                : multipass === "qres"
+                  ? "1/4"
+                  : "plein"}
             </span>
           {/if}
         </div>
@@ -386,7 +564,9 @@
 
       {#if openSections.nvenc}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">AQ adaptative et multipass</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            AQ adaptative et multipass
+          </p>
 
           <div class="grid grid-cols-2 gap-1.5">
             <button
@@ -409,14 +589,25 @@
 
           {#if spatialAq || temporalAq}
             <div class="flex justify-between items-start">
-              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">Force AQ</span>
-              <span class="font-mono text-[12px] font-bold" style="color: var(--color-accent);">{aqStrength}</span>
+              <span
+                class="font-mono text-[10px]"
+                style="color: var(--color-subtext);">Force AQ</span
+              >
+              <span
+                class="font-mono text-[12px] font-bold"
+                style="color: var(--color-accent);">{aqStrength}</span
+              >
             </div>
             <input
               type="range"
               value={aqStrength}
-              oninput={(e: Event) => encoder.setAqStrength(parseInt((e.target as HTMLInputElement).value))}
-              min="1" max="15" step="1"
+              oninput={(e: Event) =>
+                encoder.setAqStrength(
+                  parseInt((e.target as HTMLInputElement).value),
+                )}
+              min="1"
+              max="15"
+              step="1"
               class="crf-range w-full"
               aria-label="Force AQ"
             />
@@ -452,9 +643,13 @@
       {/if}
     </div>
 
-    <!-- Conteneur -->
     <div class="acc-item">
-      <button type="button" class="acc-trigger" onclick={() => toggle('container')} aria-expanded={openSections.container}>
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("container")}
+        aria-expanded={openSections.container}
+      >
         <div class="acc-trigger-left">
           <span class="section-label">Conteneur de sortie</span>
           {#if !openSections.container}
@@ -468,7 +663,9 @@
 
       {#if openSections.container}
         <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Format du fichier final</p>
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Format du fichier final
+          </p>
 
           <div class="grid grid-cols-2 gap-1.5">
             <button
@@ -491,8 +688,12 @@
 
           {#if container === "mp4"}
             <div class="info-box">
-              <span class="font-mono text-[10px]" style="color: var(--color-subtext);">
-                Sous-titres convertis en mov_text — meilleure compatibilité Apple/mobile, MKV reste recommandé pour l'ASS avancé.
+              <span
+                class="font-mono text-[10px]"
+                style="color: var(--color-subtext);"
+              >
+                Sous-titres convertis en mov_text — meilleure compatibilité
+                Apple/mobile, MKV reste recommandé pour l'ASS avancé.
               </span>
             </div>
           {/if}
@@ -500,14 +701,184 @@
       {/if}
     </div>
 
-    <!-- Estimation -->
+    <div class="acc-item">
+      <button
+        type="button"
+        class="acc-trigger"
+        onclick={() => toggle("subtitles")}
+        aria-expanded={openSections.subtitles}
+      >
+        <div class="acc-trigger-left">
+          <span class="section-label">Extraction sous-titres</span>
+          {#if !openSections.subtitles}
+            <span class="acc-summary">
+              {encoder.subExtractFormat.toUpperCase()} · {encoder.subExtractNaming ===
+              "source"
+                ? "Nom source"
+                : "Nom nettoyé"}
+            </span>
+          {/if}
+        </div>
+        <div class="acc-trigger-right">
+          <ChevronDown class={chevronClass(openSections.subtitles)} />
+        </div>
+      </button>
+
+      {#if openSections.subtitles}
+        <div class="acc-content space-y-3">
+          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
+            Bouton dans la barre de contrôle
+          </p>
+          <button
+            type="button"
+            onclick={() =>
+              encoder.setShowExtractButton(!encoder.showExtractButton)}
+            class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn w-full"
+            class:preset-btn--active={encoder.showExtractButton}
+          >
+            {encoder.showExtractButton
+              ? "✓ Bouton Extraire visible"
+              : "Bouton Extraire masqué"}
+          </button>
+
+          <p
+            class="font-mono text-[10px] mt-2"
+            style="color: var(--color-subtext);"
+          >
+            Format du fichier
+          </p>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractFormat("srt")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractFormat === "srt"}
+            >
+              SRT
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractFormat("ass")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractFormat === "ass"}
+            >
+              ASS
+            </button>
+          </div>
+
+          <p
+            class="font-mono text-[10px] mt-2"
+            style="color: var(--color-subtext);"
+          >
+            Nommage du fichier
+          </p>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractNaming("source")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractNaming === "source"}
+            >
+              Nom source
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractNaming("cleaned")}
+              class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractNaming === "cleaned"}
+              title="Titre + Épisode + Type"
+            >
+              Nettoyé
+            </button>
+          </div>
+
+          <p
+            class="font-mono text-[10px] mt-2"
+            style="color: var(--color-subtext);"
+          >
+            Dossier de destination
+          </p>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractPathMode("source")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractPathMode === "source"}
+            >
+              Source
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractPathMode("downloads")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractPathMode ===
+                "downloads"}
+            >
+              Téléchargements
+            </button>
+            <button
+              type="button"
+              onclick={() => encoder.setSubExtractPathMode("custom")}
+              class="font-mono text-[10px] px-0 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
+              class:preset-btn--active={encoder.subExtractPathMode === "custom"}
+            >
+              Personnalisé
+            </button>
+          </div>
+
+          {#if encoder.subExtractPathMode === "custom"}
+            <div class="flex items-center gap-1.5 mt-1.5">
+              <input
+                type="text"
+                value={encoder.subExtractCustomPath}
+                oninput={(e) =>
+                  encoder.setSubExtractCustomPath(
+                    (e.target as HTMLInputElement).value,
+                  )}
+                placeholder="Chemin complet du dossier..."
+                class="w-full font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)]"
+                style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text);"
+              />
+              <button
+                type="button"
+                onclick={async () => {
+                  try {
+                    const dialog = await import("@tauri-apps/plugin-dialog");
+                    const selected = await dialog.open({ directory: true });
+                    if (selected && typeof selected === "string")
+                      encoder.setSubExtractCustomPath(selected);
+                  } catch (e) {
+                    console.error("Plugin dialog non disponible", e);
+                  }
+                }}
+                class="icon-btn shrink-0"
+                style="background: var(--color-surface); border: 1px solid var(--color-border);"
+                aria-label="Parcourir"
+              >
+                <FolderOpen class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
     {#if totalOriginalMb > 0}
       <div class="acc-item">
-        <button type="button" class="acc-trigger" onclick={() => toggle('estimate')} aria-expanded={openSections.estimate}>
+        <button
+          type="button"
+          class="acc-trigger"
+          onclick={() => toggle("estimate")}
+          aria-expanded={openSections.estimate}
+        >
           <div class="acc-trigger-left">
             <span class="section-label">Estimation résultat</span>
             {#if !openSections.estimate}
-              <span class="acc-summary">{formatSize(estimatedTotalMb)} (-{estimatedGainPct.toFixed(1)}%)</span>
+              <span class="acc-summary"
+                >{formatSize(estimatedTotalMb)} (-{estimatedGainPct.toFixed(
+                  1,
+                )}%)</span
+              >
             {/if}
           </div>
           <div class="acc-trigger-right">
@@ -517,28 +888,55 @@
 
         {#if openSections.estimate}
           <div class="acc-content space-y-3">
-            <p class="font-mono text-[10px]" style="color: var(--color-subtext);">Prévision basée sur les paramètres actuels</p>
+            <p
+              class="font-mono text-[10px]"
+              style="color: var(--color-subtext);"
+            >
+              Prévision basée sur les paramètres actuels
+            </p>
 
             <div class="grid grid-cols-3 gap-2">
               <div class="stat-box">
                 <div class="section-label mb-1">ORIGINAL</div>
-                <div class="font-mono text-[12px] font-bold" style="color: var(--color-text);">{formatSize(totalOriginalMb)}</div>
+                <div
+                  class="font-mono text-[12px] font-bold"
+                  style="color: var(--color-text);"
+                >
+                  {formatSize(totalOriginalMb)}
+                </div>
               </div>
               <div class="stat-box">
                 <div class="section-label mb-1">ESTIMÉ</div>
-                <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">{formatSize(estimatedTotalMb)}</div>
+                <div
+                  class="font-mono text-[12px] font-bold"
+                  style="color: var(--color-success);"
+                >
+                  {formatSize(estimatedTotalMb)}
+                </div>
               </div>
               <div class="stat-box">
                 <div class="section-label mb-1">GAIN</div>
-                <div class="font-mono text-[12px] font-bold" style="color: var(--color-success);">-{estimatedGainPct.toFixed(1)}%</div>
+                <div
+                  class="font-mono text-[12px] font-bold"
+                  style="color: var(--color-success);"
+                >
+                  -{estimatedGainPct.toFixed(1)}%
+                </div>
               </div>
             </div>
 
-            <div class="relative rounded-[var(--radius-sm)] overflow-hidden" style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);">
-              <div class="absolute inset-y-0 left-0 rounded-[1px]"
-                   style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"></div>
-              <div class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
-                   style="color: var(--color-text);">
+            <div
+              class="relative rounded-[var(--radius-sm)] overflow-hidden"
+              style="height: 20px; background: var(--color-surface); border: 1px solid var(--color-border);"
+            >
+              <div
+                class="absolute inset-y-0 left-0 rounded-[1px]"
+                style="width: {progressVal}%; background: var(--color-success); transition: width 0.3s;"
+              ></div>
+              <div
+                class="absolute inset-0 flex items-center justify-center font-mono text-[10px]"
+                style="color: var(--color-text);"
+              >
                 {formatSize(estimatedTotalMb)} / {formatSize(totalOriginalMb)}
               </div>
             </div>
@@ -585,7 +983,10 @@
     background: transparent;
     color: var(--color-subtext);
     cursor: pointer;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s,
+      border-color 0.1s;
   }
   .icon-btn:hover {
     background: var(--color-panel2);

@@ -57,6 +57,8 @@ fn main() {
             commands::send_email_report,
             commands::load_stats,
             commands::save_stats,
+            commands::list_subtitle_tracks,
+            commands::extract_subtitles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

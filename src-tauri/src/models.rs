@@ -142,6 +142,16 @@ pub struct EncodingPrefs {
     pub multipass: String,
     #[serde(default = "default_container")]
     pub container: String,
+    #[serde(default = "default_sub_extract_format")]
+    pub sub_extract_format: String,
+    #[serde(default = "default_sub_extract_naming")]
+    pub sub_extract_naming: String,
+    #[serde(default = "default_sub_extract_path_mode")]
+    pub sub_extract_path_mode: String,
+    #[serde(default)]
+    pub sub_extract_custom_path: String,
+    #[serde(default = "default_show_extract_button")]
+    pub show_extract_button: bool,
 }
 
 fn default_crf() -> u32 { 28 }
@@ -158,6 +168,10 @@ fn default_audio_bitrate() -> u32 { 192 }
 fn default_aq_strength() -> u32 { 8 }
 fn default_multipass() -> String { "disabled".to_string() }
 fn default_container() -> String { "mkv".to_string() }
+fn default_sub_extract_format() -> String { "srt".to_string() }
+fn default_sub_extract_naming() -> String { "source".to_string() }
+fn default_sub_extract_path_mode() -> String { "source".to_string() }
+fn default_show_extract_button() -> bool { true }
 
 impl Default for EncodingPrefs {
     fn default() -> Self {
@@ -174,6 +188,11 @@ impl Default for EncodingPrefs {
             aq_strength: default_aq_strength(),
             multipass: default_multipass(),
             container: default_container(),
+            sub_extract_format: default_sub_extract_format(),
+            sub_extract_naming: default_sub_extract_naming(),
+            sub_extract_path_mode: default_sub_extract_path_mode(),
+            sub_extract_custom_path: String::new(),
+            show_extract_button: default_show_extract_button(),
         }
     }
 }
