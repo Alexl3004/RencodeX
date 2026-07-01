@@ -1,7 +1,7 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { tick } from "svelte";
-  import { Switch } from "@skeletonlabs/skeleton-svelte";
+
   import { Copy, CircleCheck, Trash2, X, AlertTriangle } from '@lucide/svelte';
 
 
@@ -100,21 +100,19 @@
         </button>
       </div>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
-      <Switch
-        checked={autoScroll}
-        onCheckedChange={(details) => (autoScroll = details.checked)}
-        class="flex items-center gap-1.5"
+      <button
+        type="button"
+        role="switch"
+        aria-checked={autoScroll}
+        onclick={() => (autoScroll = !autoScroll)}
+        class="native-switch flex items-center gap-1.5"
+        aria-label="Auto-scroll"
       >
-        <Switch.Control
-          class="h-[15px] w-[28px] rounded-full border border-[var(--color-border2)] bg-[var(--color-muted)] transition-colors data-[state=checked]:border-[var(--color-accent2)] data-[state=checked]:bg-[var(--color-accent)]"
-        >
-          <Switch.Thumb
-            class="h-[11px] w-[11px] translate-x-[2px] rounded-full bg-white transition-transform data-[state=checked]:translate-x-[15px]"
-          />
-        </Switch.Control>
-        <Switch.Label class="font-mono text-[10px] text-[var(--color-subtext)]">auto</Switch.Label>
-        <Switch.HiddenInput />
-      </Switch>
+        <span class="switch-track {autoScroll ? 'switch-on' : 'switch-off'}">
+          <span class="switch-thumb {autoScroll ? 'thumb-on' : 'thumb-off'}"></span>
+        </span>
+        <span class="font-mono text-[10px] text-[var(--color-subtext)]">auto</span>
+      </button>
       <div class="sep h-3 mx-1" aria-hidden="true"></div>
       <button type="button" onclick={copyAll}
         class="log-action-btn font-mono text-[10px] flex items-center gap-1
@@ -149,7 +147,10 @@
   <div bind:this={container} class="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] space-y-0.5 leading-relaxed"
        onscroll={() => {
          if (!container) return;
-         autoScroll = container.scrollHeight - container.scrollTop - container.clientHeight < 30;
+         const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 30;
+         // On désactive l'auto-scroll si l'utilisateur remonte manuellement,
+         // mais on ne le réactive PAS automatiquement — c'est le toggle qui commande.
+         if (!atBottom && autoScroll) autoScroll = false;
        }}>
     {#if filteredLogs.length === 0}
       <span class="text-[var(--color-subtext2)] italic text-[10px]">
@@ -198,4 +199,44 @@
   .log-action-btn:hover {
     color: var(--color-text);
   }
+
+  /* Native switch — aucun état interne, piloté uniquement par autoScroll */
+  .native-switch {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+  }
+  .switch-track {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 15px;
+    border-radius: 999px;
+    border: 1px solid;
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .switch-on {
+    background: var(--color-accent);
+    border-color: var(--color-accent2, var(--color-accent));
+  }
+  .switch-off {
+    background: var(--color-muted);
+    border-color: var(--color-border2, var(--color-border));
+  }
+  .switch-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: white;
+    transition: left 0.15s;
+  }
+  .thumb-on  { left: 15px; }
+  .thumb-off { left: 2px; }
 </style>
