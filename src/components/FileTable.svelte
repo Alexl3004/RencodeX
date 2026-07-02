@@ -12,6 +12,8 @@
     CircleCheck,
     AlertTriangle,
     LoaderCircle,
+    Subtitles,
+    Play,
   } from "@lucide/svelte";
 
   let filterText = $state("");
@@ -47,7 +49,6 @@
     return fileIndex > currentIndex;
   }
 
-  // Compteurs pour les filtres
   let statusCounts = $derived.by(() => {
     const counts = {
       all: encoder.files.length,
@@ -116,7 +117,6 @@
     return STATUS_COLOR[file.status] ?? "";
   }
 
-  // Fonction pour le statut d'extraction (uniquement done/error, extracting géré inline)
   function getSubExtractStatus(file: AppFile) {
     switch (file.sub_extract_status) {
       case "done":
@@ -148,9 +148,20 @@
   <!-- Barre de filtres -->
   {#if encoder.files.length > 0}
     <div
-      class="flex items-center gap-1.5 px-2 py-1.5 shrink-0"
+      class="flex items-center gap-1.5 px-2 py-1.5 shrink-0 flex-wrap"
       style="border-bottom: 1px solid var(--color-border); background: var(--color-surface);"
     >
+      <!-- Vider le tableau -->
+      <button
+        onclick={() => encoder.clearAll()}
+        title="Vider la liste"
+        aria-label="Vider la liste des fichiers"
+        class="clear-all-btn"
+      >
+        <X class="w-3 h-3" />
+      </button>
+
+      <!-- Recherche -->
       <div class="relative flex items-center">
         <Search
           class="absolute left-2 w-3 h-3 pointer-events-none"
@@ -175,8 +186,23 @@
         {/if}
       </div>
 
-      {#each [{ key: "all", label: "Tous", count: statusCounts.all }, { key: "ready", label: "Prêt", count: statusCounts.ready }, { key: "queued", label: "En file", count: statusCounts.queued }, { key: "encoding", label: "En cours", count: statusCounts.encoding }, { key: "done", label: "Terminé", count: statusCounts.done }, { key: "error", label: "Erreur", count: statusCounts.error }] as btn}
-        {#if btn.count > 0 || btn.key === "all"}
+      <!-- Filtres par statut -->
+      <!-- Badge fusionné Tous + Prêt -->
+      <button
+        onclick={() => (filterStatus = "all")}
+        class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-sm)] flex items-center gap-1 transition-colors"
+        style={filterStatus === "all"
+          ? "background: var(--color-accent); color: #fff;"
+          : "background: var(--color-panel); border: 1px solid var(--color-border); color: var(--color-subtext);"}
+        aria-pressed={filterStatus === "all"}
+      >
+        Prêt <span class="opacity-75"
+          >{statusCounts.ready}/{statusCounts.all}</span
+        >
+      </button>
+
+      {#each [{ key: "queued", label: "En file", count: statusCounts.queued }, { key: "encoding", label: "En cours", count: statusCounts.encoding }, { key: "done", label: "Terminé", count: statusCounts.done }, { key: "error", label: "Erreur", count: statusCounts.error }] as btn}
+        {#if btn.count > 0}
           <button
             onclick={() => (filterStatus = btn.key as typeof filterStatus)}
             class="font-mono text-[9px] px-1.5 py-0.5 rounded-[var(--radius-sm)] flex items-center gap-1 transition-colors"
@@ -186,21 +212,93 @@
             aria-pressed={filterStatus === btn.key}
           >
             {btn.label}
-            {#if btn.count > 0}<span class="opacity-75">{btn.count}</span>{/if}
+            <span class="opacity-75">{btn.count}</span>
           </button>
         {/if}
       {/each}
 
       {#if filterText || filterStatus !== "all"}
-        <span
-          class="ml-auto font-mono text-[9px]"
-          style="color: var(--color-subtext);"
-          >{filteredFiles.length}/{encoder.files.length}</span
-        >
+        <span class="font-mono text-[9px]" style="color: var(--color-subtext);">
+          {filteredFiles.length}/{encoder.files.length}
+        </span>
+      {/if}
+
+      <!-- Spacer -->
+      <div class="flex-1"></div>
+
+      <!-- ── Groupe sélection unifié (encodage + extraction) ────────────── -->
+      {#if encoder.files.some((f) => f.status === "ready")}
+        {@const selMode =
+          encoder.encodeSelectionMode || encoder.extractSelectionMode}
+        {@const selEncCount = encoder.selectedForEncoding.size}
+        {@const selExtCount = encoder.selectedForExtraction.size}
+        {@const hasExtract =
+          encoder.showExtractButton &&
+          encoder.files.some((f) => f.sub_langs.length > 0)}
+
+        <div class="sel-group">
+          <label
+            class="sel-toggle"
+            title="Mode sélection : cliquer sur les lignes pour les sélectionner"
+          >
+            <span class="sel-toggle-label">
+              <span class="sel-count">
+                {#if selMode && selEncCount > 0}
+                  ({selEncCount})
+                {/if}
+              </span>
+              Sélection
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={selMode}
+              aria-label={selMode
+                ? "Désactiver le mode sélection"
+                : "Activer le mode sélection"}
+              onclick={() => {
+                const next = !selMode;
+                encoder.setEncodeSelectionMode(next);
+                if (hasExtract) encoder.setExtractSelectionMode(next);
+              }}
+              class="toggle {selMode ? 'on' : ''}"
+            ></button>
+          </label>
+          <button
+            type="button"
+            onclick={() => {
+              encoder.clearEncodeSelection();
+              if (hasExtract) encoder.clearExtractSelection();
+            }}
+            disabled={!selMode || (selEncCount === 0 && selExtCount === 0)}
+            class="micro-btn">Aucun</button
+          >
+          <button
+            type="button"
+            onclick={() => {
+              encoder.setEncodeSelection(
+                encoder.files
+                  .filter((f) => f.status === "ready")
+                  .map((f) => f.path),
+              );
+              if (hasExtract)
+                encoder.setExtractSelection(
+                  encoder.files
+                    .filter(
+                      (f) => f.status === "ready" && f.sub_langs.length > 0,
+                    )
+                    .map((f) => f.path),
+                );
+            }}
+            disabled={!selMode}
+            class="micro-btn">Tout</button
+          >
+        </div>
       {/if}
     </div>
   {/if}
 
+  <!-- Table -->
   <div class="flex-1 overflow-auto">
     {#if encoder.files.length === 0}
       <div class="py-10 text-center flex items-center justify-center h-full">
@@ -250,30 +348,72 @@
             {@const isCurrentEncoding = isCurrentlyEncoding(file)}
             {@const subStatus = getSubExtractStatus(file)}
 
+            {@const isEncodeEligible = file.status === "ready"}
+            {@const isEncodeSelected = encoder.selectedForEncoding.has(
+              file.path,
+            )}
+            {@const inEncodeMode = encoder.encodeSelectionMode}
+
+            {@const isExtractEligible =
+              file.status === "ready" && file.sub_langs.length > 0}
+            {@const isExtractSelected = encoder.selectedForExtraction.has(
+              file.path,
+            )}
+            {@const inExtractMode = encoder.extractSelectionMode}
+
+            <!-- En mode sélection unifié les deux modes sont actifs en même temps -->
+            {@const inSelMode = inEncodeMode || inExtractMode}
+            {@const isSelected = isEncodeSelected || isExtractSelected}
+            {@const isEligible = isEncodeEligible}
+
             <tr
-              class="group transition-colors {isCurrentEncoding
-                ? 'row-encoding'
-                : ''} row-clickable"
+              class="group transition-colors
+                {isCurrentEncoding ? 'row-encoding' : ''}
+                {isSelected ? 'row-selected' : ''}
+                {inSelMode && isEligible ? 'row-sel-mode' : ''}
+                {!inSelMode ? 'row-clickable' : ''}
+                {inSelMode && !isEligible ? 'row-sel-disabled' : ''}"
               onclick={(e) => {
                 if ((e.target as HTMLElement).closest("button")) return;
-                openModal(file);
+                if (inSelMode && isEncodeEligible) {
+                  encoder.toggleEncodeSelection(file.path);
+                  if (inExtractMode && isExtractEligible) {
+                    encoder.toggleExtractSelection(file.path);
+                  }
+                } else if (!inSelMode) {
+                  openModal(file);
+                }
               }}
-              title="Cliquer pour voir les infos / renommer"
+              title={inSelMode
+                ? isEncodeEligible
+                  ? isEncodeSelected
+                    ? "Désélectionner"
+                    : "Sélectionner"
+                  : "Fichier non prêt"
+                : "Cliquer pour voir les infos / renommer"}
             >
+              <!-- Indicateur de sélection et couleur de fond selon le mode -->
               <td class="td-name">
                 <span
                   class="truncate font-mono block"
                   style="color: var(--color-text);"
                   title={file.output_name + file.output_ext}
                 >
+                  {#if inSelMode && isEncodeSelected}
+                    <span class="sel-dot encode-dot" aria-hidden="true"></span>
+                  {:else if inSelMode && isExtractSelected}
+                    <span class="sel-dot extract-dot" aria-hidden="true"></span>
+                  {/if}
                   {file.output_name}{file.output_ext}
                 </span>
               </td>
+
               <td
                 class="text-right font-mono"
                 style="color: var(--color-subtext);"
-                >{file.size_mb > 0 ? formatSize(file.size_mb) : "—"}</td
               >
+                {file.size_mb > 0 ? formatSize(file.size_mb) : "—"}
+              </td>
               <td
                 class="text-center font-mono"
                 style="color: var(--color-subtext);"
@@ -322,7 +462,6 @@
                 {:else}—{/if}
               </td>
               <td class="text-center">
-                <!-- Statut principal : encodage en cours -->
                 {#if isCurrentEncoding && encoder.progress}
                   <div class="flex flex-col items-center gap-0.5">
                     <span
@@ -336,7 +475,6 @@
                       >{Math.round(encoder.progress.percent)}%</span
                     >
                   </div>
-                  <!-- Extraction en cours : priorité sur le statut "Prêt" -->
                 {:else if file.sub_extract_status === "extracting"}
                   <div class="flex flex-col items-center gap-0.5">
                     <span
@@ -346,17 +484,7 @@
                       <LoaderCircle class="w-2.5 h-2.5 animate-spin" />
                       Extraction…
                     </span>
-                    {#if encoder.subExtractProgress}
-                      <span
-                        class="font-mono text-[9px]"
-                        style="color: var(--color-subtext);"
-                      >
-                        {encoder.subExtractProgress.file_index + 1}/{encoder
-                          .subExtractProgress.file_total}
-                      </span>
-                    {/if}
                   </div>
-                  <!-- Encodage terminé -->
                 {:else if file.status === "done" && file.result}
                   <div class="flex flex-col items-center gap-0.5">
                     <span class="font-mono text-[10px] {getStatusColor(file)}"
@@ -379,7 +507,6 @@
                   >
                 {/if}
 
-                <!-- Statut d'extraction done/error (affiché en dessous du statut principal) -->
                 {#if subStatus.label}
                   <div class="flex flex-col items-center gap-0.5 mt-0.5">
                     <span
@@ -395,6 +522,7 @@
                   </div>
                 {/if}
               </td>
+
               <td class="col-delete">
                 <button
                   class="row-delete-btn opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[10px] disabled:hidden"
@@ -415,6 +543,28 @@
 </div>
 
 <style>
+  .clear-all-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-panel);
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition:
+      background 0.1s,
+      color 0.1s,
+      border-color 0.1s;
+    flex-shrink: 0;
+  }
+  .clear-all-btn:hover {
+    background: color-mix(in srgb, var(--color-danger) 12%, var(--color-panel));
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+
   .file-table {
     table-layout: fixed;
     width: 100%;
@@ -426,16 +576,52 @@
   .td-name {
     max-width: 0;
     overflow: hidden;
+    position: relative;
   }
+
+  /* Fond selon le mode sélection actif */
   .row-encoding td {
     background: color-mix(in srgb, var(--color-accent) 5%, transparent);
   }
+  /* Sélectionné encodage → teinte verte/primaire */
+  .row-selected td {
+    background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  }
+
   .row-clickable {
     cursor: pointer;
   }
   .row-clickable:hover td {
     background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   }
+  .row-sel-mode {
+    cursor: pointer;
+  }
+  .row-sel-mode:hover td {
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  }
+  .row-sel-disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
+  /* Point coloré indiquant le type de sélection */
+  .sel-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .encode-dot {
+    background: var(--color-accent);
+  }
+  .extract-dot {
+    background: var(--color-success);
+  }
+
   .col-delete {
     width: 36px;
     text-align: center;
@@ -464,70 +650,65 @@
   .row-delete-btn:hover {
     color: var(--color-danger);
   }
-  .modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    background: rgba(0, 0, 0, 0.65);
+
+  /* Groupes de sélection dans la barre de filtres */
+  .sel-group {
     display: flex;
     align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(2px);
+    gap: 4px;
   }
-  .modal-box {
-    background: var(--color-panel);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    max-height: 85vh;
-  }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-panel);
+  .sel-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--color-border);
     flex-shrink: 0;
+    margin: 0 2px;
   }
-  .modal-body {
-    padding: 16px;
-    overflow-y: auto;
-    flex: 1;
-  }
-  .modal-footer {
+  .sel-toggle {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 16px;
-    border-top: 1px solid var(--color-border);
-    background: var(--color-panel);
-    flex-shrink: 0;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
   }
-  .modal-close-btn {
-    width: 24px;
-    height: 24px;
+  .sel-toggle-label {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-xs);
-    border: 1px solid transparent;
-    background: transparent;
+    gap: 3px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
     color: var(--color-subtext);
-    font-size: 12px;
+    white-space: nowrap;
+  }
+  .sel-count {
+    display: inline-block;
+    min-width: 26px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+  .micro-btn {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: var(--radius-xs, 4px);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-subtext);
     cursor: pointer;
     transition:
       background 0.1s,
-      color 0.1s,
-      border-color 0.1s;
+      color 0.1s;
+    width: 38px;
+    text-align: center;
   }
-  .modal-close-btn:hover {
-    background: var(--color-panel2);
-    border-color: var(--color-border);
+  .micro-btn:hover:not(:disabled) {
+    background: var(--color-border);
     color: var(--color-text);
+  }
+  .micro-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
 </style>

@@ -114,7 +114,6 @@ export interface AppFile {
   output_ext: string;
   result?: FileResult;
   cleaned?: CleanedName;
-  // 👇 Nouveaux champs pour l'extraction des sous-titres
   sub_extract_status: "none" | "extracting" | "done" | "error";
   sub_extract_error?: string;
 }
@@ -123,7 +122,7 @@ export interface SubExtractProgress {
   file_index: number;
   file_total: number;
   file_name: string;
-  percent: number; // 0-100
+  percent: number;
 }
 
 // ─── Format Saison/Épisode ──────────────────────────────────────────────────
@@ -257,6 +256,7 @@ export type TagId =
   | "bitdepth"
   | "audioCodec"
   | "team";
+
 export const DEFAULT_TAG_ORDER: TagId[] = [
   "title",
   "se",
@@ -269,6 +269,7 @@ export const DEFAULT_TAG_ORDER: TagId[] = [
   "audioCodec",
   "team",
 ];
+
 export const TAG_LABELS: Record<TagId, string> = {
   title: "Titre",
   se: "Saison/Épisode",
@@ -421,15 +422,23 @@ function createEncoder() {
   let subExtractPathMode = $state<SubExtractPathMode>("source");
   let subExtractCustomPath = $state<string>("");
 
-  // ─── Nouveaux états pour l'extraction des sous-titres ──────────────────
+  // ─── États extraction sous-titres ────────────────────────────────────────
   let extractingSubs = $state(false);
   let subExtractProgress = $state<SubExtractProgress | null>(null);
   let showExtractButton = $state(true);
   let cancelExtraction = $state(false);
+  let selectedForExtraction = $state<Set<string>>(new Set());
+  let extractSelectionMode = $state(false);
+
+  // ─── États sélection encodage ─────────────────────────────────────────────
+  let encodeSelectionMode = $state(false);
+  let selectedForEncoding = $state<Set<string>>(new Set());
+  // Chemins des fichiers du batch en cours (pour résoudre file_index → path)
+  let encodingFilePaths = $state<string[]>([]);
 
   let _unlisten: UnlistenFn[] = [];
 
-  // ─── Setters et persistance ──────────────────────────────────────────────
+  // ─── Setters ──────────────────────────────────────────────────────────────
 
   function setCrf(value: number) {
     crf = value;
@@ -513,7 +522,42 @@ function createEncoder() {
     persistPrefs();
   }
 
+  // ─── Sélection extraction ─────────────────────────────────────────────────
+  function setExtractSelectionMode(value: boolean) {
+    extractSelectionMode = value;
+  }
+  function toggleExtractSelection(path: string) {
+    const s = new Set(selectedForExtraction);
+    s.has(path) ? s.delete(path) : s.add(path);
+    selectedForExtraction = s;
+  }
+  function setExtractSelection(paths: string[]) {
+    selectedForExtraction = new Set(paths);
+  }
+  function clearExtractSelection() {
+    selectedForExtraction = new Set();
+  }
+
+  // ─── Sélection encodage ───────────────────────────────────────────────────
+  function setEncodeSelectionMode(value: boolean) {
+    encodeSelectionMode = value;
+  }
+  function toggleEncodeSelection(path: string) {
+    const s = new Set(selectedForEncoding);
+    s.has(path) ? s.delete(path) : s.add(path);
+    selectedForEncoding = s;
+  }
+  function setEncodeSelection(paths: string[]) {
+    selectedForEncoding = new Set(paths);
+  }
+  function clearEncodeSelection() {
+    selectedForEncoding = new Set();
+  }
+
+  // ─── Persistance préférences ──────────────────────────────────────────────
+
   let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
   function currentPrefs() {
     return {
       crf,
@@ -535,6 +579,7 @@ function createEncoder() {
       show_extract_button: showExtractButton,
     };
   }
+
   async function flushPrefs() {
     if (_persistTimer) {
       clearTimeout(_persistTimer);
@@ -546,6 +591,7 @@ function createEncoder() {
       log(`Erreur sauvegarde préférences : ${e}`, "error");
     }
   }
+
   function persistPrefs() {
     if (_persistTimer) clearTimeout(_persistTimer);
     _persistTimer = setTimeout(() => {
@@ -574,6 +620,7 @@ function createEncoder() {
         sub_extract_custom_path?: string;
         show_extract_button?: boolean;
       }>("load_encoding_prefs");
+
       if (typeof prefs.crf === "number") crf = prefs.crf;
       if (prefs.preset) preset = prefs.preset;
       if (
@@ -632,7 +679,7 @@ function createEncoder() {
     }
   }
 
-  // ─── Initialisation ──────────────────────────────────────────────────────
+  // ─── Initialisation ───────────────────────────────────────────────────────
 
   async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
@@ -649,9 +696,11 @@ function createEncoder() {
     const u1 = await listen<ProgressEvent>("encode-progress", (e) => {
       progress = e.payload;
       const activeIdx = e.payload.file_index;
-      files = files.map((f, i) => {
+      // Résoudre le chemin via la liste des jobs (et non l'index global de files)
+      const activePath = encodingFilePaths[activeIdx];
+      files = files.map((f) => {
         if (f.status === "queued" || f.status === "encoding") {
-          return { ...f, status: i === activeIdx ? "encoding" : "queued" };
+          return { ...f, status: f.path === activePath ? "encoding" : "queued" };
         }
         return f;
       });
@@ -689,7 +738,7 @@ function createEncoder() {
     _unlisten = [u1, u2];
   }
 
-  // ─── Ajout / suppression de fichiers ────────────────────────────────────
+  // ─── Ajout / suppression de fichiers ─────────────────────────────────────
 
   async function addFiles(paths: string[]) {
     const ignored = paths.filter((p) => !/\.(mp4|mkv|avi|mov|flv)$/i.test(p));
@@ -801,6 +850,13 @@ function createEncoder() {
     const f = files.find((f) => f.path === path);
     if (f) log(`Retiré : ${f.filename}`, "info");
     files = files.filter((f) => f.path !== path);
+    // Nettoyer des sélections si le fichier était sélectionné
+    const es = new Set(selectedForExtraction);
+    es.delete(path);
+    selectedForExtraction = es;
+    const cs = new Set(selectedForEncoding);
+    cs.delete(path);
+    selectedForEncoding = cs;
     rebuildLangs();
   }
 
@@ -829,6 +885,8 @@ function createEncoder() {
     logs = [];
     extractingSubs = false;
     subExtractProgress = null;
+    selectedForExtraction = new Set();
+    selectedForEncoding = new Set();
   }
 
   function clearLogs() {
@@ -842,61 +900,79 @@ function createEncoder() {
     encoding = true;
     summary = null;
 
-    const jobs: EncodeJob[] = files
-      .filter((f) => f.status === "ready")
-      .map((f) => {
-        const audioCodecOvr: Record<string, string> = {};
-        f.streams
-          .filter((s) => s.codec_type === "audio")
-          .forEach((s) => {
-            const target = globalCodecOverride[s.codec_name.toLowerCase()];
-            if (target && target !== codecDefault(s.codec_name)) {
-              audioCodecOvr[s.index.toString()] = target;
-            }
-          });
-        const outExt = container === "mp4" ? ".mp4" : ".mkv";
-        return {
-          input_path: f.path,
-          output_path: joinPath(
-            outputDir,
-            `${applySeFormat(f, seasonEpisodeFormat)}${outExt}`,
-          ),
-          audio_langs: [...selAudio],
-          sub_langs: [...selSubs],
-          audio_overrides: audioOverrides[f.path] ?? {},
-          sub_overrides: subOverrides[f.path] ?? {},
-          audio_codec_overrides: audioCodecOvr,
-          audio_bitrate_overrides: {},
-          duration_secs: f.duration_secs,
-          fps: f.fps ?? 25,
-          crf,
-          preset,
-          audio_mode: audioMode,
-          audio_bitrate: audioBitrate,
-          spatial_aq: spatialAq,
-          temporal_aq: temporalAq,
-          aq_strength: aqStrength,
-          multipass,
-          container,
-        };
-      });
+    // Si le mode sélection est actif et qu'il y a des fichiers sélectionnés,
+    // n'encoder que ceux-là ; sinon encoder tous les fichiers prêts.
+    const readyFiles = files.filter((f) => f.status === "ready");
+    const targetFiles =
+      encodeSelectionMode && selectedForEncoding.size > 0
+        ? readyFiles.filter((f) => selectedForEncoding.has(f.path))
+        : readyFiles;
 
-    const totalSize = formatMb(
-      files
-        .filter((f) => f.status === "ready")
-        .reduce((s, f) => s + f.size_mb, 0),
-    );
+    if (targetFiles.length === 0) {
+      encoding = false;
+      return;
+    }
+
+    const jobs: EncodeJob[] = targetFiles.map((f) => {
+      const audioCodecOvr: Record<string, string> = {};
+      f.streams
+        .filter((s) => s.codec_type === "audio")
+        .forEach((s) => {
+          const target = globalCodecOverride[s.codec_name.toLowerCase()];
+          if (target && target !== codecDefault(s.codec_name)) {
+            audioCodecOvr[s.index.toString()] = target;
+          }
+        });
+      const outExt = container === "mp4" ? ".mp4" : ".mkv";
+      return {
+        input_path: f.path,
+        output_path: joinPath(
+          outputDir,
+          `${applySeFormat(f, seasonEpisodeFormat)}${outExt}`,
+        ),
+        audio_langs: [...selAudio],
+        sub_langs: [...selSubs],
+        audio_overrides: audioOverrides[f.path] ?? {},
+        sub_overrides: subOverrides[f.path] ?? {},
+        audio_codec_overrides: audioCodecOvr,
+        audio_bitrate_overrides: {},
+        duration_secs: f.duration_secs,
+        fps: f.fps ?? 25,
+        crf,
+        preset,
+        audio_mode: audioMode,
+        audio_bitrate: audioBitrate,
+        spatial_aq: spatialAq,
+        temporal_aq: temporalAq,
+        aq_strength: aqStrength,
+        multipass,
+        container,
+      };
+    });
+
+    const totalSize = formatMb(targetFiles.reduce((s, f) => s + f.size_mb, 0));
+    const selLabel =
+      encodeSelectionMode && selectedForEncoding.size > 0
+        ? ` (sélection : ${selectedForEncoding.size}/${readyFiles.length})`
+        : "";
     log(
-      `── Démarrage de l'encodage — ${jobs.length} fichier${jobs.length > 1 ? "s" : ""} (${totalSize}) ──`,
+      `── Démarrage de l'encodage — ${jobs.length} fichier${jobs.length > 1 ? "s" : ""}${selLabel} (${totalSize}) ──`,
       "info",
     );
+
+    // Marquer uniquement les fichiers cibles en file
     files = files.map((f) =>
-      f.status === "ready" ? { ...f, status: "queued" } : f,
+      targetFiles.some((t) => t.path === f.path) && f.status === "ready"
+        ? { ...f, status: "queued" }
+        : f,
     );
     jobs.forEach((j, i) => {
       const name = j.input_path.split(/[\\/]/).pop() ?? j.input_path;
       log(`  [${i + 1}/${jobs.length}] En file : ${name}`, "info");
     });
+
+    // Mémoriser l'ordre des chemins du batch pour résoudre file_index dans les événements
+    encodingFilePaths = targetFiles.map((f) => f.path);
 
     try {
       summary = await invoke<EncodeSummary>("start_encoding", { jobs });
@@ -947,6 +1023,9 @@ function createEncoder() {
     } finally {
       encoding = false;
       progress = null;
+      encodingFilePaths = [];
+      selectedForEncoding = new Set();
+      encodeSelectionMode = false;
     }
   }
 
@@ -963,50 +1042,55 @@ function createEncoder() {
     log("Annulation de l'extraction demandée…", "warn");
   }
 
-  // ─── Extraction des sous-titres (avec progression fichier par fichier) ──
+  // ─── Extraction des sous-titres ──────────────────────────────────────────
 
   async function startSubtitleExtraction() {
     const readyFiles = files.filter((f) => f.status === "ready");
     if (readyFiles.length === 0 || selSubs.size === 0 || extractingSubs) return;
 
+    const targetFiles =
+      selectedForExtraction.size > 0
+        ? readyFiles.filter((f) => selectedForExtraction.has(f.path))
+        : readyFiles;
+    if (targetFiles.length === 0) return;
+
     extractingSubs = true;
     cancelExtraction = false;
     subExtractProgress = null;
-    // Réinitialiser les statuts d'extraction pour tous les fichiers
     files = files.map((f) => ({
       ...f,
-      sub_extract_status: f.status === "ready" ? "none" : f.sub_extract_status,
-      sub_extract_error: undefined,
+      sub_extract_status: targetFiles.some((t) => t.path === f.path)
+        ? "none"
+        : f.sub_extract_status,
+      sub_extract_error: targetFiles.some((t) => t.path === f.path)
+        ? undefined
+        : f.sub_extract_error,
     }));
 
     try {
-      const total = readyFiles.length;
+      const total = targetFiles.length;
       for (let i = 0; i < total; i++) {
         if (cancelExtraction) {
           log("Extraction annulée par l'utilisateur", "warn");
           toasts.warn("Extraction annulée");
           break;
         }
-        const file = readyFiles[i];
-        // Mise à jour de la progression
+        const file = targetFiles[i];
         subExtractProgress = {
           file_index: i,
           file_total: total,
           file_name: file.filename,
-          percent: 0, // on pourrait le faire évoluer, mais on garde 0 pour simplifier
+          percent: 0,
         };
-        // Marquer le fichier comme en cours d'extraction
         files = files.map((f) =>
           f.path === file.path ? { ...f, sub_extract_status: "extracting" } : f,
         );
 
         try {
-          // Récupérer les pistes de sous-titres
           const tracks = await invoke<
             { index: number; language: string; codec: string }[]
           >("list_subtitle_tracks", { path: file.path });
 
-          // Déterminer le dossier de sortie
           let dir = "";
           if (subExtractPathMode === "source") {
             dir = file.path.split(/[\\/]/).slice(0, -1).join("\\");
@@ -1022,7 +1106,6 @@ function createEncoder() {
           }
           dir = dir.replace(/[\\/]+$/, "");
 
-          // Déterminer le nom de base
           let baseName = "";
           if (subExtractNaming === "source") {
             baseName =
@@ -1045,7 +1128,6 @@ function createEncoder() {
             }
           }
 
-          // Extraire chaque piste sélectionnée
           for (const track of tracks) {
             if (!selSubs.has(track.language)) continue;
             const outputPath = `${dir}\\${baseName}.${track.language}.${subExtractFormat}`;
@@ -1056,13 +1138,11 @@ function createEncoder() {
             });
           }
 
-          // Succès
           files = files.map((f) =>
             f.path === file.path ? { ...f, sub_extract_status: "done" } : f,
           );
           log(`Sous-titres extraits pour ${file.filename}`, "success");
         } catch (e) {
-          // Erreur
           const errMsg = String(e);
           files = files.map((f) =>
             f.path === file.path
@@ -1073,7 +1153,6 @@ function createEncoder() {
         }
       }
       await stats.recordExtraction(files, selSubs);
-      // Une fois terminé, on laisse le statut "done" sur les fichiers, et on peut afficher un toast
       toasts.success("Extraction des sous-titres terminée");
     } catch (e) {
       log(`Erreur globale lors de l'extraction : ${e}`, "error");
@@ -1084,7 +1163,7 @@ function createEncoder() {
     }
   }
 
-  // ─── Rafraîchissement des noms ──────────────────────────────────────────
+  // ─── Rafraîchissement des noms ────────────────────────────────────────────
 
   function refreshOutputNames() {
     files = files.map((f) => {
@@ -1225,13 +1304,18 @@ function createEncoder() {
     subExtractProgress = null;
     showExtractButton = true;
     cancelExtraction = false;
+    selectedForExtraction = new Set();
+    extractSelectionMode = false;
+    selectedForEncoding = new Set();
+    encodeSelectionMode = false;
     flushPrefs();
     logs = [];
     log("Interface réinitialisée aux paramètres par défaut", "info");
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
     forceUpdate();
   }
-    function clearSession() {
+
+  function clearSession() {
     files = [];
     audioLangs = new Set();
     subLangs = new Set();
@@ -1243,6 +1327,10 @@ function createEncoder() {
     extractingSubs = false;
     subExtractProgress = null;
     cancelExtraction = false;
+    selectedForExtraction = new Set();
+    extractSelectionMode = false;
+    selectedForEncoding = new Set();
+    encodeSelectionMode = false;
     logs = [];
     log("Session réinitialisée", "info");
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
@@ -1252,7 +1340,6 @@ function createEncoder() {
   // ─── Exports ──────────────────────────────────────────────────────────────
 
   return {
-    // Propriétés existantes
     get files() {
       return files;
     },
@@ -1340,7 +1427,6 @@ function createEncoder() {
     get subExtractCustomPath() {
       return subExtractCustomPath;
     },
-    // Nouveaux exports pour l'extraction
     get extractingSubs() {
       return extractingSubs;
     },
@@ -1349,6 +1435,20 @@ function createEncoder() {
     },
     get showExtractButton() {
       return showExtractButton;
+    },
+    // Sélection extraction
+    get selectedForExtraction() {
+      return selectedForExtraction;
+    },
+    get extractSelectionMode() {
+      return extractSelectionMode;
+    },
+    // Sélection encodage
+    get encodeSelectionMode() {
+      return encodeSelectionMode;
+    },
+    get selectedForEncoding() {
+      return selectedForEncoding;
     },
 
     getDisplayName(file: AppFile): string {
@@ -1381,6 +1481,14 @@ function createEncoder() {
     cancelEncoding,
     startSubtitleExtraction,
     cancelSubtitleExtraction,
+    setExtractSelectionMode,
+    toggleExtractSelection,
+    setExtractSelection,
+    clearExtractSelection,
+    setEncodeSelectionMode,
+    toggleEncodeSelection,
+    setEncodeSelection,
+    clearEncodeSelection,
     toggleAudioLang,
     toggleSubLang,
     setAudioOverride,
