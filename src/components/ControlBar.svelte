@@ -54,12 +54,7 @@
         <span
           class="spinner w-3 h-3 border-2 border-white/30 border-t-white shrink-0 rounded-full animate-spin"
         ></span>
-        {#if encoder.subExtractProgress}
-          EXTRACTION {encoder.subExtractProgress.file_index + 1}/{encoder
-            .subExtractProgress.file_total}…
-        {:else}
-          EXTRACTION…
-        {/if}
+        EXTRACTION…
       {:else}
         <FileDown height="0.9em" class="shrink-0" />
         EXTRAIRE

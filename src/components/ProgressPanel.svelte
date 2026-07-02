@@ -2,10 +2,12 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatTime, formatSize, gainPct } from "$lib/utils";
   import { Progress } from "@skeletonlabs/skeleton-svelte";
-  import { CircleCheck, TvMinimalPlay, AlertTriangle, Zap, Package, FolderOpen } from '@lucide/svelte';
+  import { CircleCheck, TvMinimalPlay, AlertTriangle, Zap, Package, FolderOpen, Subtitles } from '@lucide/svelte';
 
   let p = $derived(encoder.progress);
   let s = $derived(encoder.summary);
+  let sp = $derived(encoder.subExtractProgress);
+  let extractingSubs = $derived(encoder.extractingSubs);
 
   let totalPercent = $derived(
     p ? ((p.file_index + p.percent / 100) / p.file_total) * 100 : 0,
@@ -122,6 +124,44 @@
               <span class="inline-flex items-center gap-1"><FolderOpen class="w-3 h-3" />Original {formatSize(totalOriginalMb)}</span>
             </div>
           {/if}
+        </div>
+      {/if}
+    </div>
+
+  {:else if extractingSubs}
+    <div class="flex items-center gap-2 px-3 py-1 border-b border-[var(--color-border)] bg-[var(--color-accent)]/5 shrink-0 text-[11px]">
+      <div class="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse"></div>
+      <span class="font-mono text-[var(--color-text)] uppercase tracking-wider">Extraction sous-titres</span>
+      {#if sp && sp.file_total > 1}
+        <span class="text-[var(--color-subtext)]">{sp.file_index + 1}/{sp.file_total}</span>
+      {/if}
+    </div>
+
+    <div class="flex-1 flex items-center justify-center px-6 overflow-hidden">
+      {#if sp}
+        {@const subGlobalPercent = sp.file_total > 0 ? (sp.file_index / sp.file_total) * 100 : 0}
+        <div class="w-full flex flex-col gap-2">
+          <div class="text-[14px] font-semibold text-[var(--color-text)] truncate text-center" title={sp.file_name}>
+            {sp.file_name}
+          </div>
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] text-[var(--color-subtext)]">
+              <span class="inline-flex items-center gap-1"><Subtitles class="w-3 h-3" />Fichier {sp.file_index + 1} sur {sp.file_total}</span>
+              <span>{subGlobalPercent.toFixed(0)}%</span>
+            </div>
+            <Progress value={subGlobalPercent} max={100}>
+              <Progress.Track
+                class="h-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] opacity-40"
+              >
+                <Progress.Range class="rounded-full bg-[var(--color-accent)]" />
+              </Progress.Track>
+            </Progress>
+          </div>
+        </div>
+      {:else}
+        <div class="text-center">
+          <Subtitles class="w-8 h-8 mx-auto mb-1 text-[var(--color-accent)] animate-pulse" />
+          <p class="text-[12px] text-[var(--color-subtext)]">Extraction en cours…</p>
         </div>
       {/if}
     </div>

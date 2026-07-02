@@ -44,12 +44,7 @@ pub fn stats_path() -> PathBuf {
         .join("stats.json")
 }
 
-pub fn encoding_prefs_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("RenCodeX")
-        .join("encoding_prefs.json")
-}
+
 
 #[allow(dead_code)]
 pub fn delete_partial_output(path: &str) -> bool {
