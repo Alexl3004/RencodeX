@@ -7,21 +7,23 @@
   import LogConsole from "$components/LogConsole.svelte";
   import Dashboard from "$components/Dashboard.svelte";
   import EncodingSettings from "$components/EncodingSettings.svelte";
+  import RenamingSettings from "$components/RenamingSettings.svelte";
   import {
     ChartColumnDecreasing,
     Sun,
     Moon,
     Wrench,
     SlidersHorizontal,
+    Tags,
     Logs,
     RefreshCw,
   } from "@lucide/svelte";
 
   let { showAppSettings = $bindable(false) } = $props();
 
-  let openPanel = $state<"logs" | "dashboard" | "settings" | null>(null);
+  let openPanel = $state<"logs" | "dashboard" | "settings" | "renaming" | null>(null);
 
-  function toggle(panel: "logs" | "dashboard" | "settings") {
+  function toggle(panel: "logs" | "dashboard" | "settings" | "renaming") {
     openPanel = openPanel === panel ? null : panel;
   }
   function close() {
@@ -224,6 +226,36 @@
           </div>
         {/if}
       </div>
+
+      <!-- Renommage (ordre des tags & team) -->
+      <div class="relative inline-flex">
+        <button
+          type="button"
+          onclick={() => toggle("renaming")}
+          class="topbar-btn {openPanel === 'renaming' ? 'topbar-btn--active' : ''}"
+          aria-label="Paramètres de renommage"
+          aria-pressed={openPanel === "renaming"}
+          title="Renommage (ordre des tags, team)"
+        >
+          <Tags class="w-4 h-4" />
+        </button>
+
+        {#if openPanel === "renaming"}
+          <div
+            class="popover-backdrop"
+            role="presentation"
+            onclick={close}
+          ></div>
+          <div
+            class="popover-panel w-[340px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Paramètres de renommage"
+          >
+            <RenamingSettings onClose={close} />
+          </div>
+        {/if}
+      </div>
     </div>
 
     <div class="sep h-4 mx-1.5"></div>
@@ -324,7 +356,7 @@
     right: 0;
     z-index: 9971;
     max-width: calc(100vw - 24px);
-    max-height: 70vh;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);

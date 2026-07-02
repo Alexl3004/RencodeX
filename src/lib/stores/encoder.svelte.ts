@@ -700,7 +700,10 @@ function createEncoder() {
       const activePath = encodingFilePaths[activeIdx];
       files = files.map((f) => {
         if (f.status === "queued" || f.status === "encoding") {
-          return { ...f, status: f.path === activePath ? "encoding" : "queued" };
+          return {
+            ...f,
+            status: f.path === activePath ? "encoding" : "queued",
+          };
         }
         return f;
       });
@@ -1458,6 +1461,11 @@ function createEncoder() {
     setPreset,
     setSeasonEpisodeFormat,
     setTagOrder,
+    resetTagOrder() {
+      tagOrder = [...DEFAULT_TAG_ORDER];
+      persistPrefs();
+      refreshOutputNames();
+    },
     moveTag,
     setTeam,
     setAudioMode,
