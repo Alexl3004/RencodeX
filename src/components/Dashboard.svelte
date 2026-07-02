@@ -9,6 +9,7 @@
     Gauge,
     TrendingDown,
     CheckCircle2,
+    Subtitles,
   } from "@lucide/svelte";
   import { Progress, Popover, Portal } from "@skeletonlabs/skeleton-svelte";
 
@@ -59,6 +60,12 @@
 
   let progressVal = $derived(Math.max(0, 100 - avgRatioPct));
   let hasData = $derived(totalFiles > 0);
+
+  let totalExtractedFiles  = $derived(stats.totalExtractedFiles);
+  let totalExtractLaunched = $derived(stats.totalExtractLaunched);
+  let totalTracksExtracted = $derived(stats.totalTracksExtracted);
+  let extractSuccessRatePct = $derived(stats.extractSuccessRatePct);
+  let hasExtractData = $derived(totalExtractLaunched > 0);
 </script>
 
 <div class="panel-root">
@@ -179,6 +186,37 @@
         <div class="stat-card col-span-1">
           <div class="stat-label mb-1.5">Sortie moy.</div>
           <div class="stat-value">{formatSize(avgOutputMb)}</div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Section extraction -->
+    {#if hasExtractData}
+      <div class="section-divider">
+        <Subtitles class="w-3 h-3" style="color: var(--color-subtext);" />
+        <span class="font-mono text-[9px] subtext uppercase tracking-wider">Extraction sous-titres</span>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div class="stat-card">
+          <div class="stat-icon-row">
+            <FileCheck2 class="w-3.5 h-3.5 stat-icon" />
+            <span class="stat-label">Fichiers</span>
+          </div>
+          <div class="stat-value">{totalExtractedFiles}<span class="text-[10px] font-normal text-[var(--color-subtext)]">/{totalExtractLaunched}</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon-row">
+            <Subtitles class="w-3.5 h-3.5 stat-icon" />
+            <span class="stat-label">Pistes</span>
+          </div>
+          <div class="stat-value">{totalTracksExtracted}</div>
+        </div>
+        <div class="stat-card success-card">
+          <div class="stat-icon-row">
+            <CheckCircle2 class="w-3.5 h-3.5" style="color: var(--color-success);" />
+            <span class="stat-label">Succès</span>
+          </div>
+          <div class="stat-value" style="color: var(--color-success);">{extractSuccessRatePct.toFixed(0)}%</div>
         </div>
       </div>
     {/if}
@@ -390,6 +428,15 @@
       var(--color-success) 5%,
       var(--color-surface)
     );
+  }
+
+  /* Section divider */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid var(--color-border);
   }
 
   /* Footer */

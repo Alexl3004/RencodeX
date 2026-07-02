@@ -1072,6 +1072,7 @@ function createEncoder() {
           log(`Erreur extraction pour ${file.filename} : ${errMsg}`, "error");
         }
       }
+      await stats.recordExtraction(files, selSubs);
       // Une fois terminé, on laisse le statut "done" sur les fichiers, et on peut afficher un toast
       toasts.success("Extraction des sous-titres terminée");
     } catch (e) {
