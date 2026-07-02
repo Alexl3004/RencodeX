@@ -22,6 +22,25 @@
   >("all");
   let selectedFile = $state<AppFile | null>(null);
 
+  type SortKey = "name" | "size" | "duration" | "status";
+  type SortDir = "asc" | "desc";
+  let sortKey = $state<SortKey | null>(null);
+  let sortDir = $state<SortDir>("asc");
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      if (sortDir === "asc") sortDir = "desc";
+      else { sortKey = null; sortDir = "asc"; }
+    } else {
+      sortKey = key;
+      sortDir = "asc";
+    }
+  }
+
+  const STATUS_ORDER: Record<string, number> = {
+    encoding: 0, analysing: 1, queued: 2, ready: 3, done: 4, error: 5,
+  };
+
   function openModal(f: AppFile) {
     selectedFile = f;
   }
@@ -87,6 +106,28 @@
           f.output_name.toLowerCase().includes(q) ||
           f.filename.toLowerCase().includes(q),
       );
+    }
+    if (sortKey) {
+      const dir = sortDir === "asc" ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        if (sortKey === "name") {
+          return dir * (a.output_name + a.output_ext).localeCompare(b.output_name + b.output_ext);
+        }
+        if (sortKey === "size") {
+          return dir * (a.size_mb - b.size_mb);
+        }
+        if (sortKey === "duration") {
+          const da = a.result?.duration_secs ?? a.duration_secs ?? 0;
+          const db = b.result?.duration_secs ?? b.duration_secs ?? 0;
+          return dir * (da - db);
+        }
+        if (sortKey === "status") {
+          const sa = STATUS_ORDER[isPending(a) ? "queued" : a.status] ?? 99;
+          const sb = STATUS_ORDER[isPending(b) ? "queued" : b.status] ?? 99;
+          return dir * (sa - sb);
+        }
+        return 0;
+      });
     }
     return result;
   });
@@ -334,12 +375,48 @@
           style="background: var(--color-surface);"
         >
           <tr>
-            <th class="text-left">Fichier de sortie</th>
-            <th class="text-right">Taille</th>
+            <th class="text-left">
+              <button class="th-sort-btn" onclick={() => toggleSort("name")} aria-label="Trier par nom">
+                Fichier de sortie
+                <span class="sort-icon" aria-hidden="true">
+                  {#if sortKey === "name"}
+                    {sortDir === "asc" ? "↑" : "↓"}
+                  {:else}↕{/if}
+                </span>
+              </button>
+            </th>
+            <th class="text-right">
+              <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("size")} aria-label="Trier par taille">
+                Taille
+                <span class="sort-icon" aria-hidden="true">
+                  {#if sortKey === "size"}
+                    {sortDir === "asc" ? "↑" : "↓"}
+                  {:else}↕{/if}
+                </span>
+              </button>
+            </th>
             <th class="text-center">Audio</th>
             <th class="text-center">Sous-titres</th>
-            <th class="text-right">Temps</th>
-            <th class="text-center">Statut</th>
+            <th class="text-right">
+              <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("duration")} aria-label="Trier par durée">
+                Temps
+                <span class="sort-icon" aria-hidden="true">
+                  {#if sortKey === "duration"}
+                    {sortDir === "asc" ? "↑" : "↓"}
+                  {:else}↕{/if}
+                </span>
+              </button>
+            </th>
+            <th class="text-center">
+              <button class="th-sort-btn th-sort-center" onclick={() => toggleSort("status")} aria-label="Trier par statut">
+                Statut
+                <span class="sort-icon" aria-hidden="true">
+                  {#if sortKey === "status"}
+                    {sortDir === "asc" ? "↑" : "↓"}
+                  {:else}↕{/if}
+                </span>
+              </button>
+            </th>
             <th></th>
           </tr>
         </thead>
@@ -710,5 +787,39 @@
   .micro-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
+  }
+
+  /* Sortable column headers */
+  .th-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: "Geist Mono", monospace;
+    font-size: inherit;
+    font-weight: inherit;
+    color: var(--color-subtext);
+    padding: 0;
+    white-space: nowrap;
+    transition: color 0.1s;
+  }
+  .th-sort-btn:hover {
+    color: var(--color-text);
+  }
+  .th-sort-right {
+    margin-left: auto;
+  }
+  .th-sort-center {
+    margin: 0 auto;
+  }
+  .sort-icon {
+    font-size: 9px;
+    opacity: 0.45;
+    line-height: 1;
+  }
+  thead th {
+    padding: 4px 6px;
   }
 </style>
