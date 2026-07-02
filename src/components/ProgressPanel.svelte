@@ -34,6 +34,16 @@
       : ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100
   );
 
+  // Fichier suivant — encodage
+  let nextFile = $derived(encoder.files.find(f => f.status === "queued") ?? null);
+
+  // Fichier suivant — extraction sous-titres
+  let nextSubFile = $derived(
+    extractingSubs
+      ? encoder.files.find(f => f.sub_extract_status === "none") ?? null
+      : null
+  );
+
   // Filtrer les erreurs pour le récapitulatif
   let failedFiles = $derived(s ? s.files.filter(f => f.status !== "ok") : []);
 
@@ -124,6 +134,15 @@
               <span class="inline-flex items-center gap-1"><FolderOpen class="w-3 h-3" />Original {formatSize(totalOriginalMb)}</span>
             </div>
           {/if}
+
+          {#if nextFile}
+            <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-[var(--color-subtext)] truncate">
+              <span class="uppercase tracking-wide shrink-0">Suivant</span>
+              <span class="font-mono truncate text-[var(--color-subtext2)]" title={nextFile.output_name + nextFile.output_ext}>
+                {nextFile.output_name}{nextFile.output_ext}
+              </span>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
@@ -157,6 +176,15 @@
               </Progress.Track>
             </Progress>
           </div>
+
+          {#if nextSubFile}
+            <div class="flex items-center gap-1.5 text-[10px] text-[var(--color-subtext)] truncate">
+              <span class="uppercase tracking-wide shrink-0">Suivant</span>
+              <span class="font-mono truncate text-[var(--color-subtext2)]" title={nextSubFile.output_name + nextSubFile.output_ext}>
+                {nextSubFile.output_name}{nextSubFile.output_ext}
+              </span>
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="text-center">
