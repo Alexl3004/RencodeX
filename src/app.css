@@ -26,14 +26,11 @@
   --color-subtext: #6b6b6b;
   --color-subtext2: #4a4a4a;
 
-  /* ── Échelle de rayons ─────────────────────────────────────────────
-     Utilisée sur toutes les "box" (panneaux, cartes, modales, popovers)
-     pour casser l'aspect trop brut/anguleux de l'ancien rounded-[2px]. */
-  --radius-xs: 4px;   /* badges, mini boutons icône, puces de filtre */
-  --radius-sm: 8px;   /* boutons, inputs, mini-cartes internes */
-  --radius-md: 12px;  /* conteneurs principaux (DropZone, tableau, panneaux) */
-  --radius-lg: 16px;  /* modales et popovers flottants */
-  --radius-full: 999px; /* pastilles, toggles, chips */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
 }
 
 /* ── Light theme ──────────────────────────────────────────────────── */
@@ -63,19 +60,34 @@ body {
 }
 
 /* ── Scrollbars ───────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: var(--color-border2) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 3px;
+  height: 3px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+*:hover::-webkit-scrollbar-thumb {
   background: var(--color-border2);
-  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-subtext);
+  background: var(--color-subtext2);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* ── Drag-over highlight ──────────────────────────────────────────── */
@@ -85,18 +97,10 @@ body {
 }
 
 /* ── Log colors ───────────────────────────────────────────────────── */
-.log-info {
-  color: var(--color-subtext);
-}
-.log-warning {
-  color: var(--color-warning);
-}
-.log-error {
-  color: var(--color-danger);
-}
-.log-success {
-  color: var(--color-success);
-}
+.log-info    { color: var(--color-subtext); }
+.log-warning { color: var(--color-warning); }
+.log-error   { color: var(--color-danger); }
+.log-success { color: var(--color-success); }
 
 /* ── Buttons ──────────────────────────────────────────────────────── */
 .btn {
@@ -112,53 +116,27 @@ body {
   background: var(--color-panel2);
   color: var(--color-text);
   cursor: pointer;
-  transition:
-    background 0.1s,
-    border-color 0.12s,
-    color 0.1s;
+  transition: background 0.1s, border-color 0.12s, color 0.1s;
   user-select: none;
   letter-spacing: 0.01em;
 }
-.btn:hover {
-  background: var(--color-muted);
-  border-color: var(--color-subtext2);
-}
-.btn:active {
-  transform: translateY(1px);
-}
-.btn:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-  transform: none;
-}
+.btn:hover   { background: var(--color-muted); border-color: var(--color-subtext2); }
+.btn:active  { transform: translateY(1px); }
+.btn:disabled { opacity: 0.38; cursor: not-allowed; transform: none; }
 
-.btn-primary {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-  font-weight: 600;
-}
-.btn-primary:hover {
-  background: color-mix(in srgb, var(--color-accent) 82%, white);
-}
+.btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; font-weight: 600; }
+.btn-primary:hover { background: color-mix(in srgb, var(--color-accent) 82%, white); }
 
-.btn-danger {
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-}
-.btn-danger:hover {
-  background: var(--color-danger);
-  color: #fff;
-}
+.btn-danger { border-color: var(--color-danger); color: var(--color-danger); }
+.btn-danger:hover { background: var(--color-danger); color: #fff; }
 
-.btn-ghost {
-  background: transparent;
-  border-color: transparent;
-}
-.btn-ghost:hover {
-  background: var(--color-panel2);
-  border-color: var(--color-border);
-}
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--color-panel2); border-color: var(--color-border); }
+
+.btn-secondary { background: transparent; border-color: var(--color-border); color: var(--color-subtext); }
+.btn-secondary:hover { background: var(--color-panel2); border-color: var(--color-border2); color: var(--color-text); }
+.btn-secondary:active  { transform: translateY(1px); }
+.btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
 /* ── Section labels ───────────────────────────────────────────────── */
 .section-label {
@@ -171,14 +149,10 @@ body {
 }
 
 /* ── Mono utility ─────────────────────────────────────────────────── */
-.font-mono {
-  font-family: "Geist Mono", monospace;
-}
+.font-mono { font-family: "Geist Mono", monospace; }
 
 /* ── Table ────────────────────────────────────────────────────────── */
-.file-table {
-  border-collapse: collapse;
-}
+.file-table { border-collapse: collapse; }
 .file-table th {
   background: var(--color-surface);
   font-size: 10px;
@@ -192,62 +166,26 @@ body {
 }
 .file-table td {
   padding: 7px 12px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--color-border) 60%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
 }
-.file-table tr:hover td {
-  background: color-mix(in srgb, var(--color-muted) 8%, transparent);
-}
-
-.btn-secondary {
-  background: transparent;
-  border-color: var(--color-border);
-  color: var(--color-subtext);
-}
-.btn-secondary:hover {
-  background: var(--color-panel2);
-  border-color: var(--color-border2);
-  color: var(--color-text);
-}
-.btn-secondary:active {
-  transform: translateY(1px);
-}
-.btn-secondary:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  transform: none;
-}
+.file-table tr:hover td { background: color-mix(in srgb, var(--color-muted) 8%, transparent); }
 
 /* ── Language selector buttons ────────────────────────────────────── */
 .btn-lang-active {
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 30%,
-    var(--color-border)
-  );
+  border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
   color: var(--color-accent);
   font-weight: 500;
 }
 .btn-lang-active:hover {
   background: color-mix(in srgb, var(--color-accent) 22%, transparent);
-  border-color: color-mix(
-    in srgb,
-    var(--color-accent) 45%,
-    var(--color-border)
-  );
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
   color: var(--color-accent);
 }
 
 /* ── Progress bars ────────────────────────────────────────────────── */
-progress::-webkit-progress-bar {
-  background: var(--color-surface);
-  border-radius: 1px;
-}
-progress::-webkit-progress-value {
-  background: var(--color-accent);
-  border-radius: 1px;
-}
+progress::-webkit-progress-bar   { background: var(--color-surface); border-radius: 1px; }
+progress::-webkit-progress-value { background: var(--color-accent);  border-radius: 1px; }
 
 /* ── Input / range base ───────────────────────────────────────────── */
 input[type="text"],
@@ -264,70 +202,42 @@ input[type="password"] {
 }
 input[type="text"]:focus,
 input[type="email"]:focus,
-input[type="password"]:focus {
-  border-color: var(--color-accent);
-}
+input[type="password"]:focus { border-color: var(--color-accent); }
 
 /* ── Toggle switch ────────────────────────────────────────────────── */
 .toggle {
   position: relative;
-  width: 32px;
-  height: 17px;
+  width: 32px; height: 17px;
   background: var(--color-muted);
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border2);
   cursor: pointer;
   flex-shrink: 0;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
-.toggle.on {
-  background: var(--color-accent);
-  border-color: var(--color-accent2);
-}
+.toggle.on { background: var(--color-accent); border-color: var(--color-accent2); }
 .toggle::after {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 11px;
-  height: 11px;
+  top: 2px; left: 2px;
+  width: 11px; height: 11px;
   border-radius: 50%;
   background: #fff;
   transition: transform 0.15s;
 }
-.toggle.on::after {
-  transform: translateX(15px);
-}
+.toggle.on::after { transform: translateX(15px); }
 
 /* ── Accent line decoration ───────────────────────────────────────── */
-.accent-bar {
-  width: 3px;
-  background: var(--color-accent);
-  border-radius: 1px;
-}
+.accent-bar { width: 3px; background: var(--color-accent); border-radius: 1px; }
 
 /* ── Hairline separators ──────────────────────────────────────────── */
-.sep {
-  width: 1px;
-  background: var(--color-border);
-}
+.sep { width: 1px; background: var(--color-border); }
 
-/* ── Reset anti-Flowbite : empêcher overflow:hidden sur html/body ─── */
-html, body {
-  overflow: visible !important;
-  height: 100%;
-}
+/* ── Reset anti-Flowbite ──────────────────────────────────────────── */
+html, body { overflow: visible !important; height: 100%; }
+.fixed { position: fixed; }
 
-/* ── Garantir que les fixed overlays passent au-dessus de tout ────── */
-.fixed {
-  position: fixed;
-}
-
-/* ── Focus clavier visible (accessibilité) ──────────────────────────
-   Aucun style de focus n'existait : invisible au clavier = mauvaise
-   accessibilité et sensation d'interface inachevée. */
+/* ── Focus clavier visible ───────────────────────────────────────── */
 button:focus-visible,
 input:focus-visible,
 a:focus-visible,
@@ -338,11 +248,9 @@ a:focus-visible,
   border-radius: var(--radius-xs);
 }
 
-/* ── Respect des préférences de mouvement réduit ────────────────────── */
+/* ── Respect des préférences de mouvement réduit ─────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

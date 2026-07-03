@@ -593,6 +593,7 @@ function createEncoder() {
   // ─── Sélection extraction ─────────────────────────────────────────────────
   function setExtractSelectionMode(value: boolean) {
     extractSelectionMode = value;
+    if (!value) selectedForExtraction = new Set();
   }
   function toggleExtractSelection(path: string) {
     const s = new Set(selectedForExtraction);
@@ -609,6 +610,7 @@ function createEncoder() {
   // ─── Sélection encodage ───────────────────────────────────────────────────
   function setEncodeSelectionMode(value: boolean) {
     encodeSelectionMode = value;
+    if (!value) selectedForEncoding = new Set();
   }
   function toggleEncodeSelection(path: string) {
     const s = new Set(selectedForEncoding);

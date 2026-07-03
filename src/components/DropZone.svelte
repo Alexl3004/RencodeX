@@ -3,9 +3,9 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { invoke } from "@tauri-apps/api/core";
   import {
-    FileVideo,
+    File,
     FolderOpen,
-    FolderOutput,
+    FolderInput,
     ChevronDown,
     Loader2,
     Check,
@@ -96,7 +96,7 @@
       title="Ajouter des fichiers vidéo"
       aria-label="Ajouter des fichiers"
     >
-      <FileVideo class="btn-icon" />
+      <File class="btn-icon" />
       <span>Fichiers</span>
     </button>
 
@@ -180,7 +180,7 @@
     title="Parcourir"
     aria-label="Choisir le dossier de sortie"
   >
-    <FolderOutput class="btn-icon" />
+    <FolderInput class="btn-icon" />
   </button>
 </div>
 

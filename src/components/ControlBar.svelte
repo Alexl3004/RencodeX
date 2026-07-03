@@ -12,19 +12,15 @@
 
   let canEncode = $derived(!encoder.encoding && encodeTargetCount > 0);
 
-  let encodeLabel = $derived(
-    encoder.encodeSelectionMode && encoder.selectedForEncoding.size > 0
-      ? `Encoder (${encoder.selectedForEncoding.size})`
-      : encodeTargetCount > 0
-        ? `Encoder ${encodeTargetCount} fichier${encodeTargetCount > 1 ? "s" : ""}`
-        : "Encoder",
+  let encodeLabel = $derived(`Encoder (${encodeTargetCount})`);
+
+  let extractTargetCount = $derived(
+    encoder.extractSelectionMode && encoder.selectedForExtraction.size > 0
+      ? encoder.selectedForExtraction.size
+      : encoder.files.filter((f) => f.status === "ready" && f.sub_langs.length > 0).length,
   );
 
-  let extractLabel = $derived(
-    encoder.extractSelectionMode && encoder.selectedForExtraction.size > 0
-      ? `Extraire (${encoder.selectedForExtraction.size})`
-      : "Extraire sous-titres",
-  );
+  let extractLabel = $derived(`Extraire (${extractTargetCount})`);
 
   let showExtract = $derived(
     encoder.showExtractButton &&
@@ -40,21 +36,12 @@
 </script>
 
 <div class="control-bar">
-  <!-- Encode / Cancel -->
+  <!-- Encode -->
   <div class="btn-group">
     {#if encoder.encoding}
-      <!-- En cours : bouton désactivé + annuler -->
       <button class="cb-btn cb-btn--primary cb-btn--active" disabled>
         <Loader2 class="cb-icon animate-spin" />
         <span>Encodage…</span>
-      </button>
-      <button
-        onclick={() => encoder.cancelEncoding()}
-        class="cb-btn cb-btn--danger"
-        title="Annuler l'encodage"
-      >
-        <X class="cb-icon" />
-        <span>Annuler</span>
       </button>
     {:else}
       <button
@@ -79,14 +66,6 @@
           <Loader2 class="cb-icon animate-spin" />
           <span>Extraction…</span>
         </button>
-        <button
-          onclick={() => encoder.cancelSubtitleExtraction()}
-          class="cb-btn cb-btn--danger"
-          title="Annuler l'extraction"
-        >
-          <X class="cb-icon" />
-          <span>Annuler</span>
-        </button>
       {:else}
         <button
           onclick={() => encoder.startSubtitleExtraction()}
@@ -101,6 +80,19 @@
     </div>
   {/if}
 
+  <!-- Annuler collé à droite -->
+  {#if encoder.encoding || encoder.extractingSubs}
+    <div class="cancel-slot">
+      <button
+        onclick={() => encoder.encoding ? encoder.cancelEncoding() : encoder.cancelSubtitleExtraction()}
+        class="cb-btn cb-btn--danger"
+        title="Annuler"
+      >
+        <X class="cb-icon" />
+        <span>Annuler</span>
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -118,6 +110,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .cancel-slot {
+    margin-left: auto;
   }
 
   /* ── Base button ────────────────────────────── */
@@ -200,5 +196,4 @@
     flex-shrink: 0;
     margin: 0 2px;
   }
-
 </style>
