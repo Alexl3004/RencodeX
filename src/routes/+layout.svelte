@@ -5,18 +5,13 @@
 
   let { children } = $props();
 
-  const ACCENT_STORAGE_KEY = "rencodex-accent-color";
-
   onMount(() => {
-    // Restaurer la couleur d'accentuation sauvegardée
-    const saved = localStorage.getItem(ACCENT_STORAGE_KEY);
-    if (saved && /^#[0-9a-fA-F]{6}$/.test(saved)) {
-      document.documentElement.style.setProperty("--color-accent", saved);
-    }
+    theme.init();
   });
 
   $effect(() => {
     document.documentElement.classList.toggle("dark", theme.dark);
+    document.documentElement.classList.toggle("light", !theme.dark);
   });
 </script>
 
