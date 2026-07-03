@@ -372,61 +372,51 @@
         style="background: var(--color-surface);"
       >
         <tr>
-          <th class="text-left">Fichier de sortie</th>
-          <th class="text-right">Taille</th>
+          <th class="text-left">
+            <button class="th-sort-btn" onclick={() => toggleSort("name")} aria-label="Trier par nom">
+              Fichier de sortie
+              <span class="sort-icon" aria-hidden="true">
+                {#if sortKey === "name"}{sortDir === "asc" ? "↑" : "↓"}{:else}↕{/if}
+              </span>
+            </button>
+          </th>
+          <th class="text-right">
+            <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("size")} aria-label="Trier par taille">
+              Taille
+              <span class="sort-icon" aria-hidden="true">
+                {#if sortKey === "size"}{sortDir === "asc" ? "↑" : "↓"}{:else}↕{/if}
+              </span>
+            </button>
+          </th>
           <th class="text-center">Audio</th>
           <th class="text-center">Sous-titres</th>
-          <th class="text-right">Temps</th>
-          <th class="text-center">Statut</th>
+          <th class="text-right">
+            <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("duration")} aria-label="Trier par durée">
+              Temps
+              <span class="sort-icon" aria-hidden="true">
+                {#if sortKey === "duration"}{sortDir === "asc" ? "↑" : "↓"}{:else}↕{/if}
+              </span>
+            </button>
+          </th>
+          <th class="text-center">
+            <button class="th-sort-btn th-sort-center" onclick={() => toggleSort("status")} aria-label="Trier par statut">
+              Statut
+              <span class="sort-icon" aria-hidden="true">
+                {#if sortKey === "status"}{sortDir === "asc" ? "↑" : "↓"}{:else}↕{/if}
+              </span>
+            </button>
+          </th>
           <th></th>
         </tr>
       </thead>
       <tbody>
         {#if encoder.files.length === 0}
           <tr>
-            <th class="text-left">
-              <button class="th-sort-btn" onclick={() => toggleSort("name")} aria-label="Trier par nom">
-                Fichier de sortie
-                <span class="sort-icon" aria-hidden="true">
-                  {#if sortKey === "name"}
-                    {sortDir === "asc" ? "↑" : "↓"}
-                  {:else}↕{/if}
-                </span>
-              </button>
-            </th>
-            <th class="text-right">
-              <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("size")} aria-label="Trier par taille">
-                Taille
-                <span class="sort-icon" aria-hidden="true">
-                  {#if sortKey === "size"}
-                    {sortDir === "asc" ? "↑" : "↓"}
-                  {:else}↕{/if}
-                </span>
-              </button>
-            </th>
-            <th class="text-center">Audio</th>
-            <th class="text-center">Sous-titres</th>
-            <th class="text-right">
-              <button class="th-sort-btn th-sort-right" onclick={() => toggleSort("duration")} aria-label="Trier par durée">
-                Temps
-                <span class="sort-icon" aria-hidden="true">
-                  {#if sortKey === "duration"}
-                    {sortDir === "asc" ? "↑" : "↓"}
-                  {:else}↕{/if}
-                </span>
-              </button>
-            </th>
-            <th class="text-center">
-              <button class="th-sort-btn th-sort-center" onclick={() => toggleSort("status")} aria-label="Trier par statut">
-                Statut
-                <span class="sort-icon" aria-hidden="true">
-                  {#if sortKey === "status"}
-                    {sortDir === "asc" ? "↑" : "↓"}
-                  {:else}↕{/if}
-                </span>
-              </button>
-            </th>
-            <th></th>
+            <td colspan="7" class="py-10 text-center">
+              <p class="text-[11px] font-mono uppercase tracking-widest" style="color: var(--color-subtext);">
+                Aucun fichier
+              </p>
+            </td>
           </tr>
         {:else if filteredFiles.length === 0}
           <tr>
