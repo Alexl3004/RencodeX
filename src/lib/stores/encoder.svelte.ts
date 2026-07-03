@@ -270,6 +270,19 @@ export const DEFAULT_TAG_ORDER: TagId[] = [
   "team",
 ];
 
+export type ResolutionCase = "upper" | "lower";
+export type TitleCaseMode = "original" | "upper" | "lower" | "title";
+export type CodecFormat   = "H265" | "H.265" | "HEVC";
+export type SourceCase    = "original" | "upper" | "lower";
+
+export interface NamingOptions {
+  disabledTags?:   Set<TagId>;
+  resolutionCase?: ResolutionCase;
+  titleCase?:      TitleCaseMode;
+  codecFormat?:    CodecFormat;
+  sourceCase?:     SourceCase;
+}
+
 export const TAG_LABELS: Record<TagId, string> = {
   title: "Titre",
   se: "Saison/Épisode",
@@ -290,20 +303,49 @@ export function buildOutputName(
   audioTag: string = "AAC",
   tagOrder: TagId[] = DEFAULT_TAG_ORDER,
   team: string = "",
+  options: NamingOptions = {},
 ): string {
-  const values: Record<TagId, string> = {
-    title: cleaned.title,
-    se: formatSeasonEpisode(cleaned.season_episode, seFormat),
-    audio: tag,
-    resolution: cleaned.resolution,
-    provider: cleaned.provider,
-    source: cleaned.source,
-    codec: "H265",
-    bitdepth: "10bit",
-    audioCodec: audioTag,
-    team: team.trim(),
+  const {
+    disabledTags   = new Set<TagId>(),
+    resolutionCase = "upper",
+    titleCase      = "original",
+    codecFormat    = "H265",
+    sourceCase     = "original",
+  } = options;
+
+  const applyTitleCase = (t: string): string => {
+    switch (titleCase) {
+      case "upper": return t.toUpperCase();
+      case "lower": return t.toLowerCase();
+      case "title": return t.replace(/\b\w/g, (c) => c.toUpperCase());
+      default:      return t;
+    }
   };
+  const applyResCase = (r: string): string =>
+    resolutionCase === "lower" ? r.toLowerCase() : r.toUpperCase();
+  const applySourceCase = (s: string): string => {
+    switch (sourceCase) {
+      case "upper": return s.toUpperCase();
+      case "lower": return s.toLowerCase();
+      default:      return s;
+    }
+  };
+
+  const values: Record<TagId, string> = {
+    title:      applyTitleCase(cleaned.title),
+    se:         formatSeasonEpisode(cleaned.season_episode, seFormat),
+    audio:      tag,
+    resolution: applyResCase(cleaned.resolution),
+    provider:   cleaned.provider,
+    source:     applySourceCase(cleaned.source),
+    codec:      codecFormat,
+    bitdepth:   "10bit",
+    audioCodec: audioTag,
+    team:       team.trim(),
+  };
+
   return tagOrder
+    .filter((id) => !disabledTags.has(id))
     .map((id) => values[id])
     .filter(Boolean)
     .join(" ")
@@ -331,6 +373,7 @@ export function applySeFormat(
   seFormat: SeasonEpisodeFormat,
   tagOrder: TagId[] = DEFAULT_TAG_ORDER,
   team: string = "",
+  options: NamingOptions = {},
 ): string {
   if (file.cleaned) {
     const tag =
@@ -345,6 +388,7 @@ export function applySeFormat(
       audioTag,
       tagOrder,
       team,
+      options,
     );
   }
   return file.output_name.replace(
@@ -407,6 +451,11 @@ function createEncoder() {
   let preset = $state("p5");
   let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
   let tagOrder = $state<TagId[]>([...DEFAULT_TAG_ORDER]);
+  let disabledTags   = $state<Set<TagId>>(new Set());
+  let resolutionCase = $state<ResolutionCase>("upper");
+  let titleCase      = $state<TitleCaseMode>("original");
+  let codecFormat    = $state<CodecFormat>("H265");
+  let sourceCase     = $state<SourceCase>("original");
   let team = $state("");
 
   let audioMode = $state<AudioMode>("reencode");
@@ -466,6 +515,25 @@ function createEncoder() {
     const next = [...tagOrder];
     [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
     setTagOrder(next);
+  }
+  function toggleTag(id: TagId) {
+    const next = new Set(disabledTags);
+    next.has(id) ? next.delete(id) : next.add(id);
+    disabledTags = next;
+    persistPrefs();
+    refreshOutputNames();
+  }
+  function setResolutionCase(value: ResolutionCase) {
+    resolutionCase = value; persistPrefs(); refreshOutputNames();
+  }
+  function setTitleCase(value: TitleCaseMode) {
+    titleCase = value; persistPrefs(); refreshOutputNames();
+  }
+  function setCodecFormat(value: CodecFormat) {
+    codecFormat = value; persistPrefs(); refreshOutputNames();
+  }
+  function setSourceCase(value: SourceCase) {
+    sourceCase = value; persistPrefs(); refreshOutputNames();
   }
   function setTeam(value: string) {
     team = value;
@@ -554,6 +622,16 @@ function createEncoder() {
     selectedForEncoding = new Set();
   }
 
+  function resetFormatOptions() {
+  resolutionCase = "upper";
+  titleCase = "original";
+  codecFormat = "H265";
+  sourceCase = "original";
+  seasonEpisodeFormat = "S01E01";
+  persistPrefs();
+  refreshOutputNames();
+}
+
   // ─── Persistance préférences ──────────────────────────────────────────────
 
   let _persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -564,6 +642,11 @@ function createEncoder() {
       preset,
       se_format: seasonEpisodeFormat,
       tag_order: tagOrder,
+      disabled_tags: [...disabledTags],
+      resolution_case: resolutionCase,
+      title_case: titleCase,
+      codec_format: codecFormat,
+      source_case: sourceCase,
       team,
       audio_mode: audioMode,
       audio_bitrate: audioBitrate,
@@ -619,6 +702,11 @@ function createEncoder() {
         sub_extract_path_mode?: string;
         sub_extract_custom_path?: string;
         show_extract_button?: boolean;
+        disabled_tags?: string[];
+        resolution_case?: string;
+        title_case?: string;
+        codec_format?: string;
+        source_case?: string;
       }>("load_encoding_prefs");
 
       if (typeof prefs.crf === "number") crf = prefs.crf;
@@ -635,6 +723,20 @@ function createEncoder() {
         parsedOrder.length === DEFAULT_TAG_ORDER.length &&
         DEFAULT_TAG_ORDER.every((id) => parsedOrder.includes(id));
       if (isValidOrder) tagOrder = parsedOrder!;
+      if (Array.isArray(prefs.disabled_tags)) {
+        const valid = (prefs.disabled_tags as string[]).filter((id) =>
+          DEFAULT_TAG_ORDER.includes(id as TagId)
+        );
+        disabledTags = new Set(valid as TagId[]);
+      }
+      if (prefs.resolution_case === "upper" || prefs.resolution_case === "lower")
+        resolutionCase = prefs.resolution_case;
+      if (["original","upper","lower","title"].includes(prefs.title_case ?? ""))
+        titleCase = prefs.title_case as TitleCaseMode;
+      if (["H265","H.265","HEVC"].includes(prefs.codec_format ?? ""))
+        codecFormat = prefs.codec_format as CodecFormat;
+      if (["original","upper","lower"].includes(prefs.source_case ?? ""))
+        sourceCase = prefs.source_case as SourceCase;
       if (typeof prefs.team === "string") team = prefs.team;
       if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
         audioMode = prefs.audio_mode;
@@ -700,7 +802,10 @@ function createEncoder() {
       const activePath = encodingFilePaths[activeIdx];
       files = files.map((f) => {
         if (f.status === "queued" || f.status === "encoding") {
-          return { ...f, status: f.path === activePath ? "encoding" : "queued" };
+          return {
+            ...f,
+            status: f.path === activePath ? "encoding" : "queued",
+          };
         }
         return f;
       });
@@ -802,6 +907,7 @@ function createEncoder() {
           audioTag,
           tagOrder,
           team,
+          { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase },
         );
         const updated: AppFile = {
           ...files[idx],
@@ -1178,6 +1284,7 @@ function createEncoder() {
         audioTag,
         tagOrder,
         team,
+        { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase },
       );
       return { ...f, output_name: name };
     });
@@ -1382,9 +1489,12 @@ function createEncoder() {
     get seasonEpisodeFormat() {
       return seasonEpisodeFormat;
     },
-    get tagOrder() {
-      return tagOrder;
-    },
+    get tagOrder() { return tagOrder; },
+    get disabledTags() { return disabledTags; },
+    get resolutionCase() { return resolutionCase; },
+    get titleCase() { return titleCase; },
+    get codecFormat() { return codecFormat; },
+    get sourceCase() { return sourceCase; },
     get team() {
       return team;
     },
@@ -1452,13 +1562,24 @@ function createEncoder() {
     },
 
     getDisplayName(file: AppFile): string {
-      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team);
+      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase });
     },
     setCrf,
     setPreset,
     setSeasonEpisodeFormat,
     setTagOrder,
     moveTag,
+    toggleTag,
+    setResolutionCase,
+    setTitleCase,
+    setCodecFormat,
+    setSourceCase,
+    resetTagOrder() {
+      tagOrder = [...DEFAULT_TAG_ORDER];
+      disabledTags = new Set();
+      persistPrefs();
+      refreshOutputNames();
+    },
     setTeam,
     setAudioMode,
     setAudioBitrate,
@@ -1498,6 +1619,7 @@ function createEncoder() {
     log,
     resetToDefault,
     clearSession,
+    resetFormatOptions,
   };
 }
 

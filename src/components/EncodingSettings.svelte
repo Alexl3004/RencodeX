@@ -1,18 +1,10 @@
 <script lang="ts">
-  import {
-    encoder,
-    SEASON_EPISODE_FORMATS,
-    formatSeasonEpisode,
-    TAG_LABELS,
-    type TagId,
-  } from "$lib/stores/encoder.svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import {
     X,
     ChevronDown,
     ChevronUp,
-    ArrowUp,
-    ArrowDown,
     FolderOpen,
   } from "@lucide/svelte";
 
@@ -20,10 +12,6 @@
 
   let crf = $derived(encoder.crf);
   let preset = $derived(encoder.preset);
-  let seFormat = $derived(encoder.seasonEpisodeFormat);
-  let tagOrder = $derived(encoder.tagOrder);
-  let team = $derived(encoder.team);
-
   let audioMode = $derived(encoder.audioMode);
   let audioBitrate = $derived(encoder.audioBitrate);
   let spatialAq = $derived(encoder.spatialAq);
@@ -132,8 +120,6 @@
   let openSections = $state<Record<string, boolean>>({
     crf: false,
     preset: false,
-    seFormat: false,
-    tagOrder: false,
     audio: false,
     nvenc: false,
     container: false,
@@ -289,174 +275,6 @@
             >
               {presetInfo[preset].desc}
             </div>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <div class="acc-item">
-      <button
-        type="button"
-        class="acc-trigger"
-        onclick={() => toggle("seFormat")}
-        aria-expanded={openSections.seFormat}
-      >
-        <div class="acc-trigger-left">
-          <span class="section-label">Format saison/épisode</span>
-          {#if !openSections.seFormat}
-            <span class="acc-summary"
-              >{SEASON_EPISODE_FORMATS.find((f: any) => f.value === seFormat)
-                ?.label}</span
-            >
-          {/if}
-        </div>
-        <div class="acc-trigger-right">
-          <ChevronDown class={chevronClass(openSections.seFormat)} />
-        </div>
-      </button>
-
-      {#if openSections.seFormat}
-        <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
-            Affichage dans le nom de sortie
-          </p>
-
-          <div class="grid grid-cols-2 gap-1.5">
-            {#each SEASON_EPISODE_FORMATS as f}
-              <button
-                type="button"
-                onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-                class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
-                class:preset-btn--active={seFormat === f.value}
-              >
-                {f.label}
-              </button>
-            {/each}
-          </div>
-
-          <div class="info-box">
-            <span
-              class="font-mono text-[9px]"
-              style="color: var(--color-subtext);">Exemple :</span
-            >
-            <span
-              class="font-mono text-[11px] ml-1.5"
-              style="color: var(--color-text);"
-            >
-              Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P
-              BluRay H265 10bit AAC
-            </span>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <div class="acc-item">
-      <button
-        type="button"
-        class="acc-trigger"
-        onclick={() => toggle("tagOrder")}
-        aria-expanded={openSections.tagOrder}
-      >
-        <div class="acc-trigger-left">
-          <span class="section-label">Ordre des tags &amp; team</span>
-          {#if !openSections.tagOrder}
-            <span class="acc-summary"
-              >{team ? `Team : ${team}` : "Ordre par défaut"}</span
-            >
-          {/if}
-        </div>
-        <div class="acc-trigger-right">
-          <ChevronDown class={chevronClass(openSections.tagOrder)} />
-        </div>
-      </button>
-
-      {#if openSections.tagOrder}
-        <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
-            Réorganisez les éléments du nom de sortie. Renseignez un nom de team
-            pour l'ajouter où vous voulez.
-          </p>
-
-          <input
-            type="text"
-            value={team}
-            oninput={(e: Event) =>
-              encoder.setTeam((e.target as HTMLInputElement).value)}
-            placeholder="Nom de la team (optionnel)"
-            class="w-full font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)]"
-            style="background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text);"
-          />
-
-          <div class="space-y-1">
-            {#each tagOrder as id, i (id)}
-              <div class="tag-row">
-                <span
-                  class="font-mono text-[11px]"
-                  style="color: {id === 'team' && !team
-                    ? 'var(--color-subtext2)'
-                    : 'var(--color-text)'};"
-                >
-                  {TAG_LABELS[id]}{#if id === "team" && !team}
-                    (vide — ignoré tant qu'aucun nom n'est saisi){/if}
-                </span>
-                <div class="tag-row-actions">
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    disabled={i === 0}
-                    onclick={() => encoder.moveTag(id, -1)}
-                    aria-label={`Monter ${TAG_LABELS[id]}`}
-                  >
-                    <ArrowUp class="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    disabled={i === tagOrder.length - 1}
-                    onclick={() => encoder.moveTag(id, 1)}
-                    aria-label={`Descendre ${TAG_LABELS[id]}`}
-                  >
-                    <ArrowDown class="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            {/each}
-          </div>
-
-          <div class="info-box">
-            <span
-              class="font-mono text-[9px]"
-              style="color: var(--color-subtext);">Exemple :</span
-            >
-            <span
-              class="font-mono text-[11px] ml-1.5"
-              style="color: var(--color-text);"
-            >
-              {encoder.getDisplayName({
-                cleaned: {
-                  title: "Jujutsu Kaisen",
-                  season_episode: "S03E01",
-                  resolution: "1080P",
-                  source: "BluRay",
-                  provider: "",
-                  audio_tags: "VOSTFR",
-                  suggested: "",
-                },
-                output_name: "VOSTFR AAC",
-                path: "",
-                filename: "",
-                size_mb: 0,
-                duration_secs: 0,
-                fps: 0,
-                audio_langs: [],
-                sub_langs: [],
-                streams: [],
-                status: "ready",
-                output_ext: ".mkv",
-                sub_extract_status: "none",
-              })}
-            </span>
           </div>
         </div>
       {/if}
@@ -996,23 +814,6 @@
   .icon-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
-  }
-
-  .tag-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 6px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-  }
-  .tag-row-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
   }
 
   /* Accordion */
