@@ -152,6 +152,16 @@ pub struct EncodingPrefs {
     pub sub_extract_custom_path: String,
     #[serde(default = "default_show_extract_button")]
     pub show_extract_button: bool,
+    #[serde(default)]
+    pub disabled_tags: Vec<String>,
+    #[serde(default = "default_resolution_case")]
+    pub resolution_case: String,
+    #[serde(default = "default_title_case")]
+    pub title_case: String,
+    #[serde(default = "default_codec_format")]
+    pub codec_format: String,
+    #[serde(default = "default_source_case")]
+    pub source_case: String,
 }
 
 fn default_crf() -> u32 { 28 }
@@ -172,6 +182,10 @@ fn default_sub_extract_format() -> String { "srt".to_string() }
 fn default_sub_extract_naming() -> String { "source".to_string() }
 fn default_sub_extract_path_mode() -> String { "source".to_string() }
 fn default_show_extract_button() -> bool { true }
+fn default_resolution_case() -> String { "upper".to_string() }
+fn default_title_case()      -> String { "original".to_string() }
+fn default_codec_format()    -> String { "H265".to_string() }
+fn default_source_case()     -> String { "original".to_string() }
 
 impl Default for EncodingPrefs {
     fn default() -> Self {
@@ -193,6 +207,11 @@ impl Default for EncodingPrefs {
             sub_extract_path_mode: default_sub_extract_path_mode(),
             sub_extract_custom_path: String::new(),
             show_extract_button: default_show_extract_button(),
+            disabled_tags: Vec::new(),
+            resolution_case: default_resolution_case(),
+            title_case: default_title_case(),
+            codec_format: default_codec_format(),
+            source_case: default_source_case(),
         }
     }
 }

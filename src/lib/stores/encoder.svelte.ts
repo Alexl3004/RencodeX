@@ -622,6 +622,16 @@ function createEncoder() {
     selectedForEncoding = new Set();
   }
 
+  function resetFormatOptions() {
+  resolutionCase = "upper";
+  titleCase = "original";
+  codecFormat = "H265";
+  sourceCase = "original";
+  seasonEpisodeFormat = "S01E01";
+  persistPrefs();
+  refreshOutputNames();
+}
+
   // ─── Persistance préférences ──────────────────────────────────────────────
 
   let _persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1609,6 +1619,7 @@ function createEncoder() {
     log,
     resetToDefault,
     clearSession,
+    resetFormatOptions,
   };
 }
 

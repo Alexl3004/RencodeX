@@ -10,7 +10,7 @@
     type CodecFormat,
     type SourceCase,
   } from "$lib/stores/encoder.svelte";
-  import { X, ArrowUp, ArrowDown, GripVertical, RotateCcw } from "@lucide/svelte";
+  import { X, ArrowUp, ArrowDown, GripVertical, RotateCcw, ChevronDown } from "@lucide/svelte";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -106,6 +106,23 @@
     { value: "lower",    label: "minuscules",   preview: "jujutsu kaisen" },
     { value: "title",    label: "Titre",        preview: "Jujutsu Kaisen" },
   ];
+
+  // ── Accordéons onglet Format ───────────────────────────────────────────────
+  let openSections = $state<Record<string, boolean>>({
+    resolution: false,
+    titre: false,
+    se: false,
+    codec: false,
+    source: false,
+  });
+
+  function toggle(key: string) {
+    openSections[key] = !openSections[key];
+  }
+
+  function chevronClass(open: boolean) {
+    return open ? "acc-chevron acc-chevron--open" : "acc-chevron";
+  }
 </script>
 
 <div class="panel-root">
@@ -135,7 +152,7 @@
     </div>
   </div>
 
-  <div class="panel-body space-y-3">
+  <div class="panel-body">
 
     <!-- ── Onglet Ordre ──────────────────────────────────────────────────── -->
     {#if activeTab === "tags"}
@@ -158,7 +175,6 @@
               {disabled ? 'tag-row--disabled' : ''}"
             role="listitem"
           >
-            <!-- Toggle actif/inactif -->
             <button
               type="button"
               class="toggle-btn {disabled ? '' : 'toggle-btn--on'}"
@@ -170,7 +186,6 @@
               <span class="toggle-dot"></span>
             </button>
 
-            <!-- Poignée drag -->
             <button
               type="button"
               class="drag-handle"
@@ -207,7 +222,7 @@
         {/each}
       </div>
 
-      <div class="info-box">
+      <div class="info-box" style="margin-top: 10px;">
         <span class="font-mono text-[9px]" style="color:var(--color-subtext);">Exemple :</span>
         <span class="font-mono text-[11px] ml-1.5" style="color:var(--color-text);">{previewName()}</span>
       </div>
@@ -223,85 +238,156 @@
     {#if activeTab === "format"}
 
       <!-- Résolution -->
-      <div class="section-block">
-        <span class="block-label">Casse de la résolution</span>
-        <div class="seg-group">
-          {#each ([["upper", "1080P"], ["lower", "1080p"]] as const) as [val, preview]}
-            <button
-              type="button"
-              class="seg-btn {resCase === val ? 'seg-btn--active' : ''}"
-              onclick={() => encoder.setResolutionCase(val as ResolutionCase)}
-            >{preview}</button>
-          {/each}
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle("resolution")}
+          aria-expanded={openSections.resolution}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Casse de la résolution</span>
+            {#if !openSections.resolution}
+              <span class="acc-summary">{resCase === "upper" ? "1080P" : "1080p"}</span>
+            {/if}
+          </div>
+          <ChevronDown class={chevronClass(openSections.resolution)} />
+        </button>
+        {#if openSections.resolution}
+          <div class="acc-content space-y-3">
+            <div class="seg-group">
+              {#each ([["upper", "1080P"], ["lower", "1080p"]] as const) as [val, preview]}
+                <button type="button"
+                  class="seg-btn {resCase === val ? 'seg-btn--active' : ''}"
+                  onclick={() => encoder.setResolutionCase(val as ResolutionCase)}
+                >{preview}</button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Casse du titre -->
-      <div class="section-block">
-        <span class="block-label">Casse du titre</span>
-        <div class="seg-group seg-group--col">
-          {#each TITLE_CASE_OPTIONS as opt}
-            <button
-              type="button"
-              class="seg-btn seg-btn--wide {titleCase === opt.value ? 'seg-btn--active' : ''}"
-              onclick={() => encoder.setTitleCase(opt.value)}
-            >
-              <span class="seg-label">{opt.label}</span>
-              <span class="seg-preview">{opt.preview}</span>
-            </button>
-          {/each}
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle("titre")}
+          aria-expanded={openSections.titre}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Casse du titre</span>
+            {#if !openSections.titre}
+              <span class="acc-summary">
+                {TITLE_CASE_OPTIONS.find(o => o.value === titleCase)?.label ?? titleCase}
+              </span>
+            {/if}
+          </div>
+          <ChevronDown class={chevronClass(openSections.titre)} />
+        </button>
+        {#if openSections.titre}
+          <div class="acc-content space-y-3">
+            <div class="seg-group seg-group--col">
+              {#each TITLE_CASE_OPTIONS as opt}
+                <button type="button"
+                  class="seg-btn seg-btn--wide {titleCase === opt.value ? 'seg-btn--active' : ''}"
+                  onclick={() => encoder.setTitleCase(opt.value)}
+                >
+                  <span class="seg-label">{opt.label}</span>
+                  <span class="seg-preview">{opt.preview}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Saison / Épisode -->
-      <div class="section-block">
-        <span class="block-label">Format saison/épisode</span>
-        <div class="seg-group seg-group--col">
-          {#each SEASON_EPISODE_FORMATS as f}
-            <button
-              type="button"
-              class="seg-btn seg-btn--wide {seFormat === f.value ? 'seg-btn--active' : ''}"
-              onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-            >
-              <span class="seg-label">{f.label}</span>
-              <span class="seg-preview">{formatSeasonEpisode("S03E01", f.value)}</span>
-            </button>
-          {/each}
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle("se")}
+          aria-expanded={openSections.se}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Format saison/épisode</span>
+            {#if !openSections.se}
+              <span class="acc-summary">{formatSeasonEpisode("S03E01", seFormat)}</span>
+            {/if}
+          </div>
+          <ChevronDown class={chevronClass(openSections.se)} />
+        </button>
+        {#if openSections.se}
+          <div class="acc-content space-y-3">
+            <div class="seg-group seg-group--col">
+              {#each SEASON_EPISODE_FORMATS as f}
+                <button type="button"
+                  class="seg-btn seg-btn--wide {seFormat === f.value ? 'seg-btn--active' : ''}"
+                  onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
+                >
+                  <span class="seg-label">{f.label}</span>
+                  <span class="seg-preview">{formatSeasonEpisode("S03E01", f.value)}</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Codec vidéo -->
-      <div class="section-block">
-        <span class="block-label">Format du codec vidéo</span>
-        <div class="seg-group">
-          {#each (["H265", "H.265", "HEVC"] as const) as val}
-            <button
-              type="button"
-              class="seg-btn {codecFmt === val ? 'seg-btn--active' : ''}"
-              onclick={() => encoder.setCodecFormat(val as CodecFormat)}
-            >{val}</button>
-          {/each}
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle("codec")}
+          aria-expanded={openSections.codec}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Format du codec vidéo</span>
+            {#if !openSections.codec}
+              <span class="acc-summary">{codecFmt}</span>
+            {/if}
+          </div>
+          <ChevronDown class={chevronClass(openSections.codec)} />
+        </button>
+        {#if openSections.codec}
+          <div class="acc-content space-y-3">
+            <div class="seg-group">
+              {#each (["H265", "H.265", "HEVC"] as const) as val}
+                <button type="button"
+                  class="seg-btn {codecFmt === val ? 'seg-btn--active' : ''}"
+                  onclick={() => encoder.setCodecFormat(val as CodecFormat)}
+                >{val}</button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- Source -->
-      <div class="section-block">
-        <span class="block-label">Casse de la source</span>
-        <div class="seg-group">
-          {#each ([["original", "BluRay"], ["upper", "BLURAY"], ["lower", "bluray"]] as const) as [val, preview]}
-            <button
-              type="button"
-              class="seg-btn {sourceCase === val ? 'seg-btn--active' : ''}"
-              onclick={() => encoder.setSourceCase(val as SourceCase)}
-            >{preview}</button>
-          {/each}
-        </div>
+      <div class="acc-item">
+        <button type="button" class="acc-trigger" onclick={() => toggle("source")}
+          aria-expanded={openSections.source}>
+          <div class="acc-trigger-left">
+            <span class="section-label">Casse de la source</span>
+            {#if !openSections.source}
+              {@const srcPreviews: Record<string, string> = { original: "BluRay", upper: "BLURAY", lower: "bluray" }}
+              <span class="acc-summary">{srcPreviews[sourceCase]}</span>
+            {/if}
+          </div>
+          <ChevronDown class={chevronClass(openSections.source)} />
+        </button>
+        {#if openSections.source}
+          <div class="acc-content space-y-3">
+            <div class="seg-group">
+              {#each ([["original", "BluRay"], ["upper", "BLURAY"], ["lower", "bluray"]] as const) as [val, preview]}
+                <button type="button"
+                  class="seg-btn {sourceCase === val ? 'seg-btn--active' : ''}"
+                  onclick={() => encoder.setSourceCase(val as SourceCase)}
+                >{preview}</button>
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
 
-      <div class="info-box">
+      <!-- Aperçu + Reset -->
+      <div class="info-box" style="margin-top: 4px;">
         <span class="font-mono text-[9px]" style="color:var(--color-subtext);">Exemple :</span>
         <span class="font-mono text-[11px] ml-1.5" style="color:var(--color-text);">{previewName()}</span>
       </div>
+
+      <button type="button" class="reset-btn" onclick={() => encoder.resetFormatOptions()}
+        title="Remettre les options de format par défaut">
+        <RotateCcw class="w-3 h-3" />
+        Réinitialiser
+      </button>
+
     {/if}
 
     <!-- ── Onglet Team ───────────────────────────────────────────────────── -->
@@ -341,6 +427,7 @@
     background: var(--color-panel);
     height: 100%;
   }
+
   .panel-header {
     display: flex;
     align-items: center;
@@ -349,6 +436,7 @@
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
+
   .tab-bar-outer {
     padding: 8px 12px 0;
     border-bottom: 1px solid var(--color-border);
@@ -381,12 +469,66 @@
     font-weight: 600;
   }
 
-  .panel-body { padding: 12px 16px 16px; overflow-y: auto; }
+  .panel-body {
+    padding: 8px 16px 16px;
+    overflow-y: auto;
+  }
 
   .hint {
     font-family: "Geist Mono", monospace;
     font-size: 10px;
     color: var(--color-subtext);
+    margin-bottom: 8px;
+  }
+
+  /* ── Accordéons ── */
+  .acc-item {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .acc-item:last-child {
+    border-bottom: none;
+  }
+  .acc-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    padding: 12px 2px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .acc-trigger:hover .section-label {
+    color: var(--color-text);
+  }
+  .acc-trigger-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .acc-summary {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .acc-content {
+    padding: 0 2px 14px;
+  }
+  :global(.acc-chevron) {
+    width: 14px;
+    height: 14px;
+    color: var(--color-subtext);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  :global(.acc-chevron--open) {
+    transform: rotate(180deg);
   }
 
   /* ── Toggle bouton actif/inactif ── */
@@ -452,7 +594,6 @@
     background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   }
   .tag-row--disabled { opacity: 0.55; }
-
   .tag-row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
   /* ── Icône bouton ── */
@@ -474,6 +615,7 @@
     display: inline-flex; align-items: center; gap: 5px;
     font-family: "Geist Mono", monospace; font-size: 10px;
     padding: 5px 10px;
+    margin-top: 4px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: transparent;
@@ -495,15 +637,7 @@
     border: 1px solid var(--color-border);
   }
 
-  /* ── Section blocs (onglet Format) ── */
-  .section-block { display: flex; flex-direction: column; gap: 6px; }
-  .block-label {
-    font-family: "Geist Mono", monospace;
-    font-size: 10px;
-    color: var(--color-subtext);
-  }
-
-  /* Segmented control */
+  /* ── Segmented control ── */
   .seg-group {
     display: flex;
     gap: 4px;
@@ -534,8 +668,6 @@
     color: var(--color-accent);
     font-weight: 600;
   }
-
-  /* Variante wide avec preview à droite */
   .seg-btn--wide {
     display: flex;
     align-items: center;
