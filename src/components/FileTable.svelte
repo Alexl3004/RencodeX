@@ -14,6 +14,7 @@
     LoaderCircle,
     Subtitles,
     Play,
+    Trash2,
   } from "@lucide/svelte";
 
   let filterText = $state("");
@@ -146,7 +147,6 @@
   style="border: 1px solid var(--color-border);"
 >
   <!-- Barre de filtres -->
-  {#if encoder.files.length > 0}
     <div
       class="flex items-center gap-1.5 px-2 py-1.5 shrink-0 flex-wrap"
       style="border-bottom: 1px solid var(--color-border); background: var(--color-surface);"
@@ -159,6 +159,23 @@
         class="clear-all-btn"
       >
         <X class="w-3 h-3" />
+      </button>
+
+      <!-- Supprimer la sélection -->
+      <button
+        onclick={() => {
+          for (const path of encoder.selectedForEncoding) {
+            encoder.removeFile(path);
+          }
+          encoder.clearEncodeSelection();
+        }}
+        title={encoder.selectedForEncoding.size > 0 ? `Supprimer les ${encoder.selectedForEncoding.size} fichiers sélectionnés` : "Aucun fichier sélectionné"}
+        aria-label="Supprimer les fichiers sélectionnés"
+        class="delete-sel-btn"
+        disabled={encoder.selectedForEncoding.size === 0 || encoder.encoding || encoder.extractingSubs}
+      >
+        <Trash2 class="w-3 h-3" />
+        <span class="delete-sel-count">{encoder.selectedForEncoding.size > 0 ? encoder.selectedForEncoding.size : ""}</span>
       </button>
 
       <!-- Recherche -->
@@ -296,54 +313,57 @@
         </div>
       {/if}
     </div>
-  {/if}
 
   <!-- Table -->
   <div class="flex-1 overflow-auto">
-    {#if encoder.files.length === 0}
-      <div class="py-10 text-center flex items-center justify-center h-full">
-        <p
-          class="text-[11px] font-mono uppercase tracking-widest"
-          style="color: var(--color-subtext);"
-        >
-          Aucun fichier
-        </p>
-      </div>
-    {:else if filteredFiles.length === 0}
-      <div class="py-10 text-center flex items-center justify-center h-full">
-        <p
-          class="text-[11px] font-mono uppercase tracking-widest"
-          style="color: var(--color-subtext);"
-        >
-          Aucun résultat
-        </p>
-      </div>
-    {:else}
-      <table class="w-full text-[11px] file-table">
-        <colgroup>
-          <col class="col-name" />
-          <col style="width: 76px;" />
-          <col style="width: 72px;" />
-          <col style="width: 90px;" />
-          <col style="width: 72px;" />
-          <col style="width: 110px;" />
-          <col style="width: 36px;" />
-        </colgroup>
-        <thead
-          class="sticky top-0 z-10"
-          style="background: var(--color-surface);"
-        >
+    <table class="w-full text-[11px] file-table">
+      <colgroup>
+        <col class="col-name" />
+        <col style="width: 76px;" />
+        <col style="width: 72px;" />
+        <col style="width: 90px;" />
+        <col style="width: 72px;" />
+        <col style="width: 110px;" />
+        <col style="width: 36px;" />
+      </colgroup>
+      <thead
+        class="sticky top-0 z-10"
+        style="background: var(--color-surface);"
+      >
+        <tr>
+          <th class="text-left">Fichier de sortie</th>
+          <th class="text-right">Taille</th>
+          <th class="text-center">Audio</th>
+          <th class="text-center">Sous-titres</th>
+          <th class="text-right">Temps</th>
+          <th class="text-center">Statut</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {#if encoder.files.length === 0}
           <tr>
-            <th class="text-left">Fichier de sortie</th>
-            <th class="text-right">Taille</th>
-            <th class="text-center">Audio</th>
-            <th class="text-center">Sous-titres</th>
-            <th class="text-right">Temps</th>
-            <th class="text-center">Statut</th>
-            <th></th>
+            <td colspan="7" class="py-10 text-center">
+              <p
+                class="text-[11px] font-mono uppercase tracking-widest"
+                style="color: var(--color-subtext);"
+              >
+                Aucun fichier
+              </p>
+            </td>
           </tr>
-        </thead>
-        <tbody>
+        {:else if filteredFiles.length === 0}
+          <tr>
+            <td colspan="7" class="py-10 text-center">
+              <p
+                class="text-[11px] font-mono uppercase tracking-widest"
+                style="color: var(--color-subtext);"
+              >
+                Aucun résultat
+              </p>
+            </td>
+          </tr>
+        {:else}
           {#each filteredFiles as file (file.path)}
             {@const isCurrentEncoding = isCurrentlyEncoding(file)}
             {@const subStatus = getSubExtractStatus(file)}
@@ -536,9 +556,9 @@
               </td>
             </tr>
           {/each}
+        {/if}
         </tbody>
       </table>
-    {/if}
   </div>
 </div>
 
@@ -563,6 +583,40 @@
     background: color-mix(in srgb, var(--color-danger) 12%, var(--color-panel));
     border-color: var(--color-danger);
     color: var(--color-danger);
+  }
+
+  .delete-sel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 7px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-panel);
+    color: var(--color-subtext);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s, border-color 0.1s, opacity 0.1s;
+  }
+  .delete-sel-btn:not(:disabled) {
+    border-color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-panel));
+    color: var(--color-danger);
+  }
+  .delete-sel-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 22%, var(--color-panel));
+  }
+  .delete-sel-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .delete-sel-count {
+    display: inline-block;
+    min-width: 12px;
+    text-align: left;
   }
 
   .file-table {
