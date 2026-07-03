@@ -1,9 +1,5 @@
 <script lang="ts">
-  import {
-    encoder,
-    SEASON_EPISODE_FORMATS,
-    formatSeasonEpisode,
-  } from "$lib/stores/encoder.svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import {
     X,
@@ -16,7 +12,6 @@
 
   let crf = $derived(encoder.crf);
   let preset = $derived(encoder.preset);
-  let seFormat = $derived(encoder.seasonEpisodeFormat);
   let audioMode = $derived(encoder.audioMode);
   let audioBitrate = $derived(encoder.audioBitrate);
   let spatialAq = $derived(encoder.spatialAq);
@@ -125,7 +120,6 @@
   let openSections = $state<Record<string, boolean>>({
     crf: false,
     preset: false,
-    seFormat: false,
     audio: false,
     nvenc: false,
     container: false,
@@ -281,63 +275,6 @@
             >
               {presetInfo[preset].desc}
             </div>
-          </div>
-        </div>
-      {/if}
-    </div>
-
-    <div class="acc-item">
-      <button
-        type="button"
-        class="acc-trigger"
-        onclick={() => toggle("seFormat")}
-        aria-expanded={openSections.seFormat}
-      >
-        <div class="acc-trigger-left">
-          <span class="section-label">Format saison/épisode</span>
-          {#if !openSections.seFormat}
-            <span class="acc-summary"
-              >{SEASON_EPISODE_FORMATS.find((f: any) => f.value === seFormat)
-                ?.label}</span
-            >
-          {/if}
-        </div>
-        <div class="acc-trigger-right">
-          <ChevronDown class={chevronClass(openSections.seFormat)} />
-        </div>
-      </button>
-
-      {#if openSections.seFormat}
-        <div class="acc-content space-y-3">
-          <p class="font-mono text-[10px]" style="color: var(--color-subtext);">
-            Affichage dans le nom de sortie
-          </p>
-
-          <div class="grid grid-cols-2 gap-1.5">
-            {#each SEASON_EPISODE_FORMATS as f}
-              <button
-                type="button"
-                onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-                class="font-mono text-[11px] px-2 py-1.5 rounded-[var(--radius-sm)] transition-all preset-btn"
-                class:preset-btn--active={seFormat === f.value}
-              >
-                {f.label}
-              </button>
-            {/each}
-          </div>
-
-          <div class="info-box">
-            <span
-              class="font-mono text-[9px]"
-              style="color: var(--color-subtext);">Exemple :</span
-            >
-            <span
-              class="font-mono text-[11px] ml-1.5"
-              style="color: var(--color-text);"
-            >
-              Jujutsu Kaisen {formatSeasonEpisode("S03E01", seFormat)} VOSTFR 1080P
-              BluRay H265 10bit AAC
-            </span>
           </div>
         </div>
       {/if}
