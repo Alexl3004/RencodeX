@@ -15,23 +15,13 @@
   let dragging = $state(false);
   let scanning = $state(false);
 
-  const HISTORY_KEY = "rencodex-output-history";
-  const MAX_HISTORY = 5;
-
-  function loadHistory(): string[] {
-    try {
-      return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
-    } catch {
-      return [];
-    }
-  }
-
-  function saveHistory(dir: string) {
-    const h = [dir, ...loadHistory().filter((d) => d !== dir)].slice(0, MAX_HISTORY);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
-  }
-
-  let history = $state<string[]>(loadHistory());
+  // Les presets et l'historique sont lus directement depuis le store (réactifs).
+  // loadDirConfig() est appelé par Settings après sauvegarde via l'event ci-dessous.
+  $effect(() => {
+    function onConfigSaved() { encoder.loadDirConfig(); }
+    window.addEventListener("rencodex:config-saved", onConfigSaved);
+    return () => window.removeEventListener("rencodex:config-saved", onConfigSaved);
+  });
 
   function shortPath(p: string): string {
     if (!p) return "";
@@ -75,11 +65,9 @@
     if (dir && typeof dir === "string") setOutputDir(dir);
   }
 
-  function setOutputDir(dir: string) {
+  async function setOutputDir(dir: string) {
     encoder.outputDir = dir;
     encoder.log(`Dossier de sortie : ${dir}`, "info");
-    saveHistory(dir);
-    history = loadHistory();
   }
 </script>
 
@@ -129,7 +117,7 @@
 
   <!-- Output path -->
   <div class="output-path-wrap">
-    {#if history.length > 0}
+    {#if encoder.outputDirPresets.length > 0}
       <Popover positioning={{ placement: "bottom-end" }}>
         <Popover.Trigger
           disabled={encoder.encoding}
@@ -143,8 +131,8 @@
         <Portal>
           <Popover.Positioner>
             <Popover.Content class="history-popover">
-              <p class="history-header">Récents</p>
-              {#each history as dir}
+              <p class="history-header">Prédéfinis</p>
+              {#each encoder.outputDirPresets as dir}
                 <Popover.CloseTrigger
                   onclick={() => setOutputDir(dir)}
                   class="history-item {dir === encoder.outputDir ? 'history-item--active' : ''}"

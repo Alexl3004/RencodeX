@@ -479,6 +479,9 @@ function createEncoder() {
   let selectedForExtraction = $state<Set<string>>(new Set());
   let extractSelectionMode = $state(false);
 
+  // ─── Chemins de sortie ────────────────────────────────────────────────────
+  let outputDirPresets  = $state<string[]>([]);
+
   // ─── États sélection encodage ─────────────────────────────────────────────
   let encodeSelectionMode = $state(false);
   let selectedForEncoding = $state<Set<string>>(new Set());
@@ -783,10 +786,24 @@ function createEncoder() {
     }
   }
 
+  // ─── Chemins de sortie — chargement & persistance ─────────────────────────
+
+  /** Charge les presets depuis AppConfig (backend). */
+  async function loadDirConfig() {
+    try {
+      const cfg = await invoke<Record<string, any>>("load_config");
+      const g = (snake: string, camel: string) => cfg[snake] ?? cfg[camel];
+      outputDirPresets = (g("output_dir_presets", "outputDirPresets") as string[] | undefined) ?? [];
+    } catch {
+      outputDirPresets = [];
+    }
+  }
+
   // ─── Initialisation ───────────────────────────────────────────────────────
 
   async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
+    await loadDirConfig();
     await loadEncodingSettings();
     await stats.init();
     log(`Dossier de sortie : ${outputDir}`, "info");
@@ -1470,6 +1487,10 @@ function createEncoder() {
     set outputDir(v) {
       outputDir = v;
     },
+    get outputDirPresets() {
+      return outputDirPresets;
+    },
+    loadDirConfig,
     get encoding() {
       return encoding;
     },

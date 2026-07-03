@@ -414,11 +414,6 @@
     align-items: center;
     gap: 3px;
   }
-  .metric-icon {
-    width: 12px;
-    height: 12px;
-    color: var(--color-subtext);
-  }
   .metric-val {
     font-family: "Geist Mono", monospace;
     font-size: 13px;

@@ -92,6 +92,10 @@ pub struct AppConfig {
     pub discord_progress_interval: u64,
     #[serde(default)]
     pub discord_fields: HashMap<String, Vec<String>>,
+    #[serde(default)]
+    pub output_dir_presets: Vec<String>,
+    #[serde(default)]
+    pub output_dir_history: Vec<String>,
 }
 
 impl Default for AppConfig {
@@ -112,6 +116,8 @@ impl Default for AppConfig {
             discord_notify_progress:  false,
             discord_progress_interval: 30,
             discord_fields: HashMap::new(),
+            output_dir_presets: Vec::new(),
+            output_dir_history: Vec::new(),
         }
     }
 }

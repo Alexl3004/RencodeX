@@ -1,9 +1,23 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { downloadDir } from "@tauri-apps/api/path";
+  import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { encoder } from "$lib/stores/encoder.svelte";
+  import { theme } from "$lib/stores/theme.svelte";
   import { fly } from "svelte/transition";
-  import { sineIn } from "svelte/easing";
-  import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw } from '@lucide/svelte';
+  import { cubicOut, cubicIn } from "svelte/easing";
+  import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
+
+  type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
+  let activeTab = $state<TabId>("interface");
+
+  const TABS: { id: TabId; label: string; icon: any }[] = [
+    { id: "interface", label: "Interface",  icon: Monitor },
+    { id: "ffmpeg",    label: "FFmpeg",     icon: Cpu },
+    { id: "presets",   label: "Chemins",    icon: FolderOpen },
+    { id: "discord",   label: "Discord",    icon: MessageSquare },
+    { id: "env",       label: "Env",        icon: Terminal },
+  ];
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +60,8 @@
     discord_progress_interval: number;
     /** Champs activés par type : { "start": ["files","size","crf"], … } */
     discord_fields: Record<string, string[]>;
+    /** Chemins de sortie prédéfinis */
+    output_dir_presets: string[];
   };
 
   // ── Props & état ───────────────────────────────────────────────────────────
@@ -83,6 +99,7 @@
     discord_notify_progress: false,
     discord_progress_interval: 30,
     discord_fields: {},
+    output_dir_presets: [],
   });
 
   // ── Définition statique des notifications (labels UI) ─────────────────────
@@ -150,6 +167,7 @@
         discord_notify_progress:   g("discord_notify_progress",   "discordNotifyProgress")    ?? form.discord_notify_progress,
         discord_progress_interval: g("discord_progress_interval", "discordProgressInterval")  ?? form.discord_progress_interval,
         discord_fields:            g("discord_fields",            "discordFields")            ?? form.discord_fields,
+        output_dir_presets:        g("output_dir_presets",        "outputDirPresets")         ?? form.output_dir_presets,
       };
 
       // S'assurer que discord_fields contient une entrée pour chaque type
@@ -163,6 +181,16 @@
 
       effective = eff;
       catalog   = { ...cat };
+
+      // Si aucun preset configuré, ajouter le dossier Téléchargements par défaut
+      if (form.output_dir_presets.length === 0) {
+        try {
+          const dl = await downloadDir();
+          if (dl) await persistPresets([dl]);
+        } catch {
+          // pas critique
+        }
+      }
     } catch (e) {
       encoder.log(`Erreur chargement config : ${e}`, "error");
     }
@@ -191,10 +219,12 @@
           discord_notify_progress:   form.discord_notify_progress,
           discord_progress_interval: form.discord_progress_interval,
           discord_fields:            form.discord_fields,
+          output_dir_presets:        form.output_dir_presets,
         }
       });
       effective = await invoke<EffectiveConfig>("get_effective_config");
       encoder.log("Configuration sauvegardée", "success");
+      window.dispatchEvent(new CustomEvent("rencodex:config-saved"));
     } catch (e) {
       encoder.log(`Erreur sauvegarde : ${e}`, "error");
     } finally {
@@ -269,11 +299,76 @@
     if (open) loadSettings();
   });
 
+  // ── Chemins prédéfinis ─────────────────────────────────────────────────────
+
+  let newPreset = $state("");
+
+  /**
+   * Construit l'objet config complet à partir du form actuel.
+   * Utilisé pour la sauvegarde immédiate des presets (sans passer par le bouton).
+   */
+  function buildConfigPayload(overridePresets?: string[]) {
+    return {
+      ffmpeg_path:               form.ffmpeg_path,
+      dark_mode:                 form.dark_mode,
+      send_email:                form.send_email,
+      email_to:                  form.email_to,
+      discord_bot_token:         form.discord_bot_token,
+      discord_log_channel_id:    form.discord_log_channel_id,
+      discord_cmd_channel_id:    form.discord_cmd_channel_id,
+      discord_enabled:           form.discord_enabled,
+      discord_notify_start:      form.discord_notify_start,
+      discord_notify_file_done:  form.discord_notify_file_done,
+      discord_notify_summary:    form.discord_notify_summary,
+      discord_notify_error:      form.discord_notify_error,
+      discord_notify_progress:   form.discord_notify_progress,
+      discord_progress_interval: form.discord_progress_interval,
+      discord_fields:            form.discord_fields,
+      output_dir_presets:        overridePresets ?? form.output_dir_presets,
+    };
+  }
+
+  /** Persiste les presets immédiatement (même pattern que persistPrefs dans le store). */
+  async function persistPresets(presets: string[]) {
+    form.output_dir_presets = presets;
+    try {
+      await invoke("save_config", { config: buildConfigPayload(presets) });
+      // Notifier la DropZone pour qu'elle recharge depuis le store
+      window.dispatchEvent(new CustomEvent("rencodex:config-saved"));
+    } catch (e) {
+      encoder.log(`Erreur sauvegarde presets : ${e}`, "error");
+    }
+  }
+
+  async function addPreset() {
+    const p = newPreset.trim();
+    if (!p || form.output_dir_presets.includes(p)) return;
+    newPreset = "";
+    await persistPresets([...form.output_dir_presets, p]);
+  }
+
+  async function browsePreset() {
+    const dir = await openDialog({ directory: true });
+    if (dir && typeof dir === "string") {
+      newPreset = dir;
+    }
+  }
+
+  async function removePreset(path: string) {
+    await persistPresets(form.output_dir_presets.filter((p) => p !== path));
+  }
+
+  async function handlePresetKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") { e.preventDefault(); await addPreset(); }
+  }
+
+  // ── Dérivés Discord ────────────────────────────────────────────────────────
+
   let discordFromEnv = $derived(
     effective?.discord_token_set && !form.discord_bot_token,
   );
 
-  const flyParams = { x: 320, duration: 200, easing: sineIn };
+  const flyParams = { x: 400, duration: 320, easing: cubicOut };
 </script>
 
 {#if open}
@@ -285,33 +380,108 @@
   onkeydown={(e) => { if (e.key === 'Escape') open = false; }}
 ></div>
 
-<!-- Panel -->
+<!-- Drawer -->
 <div
   class="settings-panel"
   role="dialog"
   aria-modal="true"
-  aria-label="Panneau de paramètres"
+  aria-label="Paramètres"
   tabindex="-1"
-  transition:fly={flyParams}
+  in:fly={{ x: 400, duration: 320, easing: cubicOut }}
+  out:fly={{ x: 400, duration: 220, easing: cubicIn }}
 >
   <!-- Header -->
   <div class="drawer-header">
     <div class="flex items-center gap-2">
-      <div class="w-[3px] h-5 rounded-[1px]" style="background: var(--color-accent);"></div>
-      <span class="font-mono text-[12px] font-semibold uppercase tracking-wider"
-            style="color: var(--color-text);">Paramètres</span>
+      <div class="w-[3px] h-4 rounded-[1px]" style="background: var(--color-accent);"></div>
+      <span class="font-mono text-[12px] font-semibold uppercase tracking-wider" style="color: var(--color-text);">Paramètres</span>
     </div>
-    <button onclick={() => (open = false)} class="icon-btn" title="Fermer" aria-label="Fermer le panneau">
+    <button onclick={() => (open = false)} class="icon-btn" title="Fermer" aria-label="Fermer">
       <X class="w-4 h-4" />
     </button>
   </div>
 
-  <!-- Body -->
-  <div class="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+  <!-- Body : sidebar nav + content -->
+  <div class="drawer-body">
 
-    <!-- Interface -->
-    <section class="space-y-3">
+    <!-- Sidebar nav -->
+    <nav class="drawer-nav" aria-label="Navigation paramètres">
+      {#each TABS as tab}
+        <button
+          type="button"
+          onclick={() => (activeTab = tab.id)}
+          class="nav-item {activeTab === tab.id ? 'nav-item--active' : ''}"
+          aria-current={activeTab === tab.id ? "page" : undefined}
+        >
+          {#if tab.id === 'interface'}<Monitor class="w-3.5 h-3.5 shrink-0" />
+          {:else if tab.id === 'ffmpeg'}<Cpu class="w-3.5 h-3.5 shrink-0" />
+          {:else if tab.id === 'presets'}<FolderOpen class="w-3.5 h-3.5 shrink-0" />
+          {:else if tab.id === 'discord'}<MessageSquare class="w-3.5 h-3.5 shrink-0" />
+          {:else if tab.id === 'env'}<Terminal class="w-3.5 h-3.5 shrink-0" />
+          {/if}
+          <span class="nav-label">{tab.label}</span>
+        </button>
+      {/each}
+    </nav>
+
+    <!-- Tab content -->
+    <div class="drawer-content">
+
+    <!-- ── Interface ─────────────────────────────────────────── -->
+    {#if activeTab === "interface"}
+      <section class="space-y-3">
       <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Interface</div>
+
+      <!-- Couleur primaire -->
+      <div>
+        <span class="field-label flex items-center gap-1.5">
+          <Palette class="w-3 h-3" />
+          Couleur primaire
+        </span>
+        <div class="flex items-center gap-2">
+          <label class="color-swatch-input" style="background: {theme.accent};" title="Choisir une couleur personnalisée">
+            <input
+              type="color"
+              value={theme.accent}
+              oninput={(e) => theme.setAccent((e.currentTarget as HTMLInputElement).value)}
+              aria-label="Couleur primaire personnalisée"
+            />
+          </label>
+          <input
+            type="text"
+            value={theme.accent}
+            onchange={(e) => theme.setAccent((e.currentTarget as HTMLInputElement).value.trim())}
+            placeholder="#e07b39"
+            maxlength="7"
+            class="field-input px-2 py-1.5 w-24 text-center"
+            aria-label="Code hexadécimal de la couleur primaire"
+          />
+          <div class="flex items-center gap-1.5">
+            {#each ["#e07b39", "#4d8fbb", "#5fb37b", "#b25fd1", "#d14d6c", "#c9b13a"] as preset}
+              <button
+                type="button"
+                class="color-swatch-preset {theme.accent.toLowerCase() === preset ? 'color-swatch-preset--active' : ''}"
+                style="background: {preset};"
+                onclick={() => theme.setAccent(preset)}
+                aria-label="Utiliser la couleur {preset}"
+                title={preset}
+              ></button>
+            {/each}
+          </div>
+          {#if theme.accent.toLowerCase() !== theme.defaultAccent}
+            <button
+              type="button"
+              onclick={() => theme.resetAccent()}
+              class="icon-btn-inline"
+              title="Réinitialiser la couleur par défaut"
+              aria-label="Réinitialiser la couleur par défaut"
+            >
+              <RotateCcw class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+        </div>
+      </div>
+
       <button
         onclick={handleReset}
         disabled={encoder.encoding || encoder.extractingSubs}
@@ -324,8 +494,9 @@
       </button>
     </section>
 
-    <!-- FFmpeg -->
-    <section class="space-y-3">
+    <!-- ── FFmpeg ──────────────────────────────────────────────── -->
+    {:else if activeTab === "ffmpeg"}
+      <section class="space-y-3">
       <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">FFmpeg</div>
       <div>
         <label for="ffmpeg-path" class="field-label">Chemin vers ffmpeg.exe</label>
@@ -339,8 +510,82 @@
       </div>
     </section>
 
-    <!-- Discord -->
-    <section class="space-y-3">
+    <!-- ── Chemins ──────────────────────────────────────────────── -->
+    {:else if activeTab === "presets"}
+      <section class="space-y-3">
+      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">
+        Chemins de sortie prédéfinis
+      </div>
+      <p class="font-mono text-[10px]" style="color: var(--color-subtext); line-height: 1.5;">
+        Ces chemins apparaîtront dans le menu de la DropZone, en plus de l'historique récent.
+      </p>
+
+      <!-- Champ d'ajout -->
+      <div class="flex gap-2">
+        <input
+          type="text"
+          bind:value={newPreset}
+          onkeydown={handlePresetKeydown}
+          placeholder="D:\Encodage\Sorties"
+          class="field-input flex-1 px-3 py-2"
+          aria-label="Nouveau chemin prédéfini"
+        />
+        <button
+          type="button"
+          onclick={browsePreset}
+          class="btn btn-secondary font-mono text-[11px] px-3"
+          aria-label="Parcourir"
+          title="Choisir un dossier"
+        >
+          <FolderInput class="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          onclick={addPreset}
+          disabled={!newPreset.trim()}
+          class="btn btn-primary font-mono text-[11px] px-3"
+          aria-label="Ajouter le chemin"
+          title="Ajouter"
+        >
+          <Check class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- Liste des presets -->
+      {#if form.output_dir_presets.length > 0}
+        <div class="space-y-1" role="list" aria-label="Chemins prédéfinis">
+          {#each form.output_dir_presets as preset, i}
+            <div
+              class="flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)]"
+              style="background: var(--color-surface); border: 1px solid var(--color-border);"
+              role="listitem"
+            >
+              <span
+                class="font-mono text-[10px] flex-1 min-w-0 truncate"
+                style="color: var(--color-text); direction: rtl; text-align: left;"
+                title={preset}
+              >{preset}</span>
+              <button
+                type="button"
+                onclick={() => removePreset(preset)}
+                class="icon-btn-inline shrink-0"
+                aria-label="Supprimer ce chemin"
+              >
+                <X class="w-3 h-3" />
+              </button>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="font-mono text-[10px] text-center py-2" style="color: var(--color-subtext); opacity: 0.5;">
+          Aucun chemin prédéfini
+        </p>
+      {/if}
+    </section>
+
+    <!-- ── Discord ──────────────────────────────────────────────── -->
+    {:else if activeTab === "discord"}
+      <section class="space-y-3">
       <div class="flex items-center justify-between pb-2" style="border-bottom: 1px solid var(--color-border);">
         <div class="section-label">Discord</div>
         <label class="toggle-row">
@@ -589,8 +834,9 @@
       {/if}
     </section>
 
-    <!-- Variables d'env -->
-    <section class="space-y-3">
+    <!-- ── Env ──────────────────────────────────────────────── -->
+    {:else if activeTab === "env"}
+      <section class="space-y-3">
       <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Variables d'environnement</div>
       <div class="space-y-1" role="list" aria-label="Variables d'environnement actives">
         {#each [
@@ -612,14 +858,17 @@
         {/each}
       </div>
     </section>
-  </div>
+
+    {/if}
+    </div><!-- end drawer-content -->
+  </div><!-- end drawer-body -->
 
   <!-- Footer -->
   <div class="drawer-footer">
     <button
       onclick={save}
       disabled={saving}
-      class="btn btn-primary flex-1 justify-center font-mono text-[11px]"
+      class="btn btn-primary justify-center font-mono text-[11px]"
       aria-label={saving ? "Sauvegarde en cours" : "Sauvegarder les paramètres"}
     >
       {#if saving}
@@ -639,7 +888,7 @@
 {/if}
 
 <style>
-  /* ── Backdrop & panel ─────────────────────────────────────────────────────── */
+  /* ── Backdrop & modal ─────────────────────────────────────────────────────── */
 
   .settings-backdrop {
     position: fixed;
@@ -662,21 +911,104 @@
     display: flex;
     flex-direction: column;
     color: var(--color-text);
+    overflow: hidden;
   }
 
   .drawer-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 20px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+  }
+
+  .drawer-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Sidebar nav */
+  .drawer-nav {
+    width: 44px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 6px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+    overflow: hidden;
+    position: relative;
+    z-index: 10;
+    /* Fermeture : même easing/durée que le out:fly de la modal (cubicIn, 220ms) */
+    transition: width 220ms cubic-bezier(0.32, 0, 0.67, 0);
+  }
+  .drawer-nav:hover {
+    width: 112px;
+    /* Ouverture : même easing/durée que le in:fly de la modal (cubicOut, 320ms), avec un délai pour éviter les survols rapides */
+    transition: width 320ms cubic-bezier(0.33, 1, 0.68, 1) 180ms;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 7px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-subtext);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .nav-item:hover {
+    background: var(--color-panel);
+    color: var(--color-text);
+    transform: translateX(2px);
+  }
+  .nav-item--active {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 28%, transparent);
+    color: var(--color-accent);
+  }
+  .nav-item--active:hover {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+  }
+
+  .nav-label {
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: opacity 180ms cubic-bezier(0.32, 0, 0.67, 0) 0s, transform 180ms cubic-bezier(0.32, 0, 0.67, 0) 0s;
+    pointer-events: none;
+  }
+  .drawer-nav:hover .nav-label {
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 280ms cubic-bezier(0.33, 1, 0.68, 1) 260ms, transform 280ms cubic-bezier(0.33, 1, 0.68, 1) 260ms;
+  }
+
+  /* Content area */
+  .drawer-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
   }
 
   .drawer-footer {
     display: flex;
     gap: 8px;
-    padding: 10px 20px;
+    justify-content: flex-end;
+    padding: 10px 16px;
     border-top: 1px solid var(--color-border);
     flex-shrink: 0;
   }
@@ -713,6 +1045,47 @@
     transition: color 0.1s;
   }
   .icon-btn-inline:hover { color: var(--color-text); }
+
+  /* ── Couleur primaire ─────────────────────────────────────────────────────── */
+
+  .color-swatch-input {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .color-swatch-input:hover { border-color: var(--color-border2); transform: scale(1.04); }
+  .color-swatch-input input[type="color"] {
+    position: absolute;
+    inset: -4px;
+    width: calc(100% + 8px);
+    height: calc(100% + 8px);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .color-swatch-preset {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: transform 0.12s, border-color 0.12s;
+  }
+  .color-swatch-preset:hover { transform: scale(1.15); }
+  .color-swatch-preset--active {
+    border: 2px solid var(--color-text);
+    transform: scale(1.15);
+  }
 
   /* ── Formulaire ───────────────────────────────────────────────────────────── */
 
