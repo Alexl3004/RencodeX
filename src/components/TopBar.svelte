@@ -8,6 +8,7 @@
   import Dashboard from "$components/Dashboard.svelte";
   import EncodingSettings from "$components/EncodingSettings.svelte";
   import RenamingSettings from "$components/RenamingSettings.svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import {
     ChartColumnDecreasing,
     Sun,
@@ -21,7 +22,9 @@
 
   let { showAppSettings = $bindable(false) } = $props();
 
-  let openPanel = $state<"logs" | "dashboard" | "settings" | "renaming" | null>(null);
+  let openPanel = $state<"logs" | "dashboard" | "settings" | "renaming" | null>(
+    null,
+  );
 
   function toggle(panel: "logs" | "dashboard" | "settings" | "renaming") {
     openPanel = openPanel === panel ? null : panel;
@@ -30,8 +33,13 @@
     openPanel = null;
   }
 
-  function handleRefresh() {
+  async function handleRefresh() {
     encoder.clearSession();
+    try {
+      encoder.outputDir = await invoke<string>("get_default_output_dir");
+    } catch {
+      // silently ignore if the command fails
+    }
   }
 
   let totalSize = $derived(
@@ -194,7 +202,7 @@
 
     <!-- Config -->
     <div class="flex items-center">
-    <LangPopover />
+      <LangPopover />
       <!-- Paramètres encodage -->
       <div class="relative inline-flex">
         <button
@@ -232,7 +240,9 @@
         <button
           type="button"
           onclick={() => toggle("renaming")}
-          class="topbar-btn {openPanel === 'renaming' ? 'topbar-btn--active' : ''}"
+          class="topbar-btn {openPanel === 'renaming'
+            ? 'topbar-btn--active'
+            : ''}"
           aria-label="Paramètres de renommage"
           aria-pressed={openPanel === "renaming"}
           title="Renommage (ordre des tags, team)"
@@ -259,6 +269,16 @@
     </div>
 
     <div class="sep h-4 mx-1.5"></div>
+    <!-- Rafraîchir -->
+    <button
+      type="button"
+      onclick={handleRefresh}
+      class="topbar-btn"
+      aria-label="Rafraîchir l'interface"
+      title="Rafraîchir l'interface"
+    >
+      <RefreshCw class="w-4 h-4" />
+    </button>
     <!-- Paramètres app -->
     <button
       type="button"
@@ -271,16 +291,7 @@
       <Wrench class="w-4 h-4" />
     </button>
     <Settings bind:open={showAppSettings} />
-    <!-- Rafraîchir -->
-    <button
-      type="button"
-      onclick={handleRefresh}
-      class="topbar-btn"
-      aria-label="Rafraîchir l'interface"
-      title="Rafraîchir l'interface"
-    >
-      <RefreshCw class="w-4 h-4" />
-    </button>
+
     <!-- Thème -->
     <button
       type="button"

@@ -1,11 +1,9 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { X, Play, FileDown } from "@lucide/svelte";
+  import { X, Play, FileDown, Loader2 } from "@lucide/svelte";
 
-  // Fichiers prêts (hors sélection)
   let readyCount = $derived(encoder.files.filter((f) => f.status === "ready").length);
 
-  // Fichiers cibles pour l'encodage selon le mode
   let encodeTargetCount = $derived(
     encoder.encodeSelectionMode && encoder.selectedForEncoding.size > 0
       ? encoder.selectedForEncoding.size
@@ -13,77 +11,194 @@
   );
 
   let canEncode = $derived(!encoder.encoding && encodeTargetCount > 0);
+
+  let encodeLabel = $derived(
+    encoder.encodeSelectionMode && encoder.selectedForEncoding.size > 0
+      ? `Encoder (${encoder.selectedForEncoding.size})`
+      : encodeTargetCount > 0
+        ? `Encoder ${encodeTargetCount} fichier${encodeTargetCount > 1 ? "s" : ""}`
+        : "Encoder",
+  );
+
+  let extractLabel = $derived(
+    encoder.extractSelectionMode && encoder.selectedForExtraction.size > 0
+      ? `Extraire (${encoder.selectedForExtraction.size})`
+      : "Extraire sous-titres",
+  );
+
+  let showExtract = $derived(
+    encoder.showExtractButton &&
+    !encoder.encoding &&
+    encoder.files.some((f) => f.status === "ready" && f.sub_langs.length > 0)
+  );
+
+  let canExtract = $derived(
+    !encoder.extractingSubs &&
+    encoder.selSubs.size > 0 &&
+    !(encoder.extractSelectionMode && encoder.selectedForExtraction.size === 0)
+  );
 </script>
 
-<div
-  class="flex items-center gap-2 flex-wrap px-4 py-2.5 border-t border-[var(--color-border)]"
-  style="background: var(--color-panel);"
->
-  <!-- LANCER -->
-  <button
-    onclick={() => encoder.startEncoding()}
-    disabled={!canEncode}
-    class="btn btn-primary gap-2 font-mono text-[11px] px-4 py-1.5"
-  >
+<div class="control-bar">
+  <!-- Encode / Cancel -->
+  <div class="btn-group">
     {#if encoder.encoding}
-      <span class="spinner w-3 h-3 border-2 border-white/30 border-t-white shrink-0 rounded-full animate-spin"></span>
-      EN COURS…
-    {:else if encoder.encodeSelectionMode && encoder.selectedForEncoding.size > 0}
-      <Play height="0.5em" fill="currentColor" stroke="none" class="shrink-0" />
-      LANCER ({encoder.selectedForEncoding.size})
+      <!-- En cours : bouton désactivé + annuler -->
+      <button class="cb-btn cb-btn--primary cb-btn--active" disabled>
+        <Loader2 class="cb-icon animate-spin" />
+        <span>Encodage…</span>
+      </button>
+      <button
+        onclick={() => encoder.cancelEncoding()}
+        class="cb-btn cb-btn--danger"
+        title="Annuler l'encodage"
+      >
+        <X class="cb-icon" />
+        <span>Annuler</span>
+      </button>
     {:else}
-      <Play height="0.5em" fill="currentColor" stroke="none" class="shrink-0" />
-      LANCER
+      <button
+        onclick={() => encoder.startEncoding()}
+        disabled={!canEncode}
+        class="cb-btn cb-btn--primary"
+        title={canEncode ? encodeLabel : "Aucun fichier prêt"}
+      >
+        <Play class="cb-icon" fill="currentColor" stroke="none" />
+        <span>{encodeLabel}</span>
+      </button>
     {/if}
-  </button>
+  </div>
 
-  <!-- ANNULER (encodage ou extraction) -->
-  {#if encoder.encoding || encoder.extractingSubs}
-    <button
-      onclick={() =>
-        encoder.encoding
-          ? encoder.cancelEncoding()
-          : encoder.cancelSubtitleExtraction()}
-      class="btn btn-danger font-mono text-[11px] px-4 py-1.5 gap-1.5"
-    >
-      <X height="1em" /> ANNULER
-    </button>
-  {/if}
+  <!-- Extract -->
+  {#if showExtract}
+    <div class="bar-sep" aria-hidden="true"></div>
 
-  <!-- ── Zone extraction sous-titres ───────────────────────────────────── -->
-  {#if encoder.showExtractButton &&
-    !encoder.encoding &&
-    encoder.files.some((f) => f.status === "ready" && f.sub_langs.length > 0)}
-
-    <!-- Séparateur visuel -->
-    <div class="sep" aria-hidden="true"></div>
-
-    <!-- Bouton EXTRAIRE -->
-    <button
-      onclick={() => encoder.startSubtitleExtraction()}
-      disabled={encoder.extractingSubs ||
-        encoder.selSubs.size === 0 ||
-        (encoder.extractSelectionMode && encoder.selectedForExtraction.size === 0)}
-      class="btn font-mono text-[11px] px-4 py-1.5 gap-1.5"
-      class:btn-primary={!encoder.extractingSubs}
-      title="Extraire les pistes de sous-titres"
-    >
+    <div class="btn-group">
       {#if encoder.extractingSubs}
-        <span class="spinner w-3 h-3 border-2 border-white/30 border-t-white shrink-0 rounded-full animate-spin"></span>
-        EXTRACTION…
+        <button class="cb-btn cb-btn--ghost cb-btn--active" disabled>
+          <Loader2 class="cb-icon animate-spin" />
+          <span>Extraction…</span>
+        </button>
+        <button
+          onclick={() => encoder.cancelSubtitleExtraction()}
+          class="cb-btn cb-btn--danger"
+          title="Annuler l'extraction"
+        >
+          <X class="cb-icon" />
+          <span>Annuler</span>
+        </button>
       {:else}
-        <FileDown height="0.9em" class="shrink-0" />
-        EXTRAIRE{#if encoder.extractSelectionMode && encoder.selectedForExtraction.size > 0}&nbsp;({encoder.selectedForExtraction.size}){/if}
+        <button
+          onclick={() => encoder.startSubtitleExtraction()}
+          disabled={!canExtract}
+          class="cb-btn cb-btn--ghost"
+          title={extractLabel}
+        >
+          <FileDown class="cb-icon" />
+          <span>{extractLabel}</span>
+        </button>
       {/if}
-    </button>
+    </div>
   {/if}
+
 </div>
 
 <style>
-  .sep {
-    width: 1px;
-    height: 18px;
-    background: var(--color-border);
+  .control-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-panel);
+    flex-wrap: wrap;
+  }
+
+  .btn-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ── Base button ────────────────────────────── */
+  .cb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
     flex-shrink: 0;
   }
+
+  .cb-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ── Primary (encode) ───────────────────────── */
+  .cb-btn--primary {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+  }
+
+  .cb-btn--primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 85%, #000);
+    border-color: color-mix(in srgb, var(--color-accent) 85%, #000);
+  }
+
+  .cb-btn--primary.cb-btn--active {
+    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-panel));
+    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+    color: var(--color-accent);
+  }
+
+  /* ── Ghost (extract) ────────────────────────── */
+  .cb-btn--ghost {
+    background: transparent;
+    border-color: var(--color-border);
+    color: var(--color-subtext);
+  }
+
+  .cb-btn--ghost:hover:not(:disabled) {
+    background: var(--color-panel2, var(--color-surface));
+    border-color: var(--color-subtext);
+    color: var(--color-text);
+  }
+
+  .cb-btn--ghost.cb-btn--active {
+    background: transparent;
+    border-color: var(--color-border);
+    color: var(--color-subtext);
+  }
+
+  /* ── Danger (cancel) ────────────────────────── */
+  .cb-btn--danger {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
+    color: var(--color-danger);
+  }
+
+  .cb-btn--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-panel));
+    border-color: var(--color-danger);
+  }
+
+  /* ── Separator ──────────────────────────────── */
+  .bar-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--color-border);
+    flex-shrink: 0;
+    margin: 0 2px;
+  }
+
 </style>
