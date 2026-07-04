@@ -60,6 +60,16 @@
       : ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100
   );
 
+  // Résout le fichier actuellement en cours depuis p.file_name (nom source brut)
+  let currentFile = $derived(
+    p ? (encoder.files.find(f => f.filename === p.file_name || f.path.endsWith(p.file_name)) ?? null) : null
+  );
+
+  // Résout le fichier en cours d'extraction depuis sp.file_name
+  let spFile = $derived(
+    sp ? (encoder.files.find(f => f.filename === sp.file_name || f.path.endsWith(sp.file_name)) ?? null) : null
+  );
+
   let nextFile = $derived(activeFiles.find(f => f.status === "queued") ?? null);
   let nextSubFile = $derived(
     extractingSubs
@@ -178,7 +188,9 @@
 
         <!-- Infos à droite -->
         <div class="encode-info">
-          <p class="file-name" title={p.file_name}>{p.file_name}</p>
+          <p class="file-name" title={currentFile ? currentFile.output_name + currentFile.output_ext : p.file_name}>
+            {currentFile ? currentFile.output_name + currentFile.output_ext : p.file_name}
+          </p>
 
           <div class="stats-row">
             <div class="stat">
@@ -250,7 +262,9 @@
           <div class="extract-icon-wrap">
             <Subtitles class="w-5 h-5" style="color: var(--color-accent);" />
           </div>
-          <p class="file-name text-center" title={sp.file_name}>{sp.file_name}</p>
+          <p class="file-name text-center" title={spFile ? spFile.output_name + spFile.output_ext : sp.file_name}>
+            {spFile ? spFile.output_name + spFile.output_ext : sp.file_name}
+          </p>
 
           <div class="global-progress" style="width: 100%; max-width: 340px;">
             <div class="global-progress-header">
@@ -316,8 +330,10 @@
           </div>
           <div class="failed-list">
             {#each failedFiles as r}
+              {@const rFile = encoder.files.find(f => f.filename === r.name || f.path === r.path) ?? null}
+              {@const displayName = rFile ? rFile.output_name + rFile.output_ext : r.name}
               <div class="failed-row">
-                <span class="failed-name" title={r.name}>{r.name.slice(-28)}</span>
+                <span class="failed-name" title={displayName}>{displayName}</span>
                 <span class="failed-badge">{r.status === 'error' ? 'Échec' : 'Annulé'}</span>
               </div>
             {/each}
