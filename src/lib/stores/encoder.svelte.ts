@@ -380,7 +380,13 @@ export function applySeFormat(
       file.output_name.match(
         /\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/,
       )?.[1] ?? "";
-    const audioTag = file.output_name.trim().split(/\s+/).pop() ?? "AAC";
+    // Extraire le codec audio depuis le nom — on cherche un token connu
+    // plutôt que de prendre aveuglément le dernier mot (qui peut être `team`).
+    const AUDIO_CODECS = ["AAC", "AC3", "EAC3", "DTS", "FLAC", "OPUS", "MP3", "TrueHD"];
+    const audioTag =
+      AUDIO_CODECS.find((c) =>
+        new RegExp(`\\b${c}\\b`, "i").test(file.output_name),
+      ) ?? "AAC";
     return buildOutputName(
       file.cleaned,
       tag,
@@ -523,23 +529,25 @@ function createEncoder() {
     const next = new Set(disabledTags);
     next.has(id) ? next.delete(id) : next.add(id);
     disabledTags = next;
+    saveRenamingPrefs();
     persistPrefs();
     refreshOutputNames();
   }
   function setResolutionCase(value: ResolutionCase) {
-    resolutionCase = value; persistPrefs(); refreshOutputNames();
+    resolutionCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
   }
   function setTitleCase(value: TitleCaseMode) {
-    titleCase = value; persistPrefs(); refreshOutputNames();
+    titleCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
   }
   function setCodecFormat(value: CodecFormat) {
-    codecFormat = value; persistPrefs(); refreshOutputNames();
+    codecFormat = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
   }
   function setSourceCase(value: SourceCase) {
-    sourceCase = value; persistPrefs(); refreshOutputNames();
+    sourceCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
   }
   function setTeam(value: string) {
     team = value;
+    saveRenamingPrefs();
     persistPrefs();
     refreshOutputNames();
   }
@@ -801,15 +809,67 @@ function createEncoder() {
 
   // ─── Initialisation ───────────────────────────────────────────────────────
 
-  async function init() {
+  // ─── Persistance prefs renommage — localStorage ──────────────────────────
+  // Tauri ne garantit pas que beforeunload se déclenche à la fermeture native.
+  // localStorage est synchrone et toujours écrit avant que la webview disparaisse.
+
+  const RENAMING_KEY = "rencodeX:renaming";
+
+  function saveRenamingPrefs(): void {
+    try {
+      localStorage.setItem(RENAMING_KEY, JSON.stringify({
+        tag_order:       tagOrder,
+        disabled_tags:   [...disabledTags],
+        resolution_case: resolutionCase,
+        title_case:      titleCase,
+        codec_format:    codecFormat,
+        source_case:     sourceCase,
+        team,
+      }));
+    } catch { /* storage indisponible */ }
+  }
+
+  function loadRenamingPrefs(): void {
+    try {
+      const raw = localStorage.getItem(RENAMING_KEY);
+      if (!raw) return;
+      const p = JSON.parse(raw) as Record<string, unknown>;
+
+      if (
+        Array.isArray(p.tag_order) &&
+        (p.tag_order as string[]).every((id) => DEFAULT_TAG_ORDER.includes(id as TagId))
+      ) tagOrder = p.tag_order as TagId[];
+
+      if (Array.isArray(p.disabled_tags))
+        disabledTags = new Set(
+          (p.disabled_tags as string[]).filter((id) =>
+            DEFAULT_TAG_ORDER.includes(id as TagId)
+          ) as TagId[]
+        );
+
+      if (p.resolution_case === "upper" || p.resolution_case === "lower")
+        resolutionCase = p.resolution_case;
+      if (["original","upper","lower","title"].includes(p.title_case as string))
+        titleCase = p.title_case as TitleCaseMode;
+      if (["H265","H.265","HEVC"].includes(p.codec_format as string))
+        codecFormat = p.codec_format as CodecFormat;
+      if (["original","upper","lower"].includes(p.source_case as string))
+        sourceCase = p.source_case as SourceCase;
+      if (typeof p.team === "string") team = p.team;
+    } catch { /* JSON invalide */ }
+  }
+
+    async function init() {
     outputDir = await invoke<string>("get_default_output_dir");
     await loadDirConfig();
     await loadEncodingSettings();
+    loadRenamingPrefs();  // override Tauri avec localStorage si plus récent
     await stats.init();
     log(`Dossier de sortie : ${outputDir}`, "info");
     await listenEvents();
     window.addEventListener("beforeunload", () => {
       flushPrefs();
+      saveRenamingPrefs();
     });
   }
 
@@ -926,7 +986,13 @@ function createEncoder() {
           audioTag,
           tagOrder,
           team,
-          { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase },
+          {
+            disabledTags:   disabledTags,
+            resolutionCase: resolutionCase,
+            titleCase:      titleCase,
+            codecFormat:    codecFormat,
+            sourceCase:     sourceCase,
+          },
         );
         const updated: AppFile = {
           ...files[idx],
@@ -1053,7 +1119,7 @@ function createEncoder() {
         input_path: f.path,
         output_path: joinPath(
           outputDir,
-          `${applySeFormat(f, seasonEpisodeFormat)}${outExt}`,
+          `${f.output_name}${outExt}`,
         ),
         audio_langs: [...selAudio],
         sub_langs: [...selSubs],
@@ -1291,6 +1357,17 @@ function createEncoder() {
   // ─── Rafraîchissement des noms ────────────────────────────────────────────
 
   function refreshOutputNames() {
+    // Snapshot explicite : garantit la lecture des valeurs $state courantes
+    // avant d'entrer dans le .map() (sécurité Svelte 5 closures).
+    const _tagOrder       = tagOrder;
+    const _disabled       = disabledTags;
+    const _resCase        = resolutionCase;
+    const _titleCase      = titleCase;
+    const _codecFmt       = codecFormat;
+    const _srcCase        = sourceCase;
+    const _seFormat       = seasonEpisodeFormat;
+    const _team           = team;
+
     files = files.map((f) => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done")
         return f;
@@ -1299,11 +1376,17 @@ function createEncoder() {
       const name = buildOutputName(
         f.cleaned,
         tag,
-        seasonEpisodeFormat,
+        _seFormat,
         audioTag,
-        tagOrder,
-        team,
-        { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase },
+        _tagOrder,
+        _team,
+        {
+          disabledTags:   _disabled,
+          resolutionCase: _resCase,
+          titleCase:      _titleCase,
+          codecFormat:    _codecFmt,
+          sourceCase:     _srcCase,
+        },
       );
       return { ...f, output_name: name };
     });

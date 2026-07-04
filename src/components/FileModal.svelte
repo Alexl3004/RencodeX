@@ -32,7 +32,13 @@
   let suggestedName = $derived.by(() => {
     if (!cleaned) return "";
     const tag = computeTag(audio_langs, sub_langs, encoder.selAudio, encoder.selSubs);
-    return buildOutputName(cleaned, tag, encoder.seasonEpisodeFormat, "AAC", encoder.tagOrder, encoder.team);
+    return buildOutputName(cleaned, tag, encoder.seasonEpisodeFormat, "AAC", encoder.tagOrder, encoder.team, {
+      disabledTags:   encoder.disabledTags,
+      resolutionCase: encoder.resolutionCase,
+      titleCase:      encoder.titleCase,
+      codecFormat:    encoder.codecFormat,
+      sourceCase:     encoder.sourceCase,
+    });
   });
 
   $effect(() => { editValue = file.output_name; });
@@ -47,7 +53,13 @@
       .then((r) => {
         cleaned = r;
         const tag = computeTag(audio_langs, sub_langs, encoder.selAudio, encoder.selSubs);
-        if (r) editValue = buildOutputName(r, tag, encoder.seasonEpisodeFormat, "AAC", encoder.tagOrder, encoder.team);
+        if (r) editValue = buildOutputName(r, tag, encoder.seasonEpisodeFormat, "AAC", encoder.tagOrder, encoder.team, {
+          disabledTags:   encoder.disabledTags,
+          resolutionCase: encoder.resolutionCase,
+          titleCase:      encoder.titleCase,
+          codecFormat:    encoder.codecFormat,
+          sourceCase:     encoder.sourceCase,
+        });
       })
       .catch(() => {})
       .finally(() => { loading = false; });
