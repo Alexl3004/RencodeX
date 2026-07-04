@@ -1,22 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { downloadDir } from "@tauri-apps/api/path";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { encoder } from "$lib/stores/encoder.svelte";
   import { theme } from "$lib/stores/theme.svelte";
-  import { fly } from "svelte/transition";
-  import { cubicOut, cubicIn } from "svelte/easing";
   import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
 
   type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
   let activeTab = $state<TabId>("interface");
 
-  const TABS: { id: TabId; label: string; icon: any }[] = [
-    { id: "interface", label: "Interface",  icon: Monitor },
-    { id: "ffmpeg",    label: "FFmpeg",     icon: Cpu },
-    { id: "presets",   label: "Chemins",    icon: FolderOpen },
-    { id: "discord",   label: "Discord",    icon: MessageSquare },
-    { id: "env",       label: "Env",        icon: Terminal },
+  const TABS: { id: TabId; label: string; icon: any; desc: string }[] = [
+    { id: "interface", label: "Interface",  icon: Monitor,      desc: "Thème · couleurs" },
+    { id: "ffmpeg",    label: "FFmpeg",     icon: Cpu,          desc: "Chemin binaire" },
+    { id: "presets",   label: "Chemins",    icon: FolderOpen,   desc: "Dossiers de sortie" },
+    { id: "discord",   label: "Discord",    icon: MessageSquare, desc: "Bot · notifications" },
+    { id: "env",       label: "Env",        icon: Terminal,     desc: "Variables système" },
   ];
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -58,6 +57,8 @@
     discord_notify_error: boolean;
     discord_notify_progress: boolean;
     discord_progress_interval: number;
+    nav_layout: "vertical" | "horizontal";
+    inner_nav_layout: "vertical" | "horizontal";
     /** Champs activés par type : { "start": ["files","size","crf"], … } */
     discord_fields: Record<string, string[]>;
     /** Chemins de sortie prédéfinis */
@@ -65,10 +66,6 @@
   };
 
   // ── Props & état ───────────────────────────────────────────────────────────
-
-  let {
-    open = $bindable(false),
-  } = $props();
 
   let saving    = $state(false);
   let testing   = $state(false);
@@ -100,6 +97,8 @@
     discord_progress_interval: 30,
     discord_fields: {},
     output_dir_presets: [],
+    nav_layout: "vertical",
+    inner_nav_layout: "vertical",
   });
 
   // ── Définition statique des notifications (labels UI) ─────────────────────
@@ -126,7 +125,6 @@
       return;
     }
     confirmReset = false;
-    open = false;
     encoder.resetToDefault();
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
   }
@@ -168,6 +166,8 @@
         discord_progress_interval: g("discord_progress_interval", "discordProgressInterval")  ?? form.discord_progress_interval,
         discord_fields:            g("discord_fields",            "discordFields")            ?? form.discord_fields,
         output_dir_presets:        g("output_dir_presets",        "outputDirPresets")         ?? form.output_dir_presets,
+        nav_layout:                g("nav_layout",                "navLayout")                ?? form.nav_layout,
+        inner_nav_layout:          g("inner_nav_layout",          "innerNavLayout")           ?? form.inner_nav_layout,
       };
 
       // S'assurer que discord_fields contient une entrée pour chaque type
@@ -220,8 +220,12 @@
           discord_progress_interval: form.discord_progress_interval,
           discord_fields:            form.discord_fields,
           output_dir_presets:        form.output_dir_presets,
+          nav_layout:                form.nav_layout,
+          inner_nav_layout:          form.inner_nav_layout,
         }
       });
+      encoder.navLayout = form.nav_layout;
+      encoder.innerNavLayout = form.inner_nav_layout;
       effective = await invoke<EffectiveConfig>("get_effective_config");
       encoder.log("Configuration sauvegardée", "success");
       window.dispatchEvent(new CustomEvent("rencodex:config-saved"));
@@ -295,9 +299,7 @@
 
   // ── Effets ─────────────────────────────────────────────────────────────────
 
-  $effect(() => {
-    if (open) loadSettings();
-  });
+  onMount(() => loadSettings());
 
   // ── Chemins prédéfinis ─────────────────────────────────────────────────────
 
@@ -368,44 +370,19 @@
     effective?.discord_token_set && !form.discord_bot_token,
   );
 
-  const flyParams = { x: 400, duration: 320, easing: cubicOut };
+
 </script>
 
-{#if open}
-<!-- Backdrop -->
-<div
-  class="settings-backdrop"
-  role="presentation"
-  onclick={() => (open = false)}
-  onkeydown={(e) => { if (e.key === 'Escape') open = false; }}
-></div>
+<div class="page-root" class:page-root--horizontal={encoder.innerNavLayout === "horizontal"}>
 
-<!-- Drawer -->
-<div
-  class="settings-panel"
-  role="dialog"
-  aria-modal="true"
-  aria-label="Paramètres"
-  tabindex="-1"
-  in:fly={{ x: 400, duration: 320, easing: cubicOut }}
-  out:fly={{ x: 400, duration: 220, easing: cubicIn }}
->
-  <!-- Header -->
-  <div class="drawer-header">
-    <div class="flex items-center gap-2">
-      <div class="w-[3px] h-4 rounded-[1px]" style="background: var(--color-accent);"></div>
-      <span class="font-mono text-[12px] font-semibold uppercase tracking-wider" style="color: var(--color-text);">Paramètres</span>
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">Paramètres</span>
+      <span class="sidebar-sub">Config · Outils</span>
     </div>
-    <button onclick={() => (open = false)} class="icon-btn" title="Fermer" aria-label="Fermer">
-      <X class="w-4 h-4" />
-    </button>
-  </div>
 
-  <!-- Body : sidebar nav + content -->
-  <div class="drawer-body">
-
-    <!-- Sidebar nav -->
-    <nav class="drawer-nav" aria-label="Navigation paramètres">
+    <nav class="sidebar-nav" aria-label="Navigation paramètres">
       {#each TABS as tab}
         <button
           type="button"
@@ -413,24 +390,116 @@
           class="nav-item {activeTab === tab.id ? 'nav-item--active' : ''}"
           aria-current={activeTab === tab.id ? "page" : undefined}
         >
-          {#if tab.id === 'interface'}<Monitor class="w-3.5 h-3.5 shrink-0" />
-          {:else if tab.id === 'ffmpeg'}<Cpu class="w-3.5 h-3.5 shrink-0" />
-          {:else if tab.id === 'presets'}<FolderOpen class="w-3.5 h-3.5 shrink-0" />
-          {:else if tab.id === 'discord'}<MessageSquare class="w-3.5 h-3.5 shrink-0" />
-          {:else if tab.id === 'env'}<Terminal class="w-3.5 h-3.5 shrink-0" />
+          <div class="nav-item-icon">
+            <tab.icon class="w-3.5 h-3.5" />
+          </div>
+          <div class="nav-item-text">
+            <span class="nav-item-label">{tab.label}</span>
+            <span class="nav-item-desc">{tab.desc}</span>
+          </div>
+          {#if activeTab === tab.id}
+            <div class="nav-item-indicator" aria-hidden="true"></div>
           {/if}
-          <span class="nav-label">{tab.label}</span>
         </button>
       {/each}
     </nav>
 
-    <!-- Tab content -->
-    <div class="drawer-content">
+    <!-- Footer : bouton sauvegarder -->
+    <div class="sidebar-footer">
+      <button
+        onclick={save}
+        disabled={saving}
+        class="save-btn"
+        aria-label={saving ? "Sauvegarde en cours" : "Sauvegarder les paramètres"}
+      >
+        {#if saving}
+          <span class="spinner" aria-hidden="true"></span>
+          Sauvegarde…
+        {:else}
+          <Check class="w-3.5 h-3.5" />
+          Sauvegarder
+        {/if}
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Content panel ────────────────────────────────────────────────────── -->
+  <div class="content-panel">
+    <div class="content-inner">
 
     <!-- ── Interface ─────────────────────────────────────────── -->
     {#if activeTab === "interface"}
-      <section class="space-y-3">
-      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Interface</div>
+      <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">Interface</h2>
+          <p class="section-desc">Personnalisez l'apparence de l'application.</p>
+        </div>
+      </header>
+
+      <!-- Navigation globale -->
+      <div>
+        <span class="field-label">Navigation globale</span>
+        <p class="field-hint">Disposition de la barre de navigation principale de l'application.</p>
+        <div class="flex gap-2">
+          <button type="button" onclick={() => { form.nav_layout = "vertical"; encoder.navLayout = "vertical"; save(); }}
+            class="layout-btn {form.nav_layout === 'vertical' ? 'layout-btn--active' : ''}"
+            aria-pressed={form.nav_layout === "vertical"}>
+            <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0.5" y="0.5" width="35" height="27" rx="3.5" stroke="currentColor" stroke-opacity="0.3"/>
+              <rect x="2" y="2" width="8" height="24" rx="2" fill="currentColor" fill-opacity="0.15"/>
+              <rect x="3" y="4" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="3" y="8" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="3" y="12" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+            </svg>
+            <span>Verticale</span>
+          </button>
+          <button type="button" onclick={() => { form.nav_layout = "horizontal"; encoder.navLayout = "horizontal"; save(); }}
+            class="layout-btn {form.nav_layout === 'horizontal' ? 'layout-btn--active' : ''}"
+            aria-pressed={form.nav_layout === "horizontal"}>
+            <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0.5" y="0.5" width="35" height="27" rx="3.5" stroke="currentColor" stroke-opacity="0.3"/>
+              <rect x="2" y="2" width="32" height="7" rx="2" fill="currentColor" fill-opacity="0.15"/>
+              <rect x="4" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="11" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="18" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+            </svg>
+            <span>Horizontale</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation interne -->
+      <div>
+        <span class="field-label">Navigation des pages</span>
+        <p class="field-hint">Disposition des menus de navigation dans chaque page (Encodage, Renommage, etc.).</p>
+        <div class="flex gap-2">
+          <button type="button" onclick={() => { form.inner_nav_layout = "vertical"; encoder.innerNavLayout = "vertical"; save(); }}
+            class="layout-btn {form.inner_nav_layout === 'vertical' ? 'layout-btn--active' : ''}"
+            aria-pressed={form.inner_nav_layout === "vertical"}>
+            <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0.5" y="0.5" width="35" height="27" rx="3.5" stroke="currentColor" stroke-opacity="0.3"/>
+              <rect x="2" y="2" width="8" height="24" rx="2" fill="currentColor" fill-opacity="0.15"/>
+              <rect x="3" y="4" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="3" y="8" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="3" y="12" width="6" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+            </svg>
+            <span>Verticale</span>
+          </button>
+          <button type="button" onclick={() => { form.inner_nav_layout = "horizontal"; encoder.innerNavLayout = "horizontal"; save(); }}
+            class="layout-btn {form.inner_nav_layout === 'horizontal' ? 'layout-btn--active' : ''}"
+            aria-pressed={form.inner_nav_layout === "horizontal"}>
+            <svg width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="0.5" y="0.5" width="35" height="27" rx="3.5" stroke="currentColor" stroke-opacity="0.3"/>
+              <rect x="2" y="2" width="32" height="7" rx="2" fill="currentColor" fill-opacity="0.15"/>
+              <rect x="4" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="11" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+              <rect x="18" y="3.5" width="5" height="2" rx="1" fill="currentColor" fill-opacity="0.5"/>
+            </svg>
+            <span>Horizontale</span>
+          </button>
+        </div>
+      </div>
 
       <!-- Couleur primaire -->
       <div>
@@ -496,8 +565,13 @@
 
     <!-- ── FFmpeg ──────────────────────────────────────────────── -->
     {:else if activeTab === "ffmpeg"}
-      <section class="space-y-3">
-      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">FFmpeg</div>
+      <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">FFmpeg</h2>
+          <p class="section-desc">Chemin vers le binaire ffmpeg utilisé pour l'encodage.</p>
+        </div>
+      </header>
       <div>
         <label for="ffmpeg-path" class="field-label">Chemin vers ffmpeg.exe</label>
         <input
@@ -512,16 +586,16 @@
 
     <!-- ── Chemins ──────────────────────────────────────────────── -->
     {:else if activeTab === "presets"}
-      <section class="space-y-3">
-      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">
-        Chemins de sortie prédéfinis
-      </div>
-      <p class="font-mono text-[10px]" style="color: var(--color-subtext); line-height: 1.5;">
-        Ces chemins apparaîtront dans le menu de la DropZone, en plus de l'historique récent.
-      </p>
+      <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">Chemins de sortie</h2>
+          <p class="section-desc">Ces chemins apparaîtront dans le menu de la DropZone, en plus de l'historique récent.</p>
+        </div>
+      </header>
 
       <!-- Champ d'ajout -->
-      <div class="flex gap-2">
+      <div class="flex gap-2 mb-2">
         <input
           type="text"
           bind:value={newPreset}
@@ -585,9 +659,12 @@
 
     <!-- ── Discord ──────────────────────────────────────────────── -->
     {:else if activeTab === "discord"}
-      <section class="space-y-3">
-      <div class="flex items-center justify-between pb-2" style="border-bottom: 1px solid var(--color-border);">
-        <div class="section-label">Discord</div>
+      <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">Discord</h2>
+          <p class="section-desc">Configurez le bot Discord pour recevoir des notifications d'encodage.</p>
+        </div>
         <label class="toggle-row">
           <span class="font-mono text-[10px]" style="color: var(--color-subtext);">Activer</span>
           <button
@@ -599,7 +676,7 @@
             class="toggle {form.discord_enabled ? 'on' : ''}"
           ></button>
         </label>
-      </div>
+      </header>
 
       {#if form.discord_enabled}
 
@@ -836,8 +913,13 @@
 
     <!-- ── Env ──────────────────────────────────────────────── -->
     {:else if activeTab === "env"}
-      <section class="space-y-3">
-      <div class="section-label pb-2" style="border-bottom: 1px solid var(--color-border);">Variables d'environnement</div>
+      <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">Variables d'environnement</h2>
+          <p class="section-desc">Surcharge de la configuration via les variables système détectées au démarrage.</p>
+        </div>
+      </header>
       <div class="space-y-1" role="list" aria-label="Variables d'environnement actives">
         {#each [
           { key: 'RENCODEX_FFMPEG_PATH',         active: effective?.ffmpeg_path !== form.ffmpeg_path },
@@ -845,7 +927,7 @@
           { key: 'RENCODEX_DISCORD_LOG_CHANNEL',  active: effective?.discord_log_channel_id !== form.discord_log_channel_id },
           { key: 'RENCODEX_DISCORD_CMD_CHANNEL',  active: effective?.discord_cmd_channel_id !== form.discord_cmd_channel_id },
         ] as v}
-          <div class="flex items-center justify-between px-3 py-2 rounded-[var(--radius-sm)]"
+          <div class="flex items-center justify-between px-1 py-2 rounded-[var(--radius-sm)]"
                style="background: var(--color-surface); border: 1px solid var(--color-border);"
                role="listitem">
             <span class="font-mono text-[10px]" style="color: var(--color-subtext);">{v.key}</span>
@@ -860,179 +942,220 @@
     </section>
 
     {/if}
-    </div><!-- end drawer-content -->
-  </div><!-- end drawer-body -->
+    </div><!-- end content-inner -->
+  </div><!-- end content-panel -->
 
-  <!-- Footer -->
-  <div class="drawer-footer">
-    <button
-      onclick={save}
-      disabled={saving}
-      class="btn btn-primary justify-center font-mono text-[11px]"
-      aria-label={saving ? "Sauvegarde en cours" : "Sauvegarder les paramètres"}
-    >
-      {#if saving}
-        <span class="spinner w-3 h-3 border-2 border-white/30 border-t-white shrink-0 rounded-full animate-spin"></span>
-        SAUVEGARDE…
-      {:else}SAUVEGARDER{/if}
-    </button>
-    <button
-      onclick={() => (open = false)}
-      class="btn btn-secondary font-mono text-[11px]"
-      aria-label="Fermer sans sauvegarder"
-    >
-      FERMER
-    </button>
-  </div>
-</div>
-{/if}
+</div><!-- end page-root -->
 
 <style>
-  /* ── Backdrop & modal ─────────────────────────────────────────────────────── */
+  /* ── Layout ──────────────────────────────────────────────────────────────── */
 
-  .settings-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 9980;
-    background: transparent;
+  .page-root {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    background: var(--color-surface);
   }
 
-  .settings-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 400px;
-    z-index: 9981;
-    background: var(--color-panel);
-    border-left: 1px solid var(--color-border);
-    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-    box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+  /* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+  .sidebar {
+    width: 200px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    color: var(--color-text);
+    background: var(--color-panel);
+    border-right: 1px solid var(--color-border);
     overflow: hidden;
   }
 
-  .drawer-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 16px;
+  .sidebar-header {
+    padding: 20px 16px 14px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
-
-  .drawer-body {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+  .sidebar-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+  .sidebar-sub {
+    display: block;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--color-subtext2);
+    margin-top: 3px;
+    text-transform: uppercase;
   }
 
-  /* Sidebar nav */
-  .drawer-nav {
-    width: 44px;
-    flex-shrink: 0;
+  .sidebar-nav {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 12px 6px;
-    border-right: 1px solid var(--color-border);
-    background: var(--color-surface);
-    overflow: hidden;
-    position: relative;
-    z-index: 10;
-    /* Fermeture : même easing/durée que le out:fly de la modal (cubicIn, 220ms) */
-    transition: width 220ms cubic-bezier(0.32, 0, 0.67, 0);
-  }
-  .drawer-nav:hover {
-    width: 112px;
-    /* Ouverture : même easing/durée que le in:fly de la modal (cubicOut, 320ms), avec un délai pour éviter les survols rapides */
-    transition: width 320ms cubic-bezier(0.33, 1, 0.68, 1) 180ms;
   }
 
   .nav-item {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-family: "Geist Mono", monospace;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 7px 8px;
+    gap: 10px;
+    padding: 8px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     background: transparent;
-    color: var(--color-subtext);
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: background 0.1s, border-color 0.1s;
     width: 100%;
+  }
+  .nav-item:hover { background: color-mix(in srgb, var(--color-muted) 30%, transparent); }
+  .nav-item--active {
+    background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  }
+
+  .nav-item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-xs);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-subtext);
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .nav-item--active .nav-item-icon {
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+    color: var(--color-accent);
+  }
+
+  .nav-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1;
+  }
+  .nav-item-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-subtext);
+    line-height: 1.2;
+    transition: color 0.1s;
+  }
+  .nav-item--active .nav-item-label {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+  .nav-item-desc {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
     white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .nav-item:hover {
-    background: var(--color-panel);
-    color: var(--color-text);
-    transform: translateX(2px);
-  }
-  .nav-item--active {
-    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-accent) 28%, transparent);
-    color: var(--color-accent);
-  }
-  .nav-item--active:hover {
-    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-    color: var(--color-accent);
+  .nav-item-indicator {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    border-radius: 2px 0 0 2px;
+    background: var(--color-accent);
   }
 
-  .nav-label {
-    opacity: 0;
-    transform: translateX(-6px);
-    transition: opacity 180ms cubic-bezier(0.32, 0, 0.67, 0) 0s, transform 180ms cubic-bezier(0.32, 0, 0.67, 0) 0s;
-    pointer-events: none;
-  }
-  .drawer-nav:hover .nav-label {
-    opacity: 1;
-    transform: translateX(0);
-    transition: opacity 280ms cubic-bezier(0.33, 1, 0.68, 1) 260ms, transform 280ms cubic-bezier(0.33, 1, 0.68, 1) 260ms;
-  }
-
-  /* Content area */
-  .drawer-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-  }
-
-  .drawer-footer {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    padding: 10px 16px;
+  /* Sidebar footer */
+  .sidebar-footer {
+    padding: 12px;
     border-top: 1px solid var(--color-border);
     flex-shrink: 0;
   }
-
-  /* ── Icônes ───────────────────────────────────────────────────────────────── */
-
-  .icon-btn {
-    width: 26px;
-    height: 26px;
-    display: inline-flex;
+  .save-btn {
+    display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-xs);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-subtext);
+    gap: 6px;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    transition: background 0.15s, border-color 0.15s;
   }
-  .icon-btn:hover {
-    background: var(--color-panel2);
-    border-color: var(--color-border);
+  .save-btn:hover {
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 50%, var(--color-border));
+  }
+  .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Content panel ───────────────────────────────────────────────────────── */
+
+  .content-panel {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .content-inner {
+    max-width: 560px;
+  }
+
+  .content-section {
+    padding: 28px 32px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
     color: var(--color-text);
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
   }
+  .section-desc {
+    font-size: 12px;
+    color: var(--color-subtext);
+    line-height: 1.6;
+    max-width: 380px;
+    margin: 0;
+  }
+
+  /* ── Icônes ───────────────────────────────────────────────────────────────── */
 
   .icon-btn-inline {
     color: var(--color-subtext);
@@ -1301,5 +1424,111 @@
     font-family: "Geist Mono", monospace;
     font-size: 9px;
     color: #5c6370;
+  }
+  .field-hint {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    margin: 2px 0 6px;
+    opacity: 0.7;
+  }
+
+  /* ── Layout picker ─────────────────────────────────────────────────────── */
+  .layout-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-subtext);
+    cursor: pointer;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .layout-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text);
+  }
+  .layout-btn--active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+  }
+
+  /* ── Layout horizontal ──────────────────────────────────────────────────── */
+  .page-root--horizontal {
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+  .page-root--horizontal .sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0 12px;
+    gap: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    flex-shrink: 0;
+  }
+  .page-root--horizontal .sidebar-header {
+    display: none;
+  }
+  .page-root--horizontal .sidebar-footer {
+    display: none;
+  }
+  .page-root--horizontal .sidebar-nav {
+    flex-direction: row;
+    padding: 0;
+    gap: 2px;
+    overflow: visible;
+    flex: 1;
+    justify-content: center;
+  }
+  .page-root--horizontal .nav-item {
+    flex-direction: row;
+    min-height: 36px;
+    width: auto;
+    padding: 6px 14px;
+    gap: 6px;
+    border-left: none;
+    border-bottom: none;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+  }
+  .page-root--horizontal .nav-item--active {
+    border-left-color: transparent;
+  }
+  .page-root--horizontal .nav-item-indicator {
+    display: none;
+  }
+  .page-root--horizontal .nav-item-text {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+  .page-root--horizontal .nav-item-desc {
+    display: none;
+  }
+  .page-root--horizontal .content-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+  }
+  .page-root--horizontal .content-panel > *,
+  .page-root--horizontal .content-inner {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
   }
 </style>

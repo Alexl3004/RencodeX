@@ -92,6 +92,10 @@ pub struct AppConfig {
     pub discord_progress_interval: u64,
     #[serde(default)]
     pub discord_fields: HashMap<String, Vec<String>>,
+    #[serde(default = "default_nav_layout")]
+    pub nav_layout: String,
+    #[serde(default = "default_inner_nav_layout")]
+    pub inner_nav_layout: String,
     #[serde(default)]
     pub output_dir_presets: Vec<String>,
     #[serde(default)]
@@ -116,6 +120,8 @@ impl Default for AppConfig {
             discord_notify_progress:  false,
             discord_progress_interval: 30,
             discord_fields: HashMap::new(),
+            nav_layout: default_nav_layout(),
+            inner_nav_layout: default_inner_nav_layout(),
             output_dir_presets: Vec::new(),
             output_dir_history: Vec::new(),
         }
@@ -170,6 +176,8 @@ pub struct EncodingPrefs {
     pub source_case: String,
 }
 
+fn default_nav_layout() -> String { "vertical".to_string() }
+fn default_inner_nav_layout() -> String { "vertical".to_string() }
 fn default_crf() -> u32 { 28 }
 fn default_preset() -> String { "p5".to_string() }
 fn default_se_format() -> String { "S01E01".to_string() }

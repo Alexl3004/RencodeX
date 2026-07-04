@@ -446,6 +446,8 @@ function createEncoder() {
   let subOverrides = $state<Record<string, Record<string, string>>>({});
   let globalCodecOverride = $state<Record<string, string>>({});
   let outputDir = $state("");
+  let navLayout = $state<"vertical" | "horizontal">("vertical");
+  let innerNavLayout = $state<"vertical" | "horizontal">("vertical");
   let encoding = $state(false);
   let progress = $state<ProgressEvent | null>(null);
   let summary = $state<EncodeSummary | null>(null);
@@ -800,6 +802,8 @@ function createEncoder() {
   async function loadDirConfig() {
     try {
       const cfg = await invoke<Record<string, any>>("load_config");
+    if (cfg.nav_layout) navLayout = cfg.nav_layout as "vertical" | "horizontal";
+    if (cfg.inner_nav_layout) innerNavLayout = cfg.inner_nav_layout as "vertical" | "horizontal";
       const g = (snake: string, camel: string) => cfg[snake] ?? cfg[camel];
       outputDirPresets = (g("output_dir_presets", "outputDirPresets") as string[] | undefined) ?? [];
     } catch {
@@ -1574,6 +1578,18 @@ function createEncoder() {
       return outputDirPresets;
     },
     loadDirConfig,
+    get navLayout() {
+      return navLayout;
+    },
+    set navLayout(v: "vertical" | "horizontal") {
+      navLayout = v;
+    },
+    get innerNavLayout() {
+      return innerNavLayout;
+    },
+    set innerNavLayout(v: "vertical" | "horizontal") {
+      innerNavLayout = v;
+    },
     get encoding() {
       return encoding;
     },
