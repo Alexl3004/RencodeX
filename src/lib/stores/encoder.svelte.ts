@@ -1326,20 +1326,32 @@ function createEncoder() {
             }
           }
 
+          // Override par fichier si disponible, sinon sélection globale
+          const activeSubs = fileSelSubs.get(file.path) ?? selSubs;
+          const extracted: string[] = [];
           for (const track of tracks) {
-            if (!selSubs.has(track.language)) continue;
+            if (!activeSubs.has(track.language)) continue;
             const outputPath = `${dir}\\${baseName}.${track.language}.${subExtractFormat}`;
             await invoke("extract_subtitles", {
               sourcePath: file.path,
               trackIndex: track.index,
               outputPath,
             });
+            extracted.push(track.language.toUpperCase());
           }
 
           files = files.map((f) =>
             f.path === file.path ? { ...f, sub_extract_status: "done" } : f,
           );
-          log(`Sous-titres extraits pour ${file.filename}`, "success");
+          if (extracted.length > 0) {
+            toasts.success(
+              `${extracted.join(", ")} · ${subExtractFormat.toUpperCase()} extrait${extracted.length > 1 ? "s" : ""}`,
+              { title: file.output_name },
+            );
+          } else {
+            toasts.warn("Aucune piste correspondant à la sélection", { title: file.output_name });
+          }
+          log(`Sous-titres extraits pour ${file.filename} [${extracted.join(", ")}]`, "success");
         } catch (e) {
           const errMsg = String(e);
           files = files.map((f) =>
@@ -1347,11 +1359,11 @@ function createEncoder() {
               ? { ...f, sub_extract_status: "error", sub_extract_error: errMsg }
               : f,
           );
+          toasts.error(errMsg, { title: `Erreur — ${file.output_name}` });
           log(`Erreur extraction pour ${file.filename} : ${errMsg}`, "error");
         }
       }
       await stats.recordExtraction(files, selSubs);
-      toasts.success("Extraction des sous-titres terminée");
     } catch (e) {
       log(`Erreur globale lors de l'extraction : ${e}`, "error");
     } finally {

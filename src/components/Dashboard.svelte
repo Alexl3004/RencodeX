@@ -13,6 +13,7 @@
     Trophy,
     Weight,
     History,
+    Zap,
   } from "@lucide/svelte";
   import { Popover, Portal } from "@skeletonlabs/skeleton-svelte";
   import { Chart, Svg, Spline } from "layerchart";
@@ -39,14 +40,16 @@
   let encodeSessions        = $derived(stats.encodeSessions);
   let extractSessions       = $derived(stats.extractSessions);
   let hasData               = $derived(totalFiles > 0);
+  let lastSession           = $derived(encodeSessions.length > 0 ? encodeSessions[0] : null);
   let hasExtractData        = $derived(totalExtractLaunched > 0);
 
   // ── Navigation ─────────────────────────────────────────────────────────
-  type SectionId = "encodage" | "extraction";
+  type SectionId = "encodage" | "historique" | "extraction";
   let activeSection = $state<SectionId>("encodage");
 
   const SECTIONS: { id: SectionId; label: string; icon: any; desc: string }[] = [
     { id: "encodage",   label: "Encodage",   icon: BarChart3,  desc: "Compression · succès" },
+    { id: "historique", label: "Historique", icon: History,    desc: "Sessions · records" },
     { id: "extraction", label: "Extraction", icon: Subtitles,  desc: "Sous-titres extraits" },
   ];
 
@@ -240,9 +243,59 @@
             </div>
           </div>
 
-          <!-- ── Records ──────────────────────────────────────────────────── -->
-          {#if recordHeaviest || recordBestRatio}
+        {/if}
+      </section>
+
+    <!-- ════ HISTORIQUE ════ -->
+    {:else if activeSection === "historique"}
+      <section class="content-section">
+        <header class="section-header">
+          <div>
+            <h2 class="section-title">Historique</h2>
+            <p class="section-desc">
+              Dernière session d'encodage et records personnels.
+            </p>
+          </div>
+        </header>
+
+        {#if !hasData}
+          <div class="empty-state">
+            <History class="w-8 h-8" style="color:var(--color-subtext2);" />
+            <span class="empty-label">Aucun historique disponible</span>
+            <span class="empty-sub">Lance un premier encodage pour voir apparaître l'historique.</span>
+          </div>
+        {:else}
+
+          <!-- ── Dernière session ───────────────────────────────────────────── -->
+          {#if lastSession}
             <div class="subsection-title">
+              <Zap class="w-3 h-3" />
+              Dernière session
+            </div>
+            <div class="last-session-card">
+              <div class="ls-date">{formattedDate(lastSession.date)}</div>
+              <div class="ls-stats-row">
+                <div class="ls-stat">
+                  <span class="ls-stat-label">Fichiers</span>
+                  <span class="ls-stat-value">{lastSession.files}</span>
+                </div>
+                <div class="ls-divider"></div>
+                <div class="ls-stat">
+                  <span class="ls-stat-label">Économisé</span>
+                  <span class="ls-stat-value ls-stat-value--success">{formatSize(lastSession.saved_mb)}</span>
+                </div>
+                <div class="ls-divider"></div>
+                <div class="ls-stat">
+                  <span class="ls-stat-label">Compression</span>
+                  <span class="ls-stat-value ls-stat-value--accent">−{lastSession.ratio_pct.toFixed(1)}%</span>
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- ── Records ───────────────────────────────────────────────────── -->
+          {#if recordHeaviest || recordBestRatio}
+            <div class="subsection-title" style="margin-top: 24px;">
               <Trophy class="w-3 h-3" />
               Records
             </div>
@@ -280,14 +333,13 @@
             </div>
           {/if}
 
-          <!-- ── Historique sessions ───────────────────────────────────────── -->
+          <!-- ── Toutes les sessions ────────────────────────────────────────── -->
           {#if encodeSessions.length > 0}
-            <div class="subsection-title">
+            <div class="subsection-title" style="margin-top: 24px;">
               <History class="w-3 h-3" />
-              Dernières sessions
+              Sessions
             </div>
             <div class="sessions-block">
-              <!-- Sparkline ratio — LayerChart -->
               {#if encodeSessions.length >= 2}
                 <div class="spark-wrap">
                   <div style="height: 44px;">
@@ -306,7 +358,6 @@
                   <span class="spark-label">Compression % / session</span>
                 </div>
               {/if}
-              <!-- Liste -->
               <div class="sessions-list">
                 {#each encodeSessions as s, i}
                   <div class="session-row {i === 0 ? 'session-row--latest' : ''}">
@@ -1058,4 +1109,56 @@
     width: 100%;
     max-width: 720px;
   }
+  /* ── Dernière session ── */
+  .last-session-card {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .ls-date {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext2);
+    letter-spacing: 0.03em;
+  }
+  .ls-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .ls-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+  }
+  .ls-divider {
+    width: 1px;
+    height: 32px;
+    background: var(--color-border);
+    flex-shrink: 0;
+  }
+  .ls-stat-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-subtext2);
+  }
+  .ls-stat-value {
+    font-family: "Geist Mono", monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1;
+  }
+  .ls-stat-value--success { color: var(--color-success); }
+  .ls-stat-value--accent  { color: var(--color-accent); }
+
+
 </style>

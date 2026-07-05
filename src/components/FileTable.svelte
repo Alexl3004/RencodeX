@@ -23,6 +23,7 @@
     Headphones,
     MessageSquare,
     RotateCcw,
+    FileDown,
   } from "@lucide/svelte";
 
   let filterText = $state("");
@@ -237,6 +238,14 @@
         return { label: "", color: "", icon: undefined };
     }
   }
+  // Extraction depuis le context menu — délègue au store (ProgressPanel + toasts)
+  function ctxExtractSubs(file: AppFile) {
+    if (!file.sub_langs.length || encoder.extractingSubs) return;
+    closeCtx();
+    // Force la sélection sur ce fichier uniquement puis lance
+    encoder.setExtractSelection([file.path]);
+    encoder.startSubtitleExtraction();
+  }
 </script>
 
 {#if infoFile}
@@ -393,6 +402,26 @@
           </button>
         </div>
       </div>
+    {/if}
+
+    <!-- Extraire les sous-titres -->
+    {#if ctxMenu.file.sub_langs.length > 0 && !encoder.encoding}
+      <div class="ctx-sep"></div>
+      <button
+        type="button"
+        class="ctx-item"
+        role="menuitem"
+        disabled={encoder.extractingSubs}
+        onclick={() => ctxExtractSubs(ctxMenu!.file)}
+      >
+        {#if encoder.extractingSubs}
+          <LoaderCircle class="w-3.5 h-3.5 shrink-0 animate-spin" />
+        {:else}
+          <FileDown class="w-3.5 h-3.5 shrink-0" />
+        {/if}
+        Extraire les sous-titres
+        <span class="ctx-extract-fmt">{encoder.subExtractFormat.toUpperCase()}</span>
+      </button>
     {/if}
 
     <div class="ctx-sep"></div>
@@ -1318,4 +1347,16 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
-</style>110px 
+
+  .ctx-extract-fmt {
+    margin-left: auto;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-success) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-success) 25%, transparent);
+    color: var(--color-success);
+  }
+</style>110px
