@@ -1,6 +1,6 @@
 # RenCodeX — Tauri 2 + Svelte 5 + Rust
 
-Encodeur vidéo desktop **H265/HEVC NVENC** pour Windows, avec nettoyage intelligent de noms de fichiers (entièrement personnalisable), notifications Discord, rapports email et scan de dossiers.
+Encodeur vidéo desktop **H265/HEVC NVENC** pour Windows, avec nettoyage intelligent de noms de fichiers entièrement personnalisable, notifications Discord riches, commandes bot à distance, rapports email et scan de dossiers récursif.
 
 ---
 
@@ -50,7 +50,7 @@ Pour utiliser un chemin différent, deux options :
 $env:RENCODEX_FFMPEG_PATH = "C:\chemin\vers\ffmpeg.exe"
 ```
 
-**Option B — Via l'interface :** modifier le chemin dans les Settings de l'application (sauvegardé dans `%APPDATA%\RenCodeX\config.json`).
+**Option B — Via l'interface :** modifier le chemin dans les Settings de l'application (onglet FFmpeg). Sauvegardé dans `%APPDATA%\RenCodeX\config.json`.
 
 ---
 
@@ -74,44 +74,53 @@ npm run tauri build
 
 ```
 RenCodeX/
-├── src-tauri/                   # Backend Rust
+├── src-tauri/                        # Backend Rust
 │   ├── src/
-│   │   ├── main.rs              # Point d'entrée Tauri + démarrage bot Discord
-│   │   ├── models.rs            # Structs partagées (AppConfig, EncodingPrefs, EncodeJob…)
-│   │   ├── state.rs             # État global de l'encodeur (Mutex partagé)
-│   │   ├── regex.rs             # Regex pré-compilées (Once_cell) pour noms de fichiers
-│   │   ├── utils.rs             # Utilitaires : chemins, langues, config, resolve_config
-│   │   ├── filename.rs          # Logique de nettoyage et parsing de noms de fichiers
-│   │   ├── media.rs             # Analyse ffprobe + encodage FFmpeg async
-│   │   ├── notify.rs            # Notifications Discord (bot + webhooks) + email SMTP
-│   │   └── commands.rs          # Commandes Tauri exposées au frontend
+│   │   ├── main.rs                   # Point d'entrée Tauri + démarrage bot Discord
+│   │   ├── models.rs                 # Structs partagées (AppConfig, EncodingPrefs, EncodeJob…)
+│   │   ├── state.rs                  # État global de l'encodeur (Mutex partagé)
+│   │   ├── regex.rs                  # Regex pré-compilées (once_cell) pour noms de fichiers
+│   │   ├── utils.rs                  # Utilitaires : chemins, langues, title case, resolve_config
+│   │   ├── filename.rs               # Logique de nettoyage et parsing de noms de fichiers
+│   │   ├── media.rs                  # Analyse ffprobe + encodage FFmpeg async + progression
+│   │   ├── notify.rs                 # Notifications Discord (bot + embeds) + bot Serenity + email SMTP
+│   │   ├── discord_fields.rs         # Catalogue et valeurs par défaut des champs Discord
+│   │   ├── commands.rs               # Commandes Tauri exposées au frontend (~20 commandes)
+│   │   └── tests.rs                  # Tests unitaires (noms de fichiers, langues, title case)
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 │
-├── src/                         # Frontend Svelte 5
+├── src/                              # Frontend Svelte 5 (runes)
 │   ├── routes/
 │   │   ├── +layout.svelte
 │   │   ├── +layout.ts
-│   │   └── +page.svelte         # Page principale
+│   │   └── +page.svelte              # Shell principal + navigation
 │   ├── components/
-│   │   ├── TopBar.svelte
-│   │   ├── DropZone.svelte
-│   │   ├── FileTable.svelte
-│   │   ├── LangSelector.svelte
-│   │   ├── EncodingSettings.svelte # Paramètres d'encodage (CRF, preset, ordre des tags, team…)
-│   │   ├── RenameModal.svelte      # Renommage assisté d'un fichier
-│   │   ├── ProgressPanel.svelte
-│   │   ├── LogConsole.svelte
-│   │   ├── OutputDirPicker.svelte
-│   │   ├── Settings.svelte         # Préférences générales (ffmpeg, Discord, email)
-│   │   └── ControlBar.svelte
+│   │   ├── TopBar.svelte             # Barre du haut : logo, statut, navigation
+│   │   ├── DropZone.svelte           # Zone de dépôt de fichiers
+│   │   ├── FileTable.svelte          # Table des fichiers en file d'attente
+│   │   ├── FileLangModal.svelte      # Sélection des pistes audio/sous-titres par fichier
+│   │   ├── FileModal.svelte          # Détail d'un fichier (streams, infos)
+│   │   ├── FileRenameModal.svelte    # Renommage assisté avec aperçu du nom généré
+│   │   ├── LangSelector.svelte       # Sélecteur de langues global
+│   │   ├── LangPopover.svelte        # Popover de langue inline dans la table
+│   │   ├── ProgressPanel.svelte      # Barre de progression + ETA
+│   │   ├── ControlBar.svelte         # Boutons Encoder / Annuler
+│   │   ├── EncodingSettings.svelte   # CRF, preset, ordre des tags, team, AQ, multipass…
+│   │   ├── RenamingSettings.svelte   # Format S/E, casse, tags désactivables, codec affiché
+│   │   ├── Dashboard.svelte          # Statistiques cumulées et historique des sessions
+│   │   ├── LogConsole.svelte         # Console de logs en temps réel
+│   │   ├── OutputDirPicker.svelte    # Sélecteur de dossier de sortie
+│   │   ├── Settings.svelte           # Préférences générales (FFmpeg, Discord, email, layout)
+│   │   └── ToastNotif.svelte         # Notifications toast
 │   ├── lib/
 │   │   ├── stores/
-│   │   │   ├── encoder.svelte.ts   # Store Svelte 5 runes (état encodeur, ordre des tags…)
-│   │   │   ├── stats.svelte.ts     # Statistiques cumulées
-│   │   │   └── theme.svelte.ts     # Store thème dark/light
-│   │   └── utils.ts                # Formatage durée / taille
-│   └── app.css                     # Variables CSS thème
+│   │   │   ├── encoder.svelte.ts     # Store principal (fichiers, encodage, prefs, types)
+│   │   │   ├── stats.svelte.ts       # Statistiques cumulées persistantes
+│   │   │   ├── theme.svelte.ts       # Thème dark/light + palettes de couleurs
+│   │   │   └── toasts.svelte.ts      # File de notifications toast
+│   │   └── utils.ts                  # Formatage durée / taille
+│   └── app.css                       # Variables CSS globales (thème, radius, fonts)
 │
 ├── package.json
 ├── svelte.config.js
@@ -128,54 +137,64 @@ RenCodeX/
 | Drag & drop fichiers | ✅ |
 | Scan de dossier récursif | ✅ |
 | Analyse ffprobe async (streams, langues, durée, FPS) | ✅ |
-| Détection langues audio & sous-titres | ✅ |
-| Sélection des pistes à conserver | ✅ |
+| Détection et sélection des pistes audio & sous-titres | ✅ |
+| Override de langue par piste (par fichier) | ✅ |
 | Encodage H265 NVENC (CRF configurable, main10, p010le) | ✅ |
-| Progression temps-réel (vitesse, temps restant) | ✅ |
+| AQ spatiale / temporelle + multipass NVENC | ✅ |
+| Conteneur MKV ou MP4 | ✅ |
+| Mode audio : réencodage AAC ou copie directe | ✅ |
+| Progression temps-réel (vitesse moyennée, ETA fichier + total) | ✅ |
 | Annulation propre (suppression du fichier partiel) | ✅ |
 | Nettoyage intelligent de noms de fichiers (regex) | ✅ |
-| **Ordre des tags du nom de sortie 100% personnalisable** | ✅ |
-| **Tag "team" insérable où l'on veut dans le nom** | ✅ |
-| Renommage double-clic / assisté dans la file | ✅ |
-| Dark / Light mode | ✅ |
-| Préférences d'encodage persistantes (`%APPDATA%\RenCodeX\encoding_prefs.json`) | ✅ |
-| Config générale persistante (`%APPDATA%\RenCodeX\config.json`) | ✅ |
-| Notifications Discord (bot + embeds rich) | ✅ |
+| Ordre des tags du nom de sortie 100% personnalisable | ✅ |
+| Tags désactivables individuellement | ✅ |
+| Casse configurable (titre, résolution, codec, source) | ✅ |
+| Tag `team` insérable à n'importe quelle position | ✅ |
+| Renommage assisté par fichier avec aperçu | ✅ |
+| Extraction de sous-titres (SRT / ASS) | ✅ |
+| Thème dark / light + palettes de couleurs | ✅ |
+| Layout de navigation configurable (vertical / horizontal) | ✅ |
+| Préférences d'encodage persistantes | ✅ |
+| Config générale persistante | ✅ |
+| Dashboard de statistiques cumulées | ✅ |
+| Historique des sessions d'encodage et d'extraction | ✅ |
+| Notifications Discord riches (embeds configurables) | ✅ |
+| Champs Discord activables/désactivables par type de notification | ✅ |
+| Notes personnalisées dans les embeds Discord | ✅ |
 | Bot Discord avec commandes à distance | ✅ |
-| Rapport email (SMTP / lettre) | ✅ |
+| Rapport email (SMTP) | ✅ |
+| Notifications système Windows (fin de fichier, erreur) | ✅ |
 
 ---
 
 ## Personnalisation du nom de sortie
 
-Le panneau **Paramètres d'encodage → Ordre des tags & team** permet d'adapter entièrement le nom généré pour chaque fichier, sans toucher au code.
+Le panneau **Paramètres d'encodage → Ordre des tags** permet d'adapter entièrement le nom généré pour chaque fichier, sans toucher au code.
 
 ### Tags disponibles
 
 | Id | Description | Exemple |
 |---|---|---|
 | `title` | Titre nettoyé | `Jujutsu Kaisen` |
-| `se` | Saison/Épisode (format choisi dans la section dédiée) | `S03E01` |
+| `se` | Saison/Épisode (format choisi dans les réglages de renommage) | `S03E01` |
 | `audio` | Tag audio/langue détecté | `VOSTFR`, `VF`, `MULTI`… |
 | `resolution` | Résolution vidéo | `1080P` |
-| `provider` | Provider détecté dans le nom source | `AMZN` |
+| `provider` | Provider détecté dans le nom source | `AMZN`, `NF`… |
 | `source` | Source vidéo | `BluRay`, `WEB-DL`… |
 | `codec` | Codec vidéo de sortie | `H265` |
 | `bitdepth` | Profondeur de couleur | `10bit` |
 | `audioCodec` | Codec audio de sortie | `AAC`, `EAC3`… |
-| `team` | Tag libre, vide par défaut | `MaTeam` |
+| `team` | Tag libre, ignoré si vide | `MaTeam` |
 
-### Réordonner
+### Réordonner / désactiver
 
-Chaque tag dispose de boutons ↑ / ↓ pour le déplacer à la position voulue. Le tag `team` reste ignoré (pas inséré dans le nom) tant qu'aucun texte n'est saisi dans le champ correspondant.
+Chaque tag dispose de boutons ↑ / ↓ pour le déplacer et peut être désactivé individuellement. Le tag `team` est ignoré tant qu'aucun texte n'est saisi dans le champ correspondant.
 
-**Exemple** avec l'ordre par défaut et la team `MaTeam` ajoutée en fin :
+**Exemple** avec l'ordre par défaut et la team `MaTeam` :
 
 ```
 Jujutsu Kaisen S03E01 VOSTFR 1080P BluRay H265 10bit AAC MaTeam
 ```
-
-Ces réglages (CRF, preset, format saison/épisode, ordre des tags, team, mode audio, AQ, multipass, conteneur) sont sauvegardés automatiquement dans `%APPDATA%\RenCodeX\encoding_prefs.json` et rechargés à chaque démarrage.
 
 ---
 
@@ -183,31 +202,55 @@ Ces réglages (CRF, preset, format saison/épisode, ordre des tags, team, mode a
 
 RenCodeX peut envoyer des notifications Discord via un bot et écouter des commandes à distance.
 
+### Connexion
+
 **Variables d'environnement (prioritaires sur la config UI) :**
 
 ```powershell
-$env:RENCODEX_DISCORD_TOKEN = "Bot_token_ici"
+$env:RENCODEX_DISCORD_TOKEN       = "Bot_token_ici"
+$env:RENCODEX_DISCORD_LOG_CHANNEL = "ID_salon_logs"
+$env:RENCODEX_DISCORD_CMD_CHANNEL = "ID_salon_commandes"
 ```
 
-**Via l'UI Settings :**
-- `discord_bot_token` — token du bot Discord
-- `discord_log_channel_id` — channel pour les notifications (résumés, erreurs, progression)
-- `discord_cmd_channel_id` — channel pour les commandes à distance (bot en écoute)
+**Via l'UI Settings (onglet Discord) :**
 
-**Notifications disponibles :**
-- Début d'encodage (total fichiers, taille, paramètres)
-- Fin de chaque fichier (taille avant/après, durée)
-- Erreurs d'encodage
-- Progression périodique (intervalle configurable, désactivé par défaut)
-- Résumé final de session
+| Champ | Rôle |
+|---|---|
+| `Token du bot` | Token Discord du bot |
+| `Salon de logs` | Channel pour les embeds de notification |
+| `Salon de commandes` | Channel écouté par le bot pour les commandes |
+
+### Notifications disponibles
+
+Chaque type de notification peut être activé/désactivé indépendamment. Les champs inclus dans chaque embed sont configurables individuellement, et une note personnalisée (avec variables dynamiques cliquables) peut être ajoutée en bas de chaque embed.
+
+| Type | Déclencheur | Champs disponibles |
+|---|---|---|
+| `start` | Lancement de la file | Nb fichiers, taille totale, CRF, preset |
+| `file_done` | Fin de chaque fichier | Taille avant/après, gain, durée, CRF, preset |
+| `progress` | Périodiquement (intervalle configurable) | Fichier, position, %, vitesse, temps restant, écoulé |
+| `summary` | Fin de session complète | Fichiers traités, gain total, durée, espace libéré, détail |
+| `error` | Échec d'encodage | Nom du fichier, message d'erreur |
+
+### Commandes bot à distance
+
+Le bot écoute le salon de commandes configuré et répond aux commandes suivantes :
+
+| Commande | Action |
+|---|---|
+| `!status` | Affiche la progression en cours (barre, vitesse, ETA) |
+| `!queue` | Liste les fichiers en attente avec leur statut |
+| `!skip` | Passe au fichier suivant (annule le fichier en cours) |
+| `!pause` | Demande une pause (effective au prochain fichier) |
+| `!resume` | Reprend après une pause |
+| `!cancel` | Annule l'encodage et supprime le fichier partiel |
+| `!help` | Affiche la liste des commandes |
 
 ---
 
 ## Configuration Email
 
-Le rapport email est envoyé via SMTP à la fin d'une session d'encodage.
-
-Les identifiants sont passés depuis le frontend lors de l'appel à `send_email_report` (non stockés en clair dans la config principale) :
+Le rapport email est envoyé via SMTP à la fin d'une session. Les identifiants sont fournis depuis l'UI (non stockés dans la config principale).
 
 ```json
 {
@@ -221,28 +264,25 @@ Les identifiants sont passés depuis le frontend lors de l'appel à `send_email_
 
 ---
 
-## Personnalisation de l'encodage
+## Extraction de sous-titres
 
-Dans `src-tauri/src/media.rs`, la fonction `start_encoding` construit la commande FFmpeg. Paramètres clés :
+L'onglet **Extraction** permet d'extraire les pistes de sous-titres d'un ou plusieurs fichiers vers des fichiers `.srt` ou `.ass`. Options disponibles :
 
-```rust
-"-cq".into(), "28".into(),     // Qualité (18–35, plus bas = meilleure qualité)
-"-preset".into(), "p5".into(), // Vitesse NVENC (p1=lent/qualité ↔ p7=rapide)
-```
-
-Le CRF et le preset sont également réglables directement depuis l'UI (panneau Paramètres d'encodage), sans recompiler.
-
-Pour encoder en CPU (sans GPU NVIDIA), remplacer `hevc_nvenc` par `libx265` dans la commande FFmpeg.
+- **Format** : SRT ou ASS
+- **Nommage** : nom source du fichier ou nom nettoyé
+- **Dossier de sortie** : même dossier que la source, Téléchargements, ou chemin personnalisé
 
 ---
 
 ## Stockage des préférences
 
+Tous les fichiers de configuration sont stockés dans `%APPDATA%\RenCodeX\` :
+
 | Fichier | Contenu |
 |---|---|
-| `%APPDATA%\RenCodeX\config.json` | Chemin FFmpeg, thème, config Discord/email |
-| `%APPDATA%\RenCodeX\encoding_prefs.json` | CRF, preset, format S/E, ordre des tags, team, réglages audio/NVENC/conteneur |
-| `%APPDATA%\RenCodeX\stats.json` | Statistiques cumulées d'encodage |
+| `config.json` | Chemin FFmpeg, thème, layout, Discord, email, champs Discord, notes Discord, presets de dossier |
+| `encoding_prefs.json` | CRF, preset, format S/E, ordre des tags, team, mode audio, AQ, multipass, conteneur, extraction |
+| `stats.json` | Statistiques cumulées d'encodage et d'extraction, historique des sessions |
 
 Ces fichiers sont séparés volontairement : sauvegarder les Settings généraux n'écrase jamais les préférences d'encodage, et inversement.
 
@@ -250,6 +290,6 @@ Ces fichiers sont séparés volontairement : sauvegarder les Settings généraux
 
 ## Notes
 
-- **NVENC uniquement par défaut** : le codec utilisé est `hevc_nvenc`. Un GPU NVIDIA Kepler+ est requis. Pour un encodage CPU, substituer `libx265` dans `media.rs`.
-- **Pause/Reprise** : non implémentée nativement (SIGSTOP non supporté proprement sur Windows). L'annulation supprime le fichier de sortie partiel. Une vraie pause via `CREATE_SUSPENDED` est envisageable.
-- **Fichiers de préférences** : stockés dans `%APPDATA%\RenCodeX\`. Aucun credential sensible (token, mot de passe) n'est sauvegardé dans ces fichiers — ils sont fournis à chaque session via l'UI ou des variables d'environnement.
+- **NVENC uniquement par défaut** : le codec utilisé est `hevc_nvenc`. Un GPU NVIDIA Kepler+ est requis. Pour encoder en CPU, remplacer `hevc_nvenc` par `libx265` dans `src-tauri/src/media.rs`.
+- **Pause/Reprise** : la pause via `!pause` prend effet au prochain fichier (pas en cours d'encodage). Une vraie suspension de processus via `CREATE_SUSPENDED` est envisageable mais non implémentée.
+- **Credentials** : aucun token Discord ni mot de passe SMTP n'est stocké dans les fichiers de config. Ils sont fournis via l'UI à chaque session ou via des variables d'environnement.
