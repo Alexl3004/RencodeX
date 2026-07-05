@@ -399,39 +399,46 @@ pub async fn start_encoding(
             if should_emit {
                 last_emit = Instant::now();
 
-                let done = if let Some(t) = out_time_us {
+                let elapsed = file_start.elapsed().as_secs_f64();
+
+                // Priorité : out_time_us > frame > vitesse*elapsed > linéaire
+                let done = if let Some(t) = out_time_us.filter(|&t| t > 0.5) {
                     t.min(file_duration)
-                } else if let Some(frame) = current_frame {
+                } else if let Some(frame) = current_frame.filter(|&f| f > 0.0) {
                     (frame / file_fps).min(file_duration)
+                } else if let Some(speed) = speed_val.filter(|&s| s > 0.0) {
+                    (elapsed * speed).min(file_duration)
                 } else {
-                    let elapsed = file_start.elapsed().as_secs_f64();
-                    if let Some(speed) = speed_val {
-                        (elapsed * speed).min(file_duration)
-                    } else {
-                        (elapsed * 1.5).min(file_duration)
-                    }
+                    // Dernier recours : progression linéaire conservative
+                    (elapsed * 0.8).min(file_duration * 0.8)
                 };
 
                 let percent = if file_duration > 0.0 {
-                    (done / file_duration * 100.0).min(100.0)
+                    (done / file_duration * 100.0).clamp(0.0, 99.9)
+                } else if total_frames > 0.0 {
+                    (current_frame.unwrap_or(0.0) / total_frames * 100.0).clamp(0.0, 99.9)
                 } else {
-                    (current_frame.unwrap_or(0.0) / total_frames * 100.0).min(100.0)
+                    0.0
                 };
 
-                let (remaining_file, remaining_total) = if let Some(avg_speed) = speed_val {
-                    let remaining_next: f64 = durations[idx + 1..].iter().sum();
+                let remaining_next: f64 = durations[idx + 1..].iter().sum();
+
+                let (remaining_file, remaining_total) = if let Some(avg_speed) = speed_val.filter(|&s| s > 0.01) {
+                    // Estimation précise : basée sur la vitesse mesurée
                     let rf = ((file_duration - done) / avg_speed).max(0.0);
-                    let rt = rf + remaining_next / avg_speed.max(0.01);
+                    let rt = rf + remaining_next / avg_speed;
+                    (rf, rt)
+                } else if done > 0.5 && elapsed > 0.5 {
+                    // Estimation par ratio temps-réel / avancement
+                    let rate = elapsed / done;
+                    let rf = (rate * (file_duration - done)).max(0.0);
+                    let rt = rf + remaining_next * rate;
                     (rf, rt)
                 } else {
-                    let elapsed = file_start.elapsed().as_secs_f64();
-                    let estimated_remain = if done > 1.0 {
-                        (elapsed / done) * (file_duration - done)
-                    } else {
-                        file_duration * 1.5
-                    };
-                    let remaining_next: f64 = durations[idx + 1..].iter().sum();
-                    (estimated_remain.max(0.0), estimated_remain + remaining_next)
+                    // Pas assez de données
+                    let rf = (file_duration - done).max(0.0);
+                    let rt = rf + remaining_next;
+                    (rf, rt)
                 };
 
                 let avg_speed = speed_val.unwrap_or(0.0);

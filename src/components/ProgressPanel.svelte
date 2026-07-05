@@ -60,6 +60,9 @@
       : ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100
   );
 
+  // Indique si la vitesse est fiable (speed > 0) pour afficher "~" sur l'estimation
+  let speedKnown = $derived(p ? p.speed > 0.05 : false);
+
   // Résout le fichier actuellement en cours depuis p.file_name (nom source brut)
   let currentFile = $derived(
     p ? (encoder.files.find(f => f.filename === p.file_name || f.path.endsWith(p.file_name)) ?? null) : null
@@ -195,7 +198,9 @@
           <div class="stats-row">
             <div class="stat">
               <span class="stat-label">Restant</span>
-              <span class="stat-val">{formatTime(p.remaining_file)}</span>
+              <span class="stat-val" title={speedKnown ? "" : "Estimation en cours…"}>
+                {speedKnown ? "" : "~"}{formatTime(p.remaining_file)}
+              </span>
             </div>
             <div class="stat-sep"></div>
             <div class="stat">
@@ -205,7 +210,9 @@
             <div class="stat-sep"></div>
             <div class="stat">
               <span class="stat-label">Total</span>
-              <span class="stat-val">{p.remaining_total > 0 ? formatTime(p.remaining_total) : '—'}</span>
+              <span class="stat-val" title={speedKnown ? "" : "Estimation en cours…"}>
+                {p.remaining_total > 0 ? (speedKnown ? "" : "~") + formatTime(p.remaining_total) : '—'}
+              </span>
             </div>
           </div>
 
