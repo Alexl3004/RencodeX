@@ -4,7 +4,8 @@
   import { downloadDir } from "@tauri-apps/api/path";
   import { open as openDialog } from "@tauri-apps/plugin-dialog";
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { theme } from "$lib/stores/theme.svelte";
+  import { theme, DARK_COMBOS, LIGHT_COMBOS } from "$lib/stores/theme.svelte";
+  import { Sun, Moon } from "@lucide/svelte";
   import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
 
   type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
@@ -501,13 +502,63 @@
         </div>
       </div>
 
+      <!-- Mode sombre / clair -->
+      <div>
+        <span class="field-label">Apparence</span>
+        <div class="mode-toggle-row">
+          <button
+            type="button"
+            onclick={() => { if (!theme.dark) theme.toggle(); }}
+            class="mode-btn {theme.dark ? 'mode-btn--active' : ''}"
+            aria-pressed={theme.dark}
+          >
+            <Moon class="w-3.5 h-3.5" />
+            Sombre
+          </button>
+          <button
+            type="button"
+            onclick={() => { if (theme.dark) theme.toggle(); }}
+            class="mode-btn {!theme.dark ? 'mode-btn--active' : ''}"
+            aria-pressed={!theme.dark}
+          >
+            <Sun class="w-3.5 h-3.5" />
+            Clair
+          </button>
+        </div>
+      </div>
+
+      <!-- Thèmes prédéfinis -->
+      <div>
+        <span class="field-label">Thèmes {theme.dark ? "sombres" : "clairs"}</span>
+        <div class="combo-grid">
+          {#each (theme.dark ? DARK_COMBOS : LIGHT_COMBOS) as combo}
+            {@const isActive =
+              theme.backgroundColor.toLowerCase() === combo.bg &&
+              theme.accent.toLowerCase() === combo.accent}
+            <button
+              type="button"
+              onclick={() => theme.applyCombo(combo)}
+              class="combo-btn {isActive ? 'combo-btn--active' : ''}"
+              title={combo.label}
+              aria-pressed={isActive}
+            >
+              <span class="combo-preview">
+                <span class="combo-bg"    style="background: {combo.bg};"></span>
+                <span class="combo-accent" style="background: {combo.accent};"></span>
+              </span>
+              <span class="combo-label">{combo.label}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
       <!-- Couleur primaire -->
       <div>
         <span class="field-label flex items-center gap-1.5">
           <Palette class="w-3 h-3" />
           Couleur primaire
         </span>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <label class="color-swatch-input" style="background: {theme.accent};" title="Choisir une couleur personnalisée">
             <input
               type="color"
@@ -525,26 +576,40 @@
             class="field-input px-2 py-1.5 w-24 text-center"
             aria-label="Code hexadécimal de la couleur primaire"
           />
-          <div class="flex items-center gap-1.5">
-            {#each ["#e07b39", "#4d8fbb", "#5fb37b", "#b25fd1", "#d14d6c", "#c9b13a"] as preset}
-              <button
-                type="button"
-                class="color-swatch-preset {theme.accent.toLowerCase() === preset ? 'color-swatch-preset--active' : ''}"
-                style="background: {preset};"
-                onclick={() => theme.setAccent(preset)}
-                aria-label="Utiliser la couleur {preset}"
-                title={preset}
-              ></button>
-            {/each}
-          </div>
-          {#if theme.accent.toLowerCase() !== theme.defaultAccent}
-            <button
-              type="button"
-              onclick={() => theme.resetAccent()}
-              class="icon-btn-inline"
-              title="Réinitialiser la couleur par défaut"
-              aria-label="Réinitialiser la couleur par défaut"
-            >
+          {#if theme.accent.toLowerCase() !== (theme.dark ? theme.defaultAccentDark : theme.defaultAccentLight)}
+            <button type="button" onclick={() => theme.resetAccent()} class="icon-btn-inline" title="Réinitialiser">
+              <RotateCcw class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Couleur de fond -->
+      <div>
+        <span class="field-label flex items-center gap-1.5">
+          <Palette class="w-3 h-3" />
+          Couleur de fond
+        </span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="color-swatch-input" style="background: {theme.backgroundColor};" title="Choisir une couleur de fond">
+            <input
+              type="color"
+              value={theme.backgroundColor}
+              oninput={(e) => theme.setBackground((e.currentTarget as HTMLInputElement).value)}
+              aria-label="Couleur de fond personnalisée"
+            />
+          </label>
+          <input
+            type="text"
+            value={theme.backgroundColor}
+            onchange={(e) => theme.setBackground((e.currentTarget as HTMLInputElement).value.trim())}
+            placeholder="#1d1d1d"
+            maxlength="7"
+            class="field-input px-2 py-1.5 w-24 text-center"
+            aria-label="Code hexadécimal du fond"
+          />
+          {#if theme.backgroundColor.toLowerCase() !== (theme.dark ? theme.defaultBgDark : theme.defaultBgLight)}
+            <button type="button" onclick={() => theme.resetBackground()} class="icon-btn-inline" title="Réinitialiser">
               <RotateCcw class="w-3.5 h-3.5" />
             </button>
           {/if}
@@ -1531,4 +1596,82 @@
     margin-right: auto;
     width: 100%;
   }
+
+  /* ── Mode toggle ────────────────────────────────────────────────────────── */
+  .mode-toggle-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-subtext);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .mode-btn:hover {
+    border-color: var(--color-subtext2);
+    color: var(--color-text);
+  }
+  .mode-btn--active {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 35%, transparent);
+    color: var(--color-accent);
+  }
+
+  /* ── Combo presets ──────────────────────────────────────────────────────── */
+  .combo-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .combo-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .combo-btn:hover {
+    border-color: var(--color-subtext2);
+    transform: translateY(-1px);
+  }
+  .combo-btn--active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  }
+  .combo-preview {
+    width: 40px;
+    height: 26px;
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    display: flex;
+    border: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  }
+  .combo-bg     { flex: 3; }
+  .combo-accent { flex: 1; }
+  .combo-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .combo-btn--active .combo-label { color: var(--color-accent); }
 </style>
