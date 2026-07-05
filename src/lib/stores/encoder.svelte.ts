@@ -441,7 +441,10 @@ function createEncoder() {
   let audioLangs = $state<Set<string>>(new Set());
   let subLangs = $state<Set<string>>(new Set());
   let selAudio = $state<Set<string>>(new Set(["fre", "eng", "jpn"]));
-  let selSubs = $state<Set<string>>(new Set(["fre"]));
+  let selSubs  = $state<Set<string>>(new Set(["fre"]));
+  // Surcharges par fichier (chemin → Set de langues sélectionnées)
+  let fileSelAudio = $state<Map<string, Set<string>>>(new Map());
+  let fileSelSubs  = $state<Map<string, Set<string>>>(new Map());
   let audioOverrides = $state<Record<string, Record<string, string>>>({});
   let subOverrides = $state<Record<string, Record<string, string>>>({});
   let globalCodecOverride = $state<Record<string, string>>({});
@@ -1125,8 +1128,8 @@ function createEncoder() {
           outputDir,
           `${f.output_name}${outExt}`,
         ),
-        audio_langs: [...selAudio],
-        sub_langs: [...selSubs],
+        audio_langs: [...(fileSelAudio.get(f.path) ?? selAudio)],
+        sub_langs:   [...(fileSelSubs.get(f.path)  ?? selSubs)],
         audio_overrides: audioOverrides[f.path] ?? {},
         sub_overrides: subOverrides[f.path] ?? {},
         audio_codec_overrides: audioCodecOvr,
@@ -1371,12 +1374,19 @@ function createEncoder() {
     const _srcCase        = sourceCase;
     const _seFormat       = seasonEpisodeFormat;
     const _team           = team;
+    const _selAudio       = selAudio;
+    const _selSubs        = selSubs;
+    const _fileSelAudio   = fileSelAudio;
+    const _fileSelSubs    = fileSelSubs;
 
     files = files.map((f) => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done")
         return f;
-      const tag = computeTag(f.audio_langs, f.sub_langs, selAudio, selSubs);
-      const audioTag = computeAudioTag(f.streams, selAudio, audioMode);
+      // Utiliser la sélection par fichier si elle existe, sinon la globale
+      const effAudio = _fileSelAudio.get(f.path) ?? _selAudio;
+      const effSubs  = _fileSelSubs.get(f.path)  ?? _selSubs;
+      const tag = computeTag(f.audio_langs, f.sub_langs, effAudio, effSubs);
+      const audioTag = computeAudioTag(f.streams, effAudio, audioMode);
       const name = buildOutputName(
         f.cleaned,
         tag,
@@ -1394,6 +1404,32 @@ function createEncoder() {
       );
       return { ...f, output_name: name };
     });
+  }
+
+  function setFileLangSel(
+    path: string,
+    audio: Set<string> | null,
+    subs: Set<string> | null,
+  ) {
+    if (audio !== null) {
+      const m = new Map(fileSelAudio);
+      if (audio.size === 0) m.delete(path); else m.set(path, audio);
+      fileSelAudio = m;
+    }
+    if (subs !== null) {
+      const m = new Map(fileSelSubs);
+      if (subs.size === 0) m.delete(path); else m.set(path, subs);
+      fileSelSubs = m;
+    }
+    refreshOutputNames();
+  }
+
+  function clearFileLangSel(path: string) {
+    const ma = new Map(fileSelAudio); ma.delete(path);
+    const ms = new Map(fileSelSubs);  ms.delete(path);
+    fileSelAudio = ma;
+    fileSelSubs  = ms;
+    refreshOutputNames();
   }
 
   function toggleAudioLang(lang: string) {
@@ -1568,6 +1604,10 @@ function createEncoder() {
     get selSubs() {
       return selSubs;
     },
+    get fileSelAudio() { return fileSelAudio; },
+    get fileSelSubs()  { return fileSelSubs; },
+    setFileLangSel,
+    clearFileLangSel,
     get outputDir() {
       return outputDir;
     },

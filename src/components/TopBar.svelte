@@ -2,7 +2,7 @@
   import { theme } from "$lib/stores/theme.svelte";
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
-  import LangPopover from "$components/LangPopover.svelte";
+  import LangSelector from "$components/LangSelector.svelte";
   import {
     Sun, Moon, SlidersHorizontal, Tags,
     Terminal , RefreshCw, Cpu, ChartColumnDecreasing, Home, Settings,
@@ -87,7 +87,6 @@
 
     <!-- Utilitaires -->
     <div class="utils-zone">
-      <LangPopover />
       <div class="v-sep" aria-hidden="true"></div>
       <button
         type="button"

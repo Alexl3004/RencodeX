@@ -6,22 +6,86 @@
   } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import FileModal from "$components/FileModal.svelte";
+  import FileRenameModal from "$components/FileRenameModal.svelte";
+  import FileLangModal from "$components/FileLangModal.svelte";
+  import LangPopover from "$components/LangPopover.svelte";
   import {
     X,
     Search,
     CircleCheck,
     AlertTriangle,
     LoaderCircle,
-    Subtitles,
-    Play,
     Trash2,
+    Captions,
+    Tag,
+    Pencil,
+    ChevronRight,
+    Headphones,
+    MessageSquare,
+    RotateCcw,
   } from "@lucide/svelte";
 
   let filterText = $state("");
   let filterStatus = $state<
     "all" | "ready" | "queued" | "encoding" | "done" | "error"
   >("all");
-  let selectedFile = $state<AppFile | null>(null);
+  // Sélection modale renommage — dérivée de encoder.files pour rester à jour
+  // Modal info
+  let infoPath = $state<string | null>(null);
+  let infoFile = $derived(
+    infoPath ? (encoder.files.find((f) => f.path === infoPath) ?? null) : null,
+  );
+
+  // Modal renommage
+  let renamePath = $state<string | null>(null);
+  let renameFile = $derived(
+    renamePath ? (encoder.files.find((f) => f.path === renamePath) ?? null) : null,
+  );
+
+  // Modal pistes par fichier
+  let langModalFile = $state<AppFile | null>(null);
+
+  // Context menu clic droit
+  let ctxMenu = $state<{ x: number; y: number; file: AppFile } | null>(null);
+  let ctxSubmenu = $state<"lang" | null>(null);
+
+  // Sélection rapide de langue dans le context menu (sans modal)
+  let ctxAudio = $state<Set<string>>(new Set());
+  let ctxSubs  = $state<Set<string>>(new Set());
+
+  function openCtx(e: MouseEvent, file: AppFile) {
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth  - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 320);
+    ctxMenu    = { x, y, file };
+    ctxSubmenu = null;
+    // Pré-remplir avec la sélection actuelle du fichier
+    ctxAudio = encoder.fileSelAudio.has(file.path)
+      ? new Set(encoder.fileSelAudio.get(file.path))
+      : new Set([...encoder.selAudio].filter(l => file.audio_langs.includes(l)));
+    ctxSubs = encoder.fileSelSubs.has(file.path)
+      ? new Set(encoder.fileSelSubs.get(file.path))
+      : new Set([...encoder.selSubs].filter(l => file.sub_langs.includes(l)));
+  }
+
+  function closeCtx() { ctxMenu = null; ctxSubmenu = null; }
+
+  function ctxApplyLang() {
+    if (!ctxMenu) return;
+    encoder.setFileLangSel(ctxMenu.file.path, ctxAudio, ctxSubs);
+    closeCtx();
+  }
+
+  function ctxToggleAudio(lang: string) {
+    const s = new Set(ctxAudio);
+    s.has(lang) ? s.delete(lang) : s.add(lang);
+    ctxAudio = s;
+  }
+  function ctxToggleSub(lang: string) {
+    const s = new Set(ctxSubs);
+    s.has(lang) ? s.delete(lang) : s.add(lang);
+    ctxSubs = s;
+  }
 
   type SortKey = "name" | "size" | "duration" | "status";
   type SortDir = "asc" | "desc";
@@ -42,15 +106,11 @@
     encoding: 0, analysing: 1, queued: 2, ready: 3, done: 4, error: 5,
   };
 
-  function openModal(f: AppFile) {
-    selectedFile = f;
-  }
+  function openInfoModal(f: AppFile) { infoPath = f.path; }
+  function openRenameModal(f: AppFile) { renamePath = f.path; }
   function handleRename(n: string) {
-    if (selectedFile) encoder.renameFile(selectedFile.path, n);
-    selectedFile = null;
-  }
-  function closeModal() {
-    selectedFile = null;
+    if (renamePath) encoder.renameFile(renamePath, n);
+    renamePath = null;
   }
 
   function isCurrentlyEncoding(file: AppFile): boolean {
@@ -179,8 +239,176 @@
   }
 </script>
 
-{#if selectedFile}
-  <FileModal file={selectedFile} onclose={closeModal} onrename={handleRename} />
+{#if infoFile}
+  <FileModal file={infoFile} onclose={() => (infoPath = null)} />
+{/if}
+
+{#if renameFile}
+  <FileRenameModal
+    file={renameFile}
+    onclose={() => (renamePath = null)}
+    onrename={handleRename}
+  />
+{/if}
+
+{#if langModalFile}
+  <FileLangModal file={langModalFile} onclose={() => (langModalFile = null)} />
+{/if}
+
+{#if ctxMenu}
+  <!-- Backdrop invisible pour fermer -->
+  <div
+    class="fixed inset-0 z-[9960]"
+    role="presentation"
+    onclick={closeCtx}
+    oncontextmenu={(e) => { e.preventDefault(); closeCtx(); }}
+  ></div>
+
+  <!-- Context menu -->
+  <div
+    class="ctx-menu fixed z-[9961] flex flex-col overflow-hidden"
+    style="left:{ctxMenu.x}px; top:{ctxMenu.y}px;"
+    role="menu"
+  >
+    <!-- Nom du fichier -->
+    <div class="ctx-filename">
+      <span class="truncate">{ctxMenu.file.filename}</span>
+      {#if encoder.fileSelAudio.has(ctxMenu.file.path) || encoder.fileSelSubs.has(ctxMenu.file.path)}
+        <span class="ctx-badge">override</span>
+      {/if}
+    </div>
+
+    <div class="ctx-sep"></div>
+
+    <!-- Infos -->
+    <button
+      type="button"
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => { openInfoModal(ctxMenu!.file); closeCtx(); }}
+    >
+      <Tag class="w-3.5 h-3.5 shrink-0" />
+      Infos
+    </button>
+
+    <!-- Renommer -->
+    {#if !encoder.encoding && ctxMenu.file.status !== "analysing"}
+      <button
+        type="button"
+        class="ctx-item"
+        role="menuitem"
+        onclick={() => { openRenameModal(ctxMenu!.file); closeCtx(); }}
+      >
+        <Pencil class="w-3.5 h-3.5 shrink-0" />
+        Renommer
+      </button>
+    {/if}
+
+    <div class="ctx-sep"></div>
+
+    <!-- Changer langue — header cliquable -->
+    <button
+      type="button"
+      class="ctx-item ctx-item--section"
+      role="menuitem"
+      aria-expanded={ctxSubmenu === "lang"}
+      onclick={() => (ctxSubmenu = ctxSubmenu === "lang" ? null : "lang")}
+    >
+      <Captions class="w-3.5 h-3.5 shrink-0" />
+      Changer les pistes
+      <ChevronRight class="w-3 h-3 shrink-0 ml-auto transition-transform {ctxSubmenu === 'lang' ? 'rotate-90' : ''}" />
+    </button>
+
+    <!-- Sous-menu langues inline -->
+    {#if ctxSubmenu === "lang"}
+      <div class="ctx-lang-panel">
+
+        <!-- Audio -->
+        {#if ctxMenu.file.audio_langs.length > 0}
+          <div class="ctx-lang-group">
+            <span class="ctx-lang-label">
+              <Headphones class="w-3 h-3 opacity-60" />
+              Audio
+            </span>
+            <div class="ctx-lang-chips">
+              {#each ctxMenu.file.audio_langs as lang}
+                {@const on = ctxAudio.has(lang)}
+                <button
+                  type="button"
+                  class="ctx-chip {on ? 'ctx-chip--audio-on' : ''}"
+                  onclick={() => ctxToggleAudio(lang)}
+                  aria-pressed={on}
+                  title={lang}
+                >
+                  {#if on}<CircleCheck class="w-2.5 h-2.5 shrink-0" />{/if}
+                  {lang.toUpperCase()}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <!-- Sous-titres -->
+        {#if ctxMenu.file.sub_langs.length > 0}
+          <div class="ctx-lang-group">
+            <span class="ctx-lang-label">
+              <MessageSquare class="w-3 h-3 opacity-60" />
+              Sous-titres
+            </span>
+            <div class="ctx-lang-chips">
+              {#each ctxMenu.file.sub_langs as lang}
+                {@const on = ctxSubs.has(lang)}
+                <button
+                  type="button"
+                  class="ctx-chip {on ? 'ctx-chip--sub-on' : ''}"
+                  onclick={() => ctxToggleSub(lang)}
+                  aria-pressed={on}
+                  title={lang}
+                >
+                  {#if on}<CircleCheck class="w-2.5 h-2.5 shrink-0" />{/if}
+                  {lang.toUpperCase()}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if ctxMenu.file.audio_langs.length === 0 && ctxMenu.file.sub_langs.length === 0}
+          <p class="ctx-lang-empty">Aucune piste détectée</p>
+        {/if}
+
+        <!-- Actions -->
+        <div class="ctx-lang-actions">
+          {#if encoder.fileSelAudio.has(ctxMenu.file.path) || encoder.fileSelSubs.has(ctxMenu.file.path)}
+            <button type="button" class="ctx-action-btn ctx-action-btn--reset"
+              onclick={() => { encoder.clearFileLangSel(ctxMenu!.file.path); closeCtx(); }}>
+              <RotateCcw class="w-3 h-3" />
+              Reset
+            </button>
+          {/if}
+          <button type="button" class="ctx-action-btn ctx-action-btn--apply ml-auto"
+            onclick={ctxApplyLang}>
+            <CircleCheck class="w-3 h-3" />
+            Appliquer
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="ctx-sep"></div>
+
+    <!-- Supprimer -->
+    <button
+      type="button"
+      class="ctx-item ctx-item--danger"
+      role="menuitem"
+      disabled={encoder.encoding || encoder.extractingSubs}
+      onclick={() => { encoder.removeFile(ctxMenu!.file.path); closeCtx(); }}
+    >
+      <Trash2 class="w-3.5 h-3.5 shrink-0" />
+      Supprimer
+    </button>
+  </div>
 {/if}
 
 <div
@@ -352,6 +580,11 @@
             class="micro-btn">Tout</button
           >
         </div>
+
+
+
+        <!-- Sélection globale des pistes -->
+        <LangPopover />
       {/if}
     </div>
 
@@ -361,11 +594,10 @@
       <colgroup>
         <col class="col-name" />
         <col style="width: 76px;" />
-        <col style="width: 72px;" />
+        <col style="width: 90px;" />
         <col style="width: 90px;" />
         <col style="width: 72px;" />
-        <col style="width: 110px;" />
-        <col style="width: 36px;" />
+        <col style="width: 90px;" />
       </colgroup>
       <thead
         class="sticky top-0 z-10"
@@ -406,7 +638,6 @@
               </span>
             </button>
           </th>
-          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -459,6 +690,7 @@
                 {inSelMode && isEligible ? 'row-sel-mode' : ''}
                 {!inSelMode ? 'row-clickable' : ''}
                 {inSelMode && !isEligible ? 'row-sel-disabled' : ''}"
+              oncontextmenu={(e) => openCtx(e, file)}
               onclick={(e) => {
                 if ((e.target as HTMLElement).closest("button")) return;
                 if (inSelMode && isEncodeEligible) {
@@ -467,7 +699,7 @@
                     encoder.toggleExtractSelection(file.path);
                   }
                 } else if (!inSelMode) {
-                  openModal(file);
+                  openInfoModal(file);
                 }
               }}
               title={inSelMode
@@ -491,6 +723,9 @@
                     <span class="sel-dot extract-dot" aria-hidden="true"></span>
                   {/if}
                   {file.output_name}{file.output_ext}
+                {#if encoder.fileSelAudio.has(file.path) || encoder.fileSelSubs.has(file.path)}
+                  <span class="override-dot" title="Pistes personnalisées"></span>
+                {/if}
                 </span>
               </td>
 
@@ -500,38 +735,33 @@
               >
                 {file.size_mb > 0 ? formatSize(file.size_mb) : "—"}
               </td>
-              <td
-                class="text-center font-mono"
-                style="color: var(--color-subtext);"
-              >
+              <td class="text-center font-mono" style="color: var(--color-subtext);">
                 {#if file.status === "analysing"}
-                  <span
-                    class="animate-pulse"
-                    style="color: var(--color-accent);">…</span
-                  >
+                  <span class="animate-pulse" style="color: var(--color-accent);">…</span>
                 {:else}
-                  <span
-                    class="inline-block max-w-[88px] truncate align-middle"
-                    title={file.audio_langs
-                      .map((l) => l.toUpperCase())
-                      .join(" ") || "—"}
-                  >
-                    {file.audio_langs.map((l) => l.toUpperCase()).join(" ") ||
-                      "—"}
+                  {@const fileAudioSel = encoder.fileSelAudio.get(file.path) ?? encoder.selAudio}
+                  {@const hasAudioOverride = encoder.fileSelAudio.has(file.path)}
+                  <span class="cell-lang-grid" title={hasAudioOverride ? "Pistes personnalisées" : ""}>
+                    {#each file.audio_langs as lang}
+                      <span class="cell-lang-tag {fileAudioSel.has(lang) ? 'cell-lang-tag--on' : 'cell-lang-tag--off'}">{lang.toUpperCase()}</span>
+                    {/each}
+                    {#if file.audio_langs.length === 0}<span>—</span>{/if}
+                    {#if hasAudioOverride}<span class="cell-override-dot" title="Override actif">●</span>{/if}
                   </span>
                 {/if}
               </td>
-              <td
-                class="text-center font-mono"
-                style="color: var(--color-subtext);"
-              >
-                <span
-                  class="inline-block max-w-[88px] truncate align-middle"
-                  title={file.sub_langs.map((l) => l.toUpperCase()).join(" ") ||
-                    "—"}
-                >
-                  {file.sub_langs.map((l) => l.toUpperCase()).join(" ") || "—"}
-                </span>
+              <td class="text-center font-mono" style="color: var(--color-subtext);">
+                {#if true}
+                  {@const fileSubSel = encoder.fileSelSubs.get(file.path) ?? encoder.selSubs}
+                  {@const hasSubOverride = encoder.fileSelSubs.has(file.path)}
+                  <span class="cell-lang-grid" title={hasSubOverride ? "Pistes personnalisées" : ""}>
+                    {#each file.sub_langs as lang}
+                      <span class="cell-lang-tag {fileSubSel.has(lang) ? 'cell-lang-tag--sub' : 'cell-lang-tag--off'}">{lang.toUpperCase()}</span>
+                    {/each}
+                    {#if file.sub_langs.length === 0}<span>—</span>{/if}
+                    {#if hasSubOverride}<span class="cell-override-dot" title="Override actif">●</span>{/if}
+                  </span>
+                {/if}
               </td>
               <td
                 class="text-right font-mono"
@@ -608,18 +838,6 @@
                   </div>
                 {/if}
               </td>
-
-              <td class="col-delete">
-                <button
-                  class="row-delete-btn opacity-0 group-hover:opacity-100 transition-opacity font-mono text-[10px] disabled:hidden"
-                  onclick={() => encoder.removeFile(file.path)}
-                  disabled={encoder.encoding || encoder.extractingSubs}
-                  title="Supprimer"
-                  aria-label="Supprimer le fichier"
-                >
-                  <X class="w-3.5 h-3.5" />
-                </button>
-              </td>
             </tr>
           {/each}
         {/if}
@@ -629,6 +847,194 @@
 </div>
 
 <style>
+  /* ── Context menu ─────────────────────────────────────────────────────── */
+  .ctx-menu {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    min-width: 200px;
+    max-width: 260px;
+    overflow: hidden;
+  }
+  .ctx-filename {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px 6px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    overflow: hidden;
+  }
+  .ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-family: "DM Sans", sans-serif;
+    font-size: 12px;
+    background: transparent;
+    border: none;
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background 0.08s, color 0.08s;
+  }
+  .ctx-item:hover {
+    background: var(--color-panel2);
+    color: var(--color-accent);
+  }
+  .ctx-item--section {
+    font-weight: 500;
+  }
+  .ctx-item--danger {
+    color: var(--color-danger);
+  }
+  .ctx-item--danger:hover {
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--color-panel2));
+    color: var(--color-danger);
+  }
+  .ctx-item--danger:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .ctx-sep {
+    height: 1px;
+    background: var(--color-border);
+    margin: 2px 0;
+    opacity: 0.6;
+  }
+  .ctx-badge {
+    margin-left: auto;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+    flex-shrink: 0;
+  }
+
+  /* ── Sous-menu langues ────────────────────────────────────────────────── */
+  .ctx-lang-panel {
+    padding: 8px 10px;
+    border-top: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface) 60%, var(--color-panel));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ctx-lang-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .ctx-lang-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--color-subtext);
+  }
+  .ctx-lang-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .ctx-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-panel);
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition: all 0.1s;
+    white-space: nowrap;
+  }
+  .ctx-chip:hover {
+    border-color: var(--color-subtext);
+    color: var(--color-text);
+  }
+  .ctx-chip--audio-on {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    color: var(--color-accent);
+  }
+  .ctx-chip--sub-on {
+    background: color-mix(in srgb, var(--color-success) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+    color: var(--color-success);
+  }
+  .ctx-lang-empty {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    opacity: 0.5;
+    text-align: center;
+    padding: 4px 0;
+  }
+  .ctx-lang-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  }
+  .ctx-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .ctx-action-btn--reset:hover {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  }
+  .ctx-action-btn--apply {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #fff;
+  }
+  .ctx-action-btn--apply:hover {
+    opacity: 0.85;
+  }
+
+  /* ── Override dot ─────────────────────────────────────────────────────── */
+  .override-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    margin-left: 4px;
+    vertical-align: middle;
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+
   .clear-all-btn {
     display: inline-flex;
     align-items: center;
@@ -741,34 +1147,13 @@
   .extract-dot {
     background: var(--color-success);
   }
-
-  .col-delete {
-    width: 36px;
-    text-align: center;
-    padding: 0 4px;
-  }
   tbody tr {
-    height: 34px;
-    max-height: 34px;
+    height: 44px;
+    max-height: 44px;
   }
   tbody td {
     overflow: hidden;
     white-space: nowrap;
-  }
-  .row-delete-btn {
-    color: var(--color-subtext);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 2px;
-    border-radius: 3px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.1s;
-  }
-  .row-delete-btn:hover {
-    color: var(--color-danger);
   }
 
   /* Groupes de sélection dans la barre de filtres */
@@ -865,4 +1250,72 @@
   thead th {
     padding: 4px 6px;
   }
-</style>
+
+  /* ── Tags langue dans cellules ── */
+  .cell-lang-grid {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 2px;
+    justify-content: center;
+    justify-items: center;
+    max-height: calc(2 * (1.4em + 4px) + 2px); /* 2 lignes de tags */
+    overflow: hidden;
+  }
+  .cell-lang-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .cell-lang-tag--off {
+    color: var(--color-subtext2);
+    opacity: 0.45;
+  }
+  .cell-lang-tag--on {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    color: var(--color-accent);
+  }
+  .cell-lang-tag--sub {
+    background: color-mix(in srgb, var(--color-success) 10%, transparent);
+    border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+    color: var(--color-success);
+  }
+  .cell-override-dot {
+    font-size: 6px;
+    color: var(--color-warning);
+    line-height: 1;
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  /* ── Bouton reset pistes rapide ── */
+  .apply-all-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-subtext);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    white-space: nowrap;
+  }
+  .apply-all-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+  }
+  .apply-all-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+</style>110px 
