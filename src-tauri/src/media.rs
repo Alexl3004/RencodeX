@@ -163,6 +163,7 @@ pub async fn start_encoding(
         let channel = cfg.discord_log_channel_id.clone();
         
         let fields_start = crate::discord_fields::default_fields("start");
+        let note_start = cfg.discord_custom_notes.get("start").cloned().unwrap_or_default();
         tokio::spawn(async move {
             discord_notify_start(
                 &token,
@@ -172,6 +173,7 @@ pub async fn start_encoding(
                 crf_value,
                 &preset_value,
                 &fields_start,
+                &note_start,
             ).await;
         });
     }
@@ -466,11 +468,13 @@ pub async fn start_encoding(
                     let spd = avg_speed;
                     let rem = remaining_total;
                     let fields_progress = crate::discord_fields::default_fields("progress");
+                    let note_progress = cfg.discord_custom_notes.get("progress").cloned().unwrap_or_default();
                     tokio::spawn(async move {
                         discord_notify_progress(
                             &token, &channel, &fname,
                             idx, total, pct, spd, rem, elapsed_file,
                             &fields_progress,
+                            &note_progress,
                         ).await;
                     });
                 }
@@ -510,6 +514,7 @@ pub async fn start_encoding(
                 let crf_val = job.crf;
                 let preset_val = job.preset.clone();
                 let fields_file_done = crate::discord_fields::default_fields("file_done");
+                let note_file_done = cfg.discord_custom_notes.get("file_done").cloned().unwrap_or_default();
                 tokio::spawn(async move {
                     discord_notify_file_done(
                         &token,
@@ -521,10 +526,12 @@ pub async fn start_encoding(
                         crf_val,
                         &preset_val,
                         &fields_file_done,
+                        &note_file_done,
                     ).await;
                 });
             } else if !ok && !cancelled && cfg.discord_notify_error {
                 let fields_error = crate::discord_fields::default_fields("error");
+                let note_error = cfg.discord_custom_notes.get("error").cloned().unwrap_or_default();
                 tokio::spawn(async move {
                     discord_notify_error(
                         &token,
@@ -532,6 +539,7 @@ pub async fn start_encoding(
                         &file_name_clone,
                         "Échec de l'encodage",
                         &fields_error,
+                        &note_error,
                     ).await;
                 });
             }
@@ -627,7 +635,8 @@ pub async fn start_encoding(
         && !cfg.discord_log_channel_id.is_empty()
     {
         let fields_summary = crate::discord_fields::default_fields("summary");
-        discord_notify(&cfg.discord_bot_token, &cfg.discord_log_channel_id, &summary, &fields_summary).await;
+        let note_summary = cfg.discord_custom_notes.get("summary").map(|s| s.as_str()).unwrap_or("");
+        discord_notify(&cfg.discord_bot_token, &cfg.discord_log_channel_id, &summary, &fields_summary, note_summary).await;
     }
 
     Ok(summary)

@@ -100,6 +100,10 @@ pub struct AppConfig {
     pub output_dir_presets: Vec<String>,
     #[serde(default)]
     pub output_dir_history: Vec<String>,
+    /// Note personnalisée affichée en bas de l'embed pour chaque type de notif.
+    /// Clés : "summary", "start", "file_done", "error", "progress".
+    #[serde(default)]
+    pub discord_custom_notes: HashMap<String, String>,
 }
 
 impl Default for AppConfig {
@@ -124,6 +128,7 @@ impl Default for AppConfig {
             inner_nav_layout: default_inner_nav_layout(),
             output_dir_presets: Vec::new(),
             output_dir_history: Vec::new(),
+            discord_custom_notes: HashMap::new(),
         }
     }
 }

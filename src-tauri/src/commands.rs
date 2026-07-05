@@ -269,6 +269,14 @@ fn fields_for(notif_type: &str) -> Vec<String> {
         .unwrap_or_else(|| crate::discord_fields::default_fields(notif_type))
 }
 
+fn note_for(notif_type: &str) -> String {
+    let cfg = load_config();
+    cfg.discord_custom_notes
+        .get(notif_type)
+        .cloned()
+        .unwrap_or_default()
+}
+
 // ── Commandes de notification Discord ────────────────────────────────────────
 
 /// Notification de résumé de session (fin de file complète).
@@ -280,7 +288,8 @@ pub async fn send_discord_notification(
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let fields = fields_for("summary");
-    discord_notify(&token, &chan, &summary, &fields).await;
+    let note   = note_for("summary");
+    discord_notify(&token, &chan, &summary, &fields, &note).await;
     Ok(())
 }
 
@@ -296,7 +305,8 @@ pub async fn send_discord_start_notification(
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let fields = fields_for("start");
-    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &fields).await;
+    let note   = note_for("start");
+    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &fields, &note).await;
     Ok(())
 }
 
@@ -314,10 +324,11 @@ pub async fn send_discord_file_done_notification(
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let fields = fields_for("file_done");
+    let note   = note_for("file_done");
     discord_notify_file_done(
         &token, &chan, &file_name,
         original_mb, encoded_mb, duration_secs,
-        crf, &preset, &fields,
+        crf, &preset, &fields, &note,
     ).await;
     Ok(())
 }
@@ -332,7 +343,8 @@ pub async fn send_discord_error_notification(
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let fields = fields_for("error");
-    discord_notify_error(&token, &chan, &file_name, &error_msg, &fields).await;
+    let note   = note_for("error");
+    discord_notify_error(&token, &chan, &file_name, &error_msg, &fields, &note).await;
     Ok(())
 }
 
@@ -351,11 +363,12 @@ pub async fn send_discord_progress_notification(
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let fields = fields_for("progress");
+    let note   = note_for("progress");
     discord_notify_progress(
         &token, &chan,
         &file_name, file_index, file_total,
         percent, speed, remaining_secs, elapsed_secs,
-        &fields,
+        &fields, &note,
     ).await;
     Ok(())
 }

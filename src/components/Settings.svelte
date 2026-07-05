@@ -6,7 +6,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { theme, DARK_COMBOS, LIGHT_COMBOS } from "$lib/stores/theme.svelte";
   import { Sun, Moon } from "@lucide/svelte";
-  import { Eye, EyeOff, X, Check, ChevronDown, ChevronRight, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
+  import { Eye, EyeOff, X, Check, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
 
   type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
   let activeTab = $state<TabId>("interface");
@@ -62,6 +62,7 @@
     inner_nav_layout: "vertical" | "horizontal";
     /** Champs activés par type : { "start": ["files","size","crf"], … } */
     discord_fields: Record<string, string[]>;
+    discord_custom_notes: Record<string, string>;
     /** Chemins de sortie prédéfinis */
     output_dir_presets: string[];
   };
@@ -78,8 +79,9 @@
   /** Catalogue reçu du backend : { notifType -> FieldDef[] } */
   let catalog = $state<Record<string, FieldDef[]>>({});
 
-  /** Quel panneau de champs est déplié : null = aucun, sinon notifType */
-  let expandedFields = $state<string | null>(null);
+  /** Références DOM des textarea de note, indexées par notifType — utilisées pour
+   *  insérer une variable à la position du curseur au clic sur un chip. */
+  let textareaRefs: Record<string, HTMLTextAreaElement> = {};
 
   let form = $state<SavedConfig>({
     ffmpeg_path: "",
@@ -97,6 +99,7 @@
     discord_notify_progress: false,
     discord_progress_interval: 30,
     discord_fields: {},
+    discord_custom_notes: {},
     output_dir_presets: [],
     nav_layout: "vertical",
     inner_nav_layout: "vertical",
@@ -109,13 +112,24 @@
     notifType: string;
     label: string;
     desc: string;
+    icon: string;
+    embedTitle: string;
   }> = [
-    { key: "discord_notify_start",     notifType: "start",     label: "Début d'encodage",  desc: "Envoi au démarrage" },
-    { key: "discord_notify_file_done", notifType: "file_done", label: "Fichier terminé",   desc: "Après chaque fichier" },
-    { key: "discord_notify_progress",  notifType: "progress",  label: "Progression",       desc: "Mise à jour périodique" },
-    { key: "discord_notify_summary",   notifType: "summary",   label: "Résumé global",     desc: "Bilan de session" },
-    { key: "discord_notify_error",     notifType: "error",     label: "Erreur d'encodage", desc: "En cas d'échec" },
+    { key: "discord_notify_start",     notifType: "start",     label: "Début d'encodage",  desc: "Envoi au démarrage",     icon: "🎬", embedTitle: "🎬 Encodage démarré" },
+    { key: "discord_notify_file_done", notifType: "file_done", label: "Fichier terminé",   desc: "Après chaque fichier",   icon: "✅", embedTitle: "✅ Fichier encodé" },
+    { key: "discord_notify_progress",  notifType: "progress",  label: "Progression",       desc: "Mise à jour périodique", icon: "📈", embedTitle: "📈 Encodage en cours" },
+    { key: "discord_notify_summary",   notifType: "summary",   label: "Résumé global",     desc: "Bilan de session",       icon: "🏁", embedTitle: "✅ Encodage terminé" },
+    { key: "discord_notify_error",     notifType: "error",     label: "Erreur d'encodage", desc: "En cas d'échec",         icon: "⚠️", embedTitle: "❌ Erreur d'encodage" },
   ];
+
+  /** Variables disponibles par type de notification, insérables dans la note. */
+  const NOTIF_VARS: Record<string, string[]> = {
+    summary:   ["{files}", "{success}", "{errors}", "{gain}", "{saved}", "{duration}"],
+    start:     ["{files}", "{size}", "{crf}", "{preset}"],
+    file_done: ["{file}", "{size_before}", "{size_after}", "{gain}", "{saved}", "{duration}", "{crf}", "{preset}"],
+    error:     ["{file}", "{error}"],
+    progress:  ["{file}", "{index}", "{total}", "{percent}", "{speed}", "{remaining}"],
+  };
 
   // ── Réinitialisation ───────────────────────────────────────────────────────
 
@@ -166,6 +180,7 @@
         discord_notify_progress:   g("discord_notify_progress",   "discordNotifyProgress")    ?? form.discord_notify_progress,
         discord_progress_interval: g("discord_progress_interval", "discordProgressInterval")  ?? form.discord_progress_interval,
         discord_fields:            g("discord_fields",            "discordFields")            ?? form.discord_fields,
+        discord_custom_notes:      g("discord_custom_notes",      "discordCustomNotes")       ?? form.discord_custom_notes,
         output_dir_presets:        g("output_dir_presets",        "outputDirPresets")         ?? form.output_dir_presets,
         nav_layout:                g("nav_layout",                "navLayout")                ?? form.nav_layout,
         inner_nav_layout:          g("inner_nav_layout",          "innerNavLayout")           ?? form.inner_nav_layout,
@@ -220,6 +235,7 @@
           discord_notify_progress:   form.discord_notify_progress,
           discord_progress_interval: form.discord_progress_interval,
           discord_fields:            form.discord_fields,
+          discord_custom_notes:      form.discord_custom_notes,
           output_dir_presets:        form.output_dir_presets,
           nav_layout:                form.nav_layout,
           inner_nav_layout:          form.inner_nav_layout,
@@ -298,6 +314,37 @@
     return catalog[notifType]?.length ?? 0;
   }
 
+  /**
+   * Insère une variable dans la note personnalisée d'un type de notification,
+   * à la position actuelle du curseur (ou en fin de texte si le champ n'a
+   * jamais eu le focus).
+   */
+  function insertVariable(notifType: string, variable: string) {
+    const current = form.discord_custom_notes[notifType] ?? "";
+    const el = textareaRefs[notifType];
+
+    if (!el) {
+      form.discord_custom_notes[notifType] = current + variable;
+      form.discord_custom_notes = { ...form.discord_custom_notes };
+      return;
+    }
+
+    const start = el.selectionStart ?? current.length;
+    const end   = el.selectionEnd ?? current.length;
+    const next  = current.slice(0, start) + variable + current.slice(end);
+
+    form.discord_custom_notes[notifType] = next;
+    form.discord_custom_notes = { ...form.discord_custom_notes };
+
+    // Remet le focus et replace le curseur juste après la variable insérée,
+    // une fois que Svelte a mis à jour la valeur du textarea.
+    const cursorPos = start + variable.length;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(cursorPos, cursorPos);
+    });
+  }
+
   // ── Effets ─────────────────────────────────────────────────────────────────
 
   onMount(() => loadSettings());
@@ -327,6 +374,7 @@
       discord_notify_progress:   form.discord_notify_progress,
       discord_progress_interval: form.discord_progress_interval,
       discord_fields:            form.discord_fields,
+      discord_custom_notes:      form.discord_custom_notes,
       output_dir_presets:        overridePresets ?? form.output_dir_presets,
     };
   }
@@ -794,167 +842,193 @@
         </div>
 
         <!-- ── Notifications ──────────────────────────────────────────────── -->
-        <div class="space-y-0 pt-3" style="border-top: 1px solid var(--color-border);">
+        <div class="pt-3" style="border-top: 1px solid var(--color-border);">
           <div class="section-label mb-2">Notifications</div>
 
+          <div class="notif-grid">
           {#each NOTIF_ROWS as row}
             {@const isOn = (form as any)[row.key] as boolean}
             {@const hasFields = (catalog[row.notifType] ?? []).length > 0}
             {@const active = activeFieldCount(row.notifType)}
             {@const total  = totalFieldCount(row.notifType)}
-            {@const isExpanded = expandedFields === row.notifType}
+            {@const note   = form.discord_custom_notes[row.notifType] ?? ""}
 
-            <!-- Ligne toggle principale -->
-            <div class="notif-row"
-                 style="border-bottom: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);">
-              <div class="flex items-center gap-2 min-w-0">
-                <!-- Chevron dépliage champs (uniquement si la notif est activée) -->
-                {#if isOn && hasFields}
-                  <button
-                    type="button"
-                    class="chevron-btn"
-                    aria-label={isExpanded ? "Masquer les champs" : "Configurer les champs"}
-                    onclick={() => (expandedFields = isExpanded ? null : row.notifType)}
-                  >
-                    {#if isExpanded}
-                      <ChevronDown class="w-3.5 h-3.5" />
-                    {:else}
-                      <ChevronRight class="w-3.5 h-3.5" />
-                    {/if}
-                  </button>
-                {:else}
-                  <!-- Placeholder pour aligner -->
-                  <span class="w-4 h-4 shrink-0"></span>
-                {/if}
+            <div class="discord-card" class:discord-card--off={!isOn}>
 
-                <div class="min-w-0">
-                  <span class="text-[12px]" style="color: var(--color-text);">{row.label}</span>
-                  <p class="font-mono text-[9px] mt-0.5" style="color: var(--color-subtext);">{row.desc}</p>
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2 shrink-0">
-                <!-- Badge champs actifs/total (affiché si la notif est ON et qu'il y a des champs) -->
-                {#if isOn && hasFields}
-                  <span
-                    class="field-badge"
-                    class:field-badge--warn={active === 0}
-                    title="{active}/{total} champs actifs"
-                  >
-                    {active}/{total}
-                  </span>
-                {/if}
-                <!-- Toggle ON/OFF -->
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={isOn}
-                  onclick={() => {
-                    (form as any)[row.key] = !isOn;
-                    // Replier le panneau si on désactive
-                    if (isOn && expandedFields === row.notifType) expandedFields = null;
-                  }}
-                  class="toggle {isOn ? 'on' : ''}"
-                  aria-label={row.label}
-                ></button>
-              </div>
-            </div>
-
-            <!-- Intervalle progression -->
-            {#if row.key === 'discord_notify_progress' && isOn}
-              <div class="pb-2 pt-1 pl-6">
-                <label for="discord-progress-interval" class="field-label">Intervalle (secondes)</label>
-                <input
-                  id="discord-progress-interval"
-                  type="number"
-                  bind:value={form.discord_progress_interval}
-                  min="10" max="300"
-                  placeholder="30"
-                  class="field-input w-full px-3 py-2"
-                />
-              </div>
-            {/if}
-
-            <!-- Panneau de champs (déplié) -->
-            {#if isOn && hasFields && isExpanded}
-              <div class="fields-panel" role="group" aria-label="Champs de la notification {row.label}">
-
-                <!-- En-tête panneau avec tout cocher/décocher -->
-                <div class="fields-panel-header">
-                  <span class="font-mono text-[9px] uppercase tracking-wider"
-                        style="color: var(--color-subtext);">Champs inclus dans l'embed</span>
-                  <div class="flex gap-2">
-                    <button
-                      type="button"
-                      class="micro-btn"
-                      onclick={() => toggleAllFields(row.notifType, true)}
-                      aria-label="Tout activer"
-                    >Tout</button>
-                    <button
-                      type="button"
-                      class="micro-btn"
-                      onclick={() => toggleAllFields(row.notifType, false)}
-                      aria-label="Tout désactiver"
-                    >Aucun</button>
+              <!-- En-tête de la card : icône, libellé, badge, toggle -->
+              <div class="discord-card-header">
+                <div class="discord-card-header-main">
+                  <span class="discord-card-icon" aria-hidden="true">{row.icon}</span>
+                  <div class="min-w-0">
+                    <span class="discord-card-title">{row.label}</span>
+                    <p class="discord-card-desc">{row.desc}</p>
                   </div>
                 </div>
 
-                <!-- Liste des champs -->
-                <div class="fields-list">
-                  {#each (catalog[row.notifType] ?? []) as field}
-                    {@const enabled = isFieldEnabled(row.notifType, field.id)}
-                    <button
-                      type="button"
-                      class="field-chip"
-                      class:field-chip--on={enabled}
-                      aria-pressed={enabled}
-                      aria-label={field.label}
-                      onclick={() => toggleField(row.notifType, field.id)}
+                <div class="discord-card-header-actions">
+                  {#if hasFields}
+                    <span
+                      class="field-badge"
+                      class:field-badge--warn={isOn && active === 0}
+                      title="{active}/{total} champs actifs"
                     >
-                      {#if enabled}
-                        <Check class="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
-                      {/if}
-                      <span>{field.label}</span>
-                    </button>
-                  {/each}
+                      {active}/{total}
+                    </span>
+                  {/if}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={isOn}
+                    onclick={() => { (form as any)[row.key] = !isOn; }}
+                    class="toggle {isOn ? 'on' : ''}"
+                    aria-label={row.label}
+                  ></button>
                 </div>
+              </div>
 
-                <!-- Aperçu visuel embed Discord -->
-                <div class="embed-preview" aria-label="Aperçu de l'embed Discord">
-                  <div class="embed-preview-label">Aperçu embed</div>
-                  <div class="embed-mock">
-                    <div class="embed-mock-bar"></div>
-                    <div class="embed-mock-body">
-                      <div class="embed-mock-title">
-                        {row.notifType === 'start'     ? '🎬 Encodage démarré'    :
-                         row.notifType === 'file_done' ? '✅ Fichier encodé'       :
-                         row.notifType === 'progress'  ? '📈 Encodage en cours'   :
-                         row.notifType === 'summary'   ? '✅ Encodage terminé'    :
-                                                         '❌ Erreur d\'encodage'}
-                      </div>
-                      <div class="embed-mock-fields">
-                        {#each (catalog[row.notifType] ?? []) as field}
-                          {#if isFieldEnabled(row.notifType, field.id)}
-                            <div class="embed-mock-field">
-                              <div class="embed-mock-field-name">{field.label}</div>
-                              <div class="embed-mock-field-value">—</div>
-                            </div>
-                          {/if}
-                        {/each}
-                        {#if activeFieldCount(row.notifType) === 0}
-                          <span class="font-mono text-[9px]" style="color: var(--color-subtext);">
-                            Aucun champ — embed vide
-                          </span>
+              <!-- Intervalle progression -->
+              {#if row.key === 'discord_notify_progress' && isOn}
+                <div class="discord-card-subfield">
+                  <label for="discord-progress-interval" class="field-label">Intervalle (secondes)</label>
+                  <input
+                    id="discord-progress-interval"
+                    type="number"
+                    bind:value={form.discord_progress_interval}
+                    min="10" max="300"
+                    placeholder="30"
+                    class="field-input w-full px-3 py-2"
+                  />
+                </div>
+              {/if}
+
+              <!-- Corps de la card : toujours visible, pas de chevron -->
+              {#if hasFields}
+                <div class="discord-card-body">
+
+                  <!-- En-tête corps avec tout cocher/décocher -->
+                  <div class="fields-panel-header">
+                    <span class="font-mono text-[9px] uppercase tracking-wider"
+                          style="color: var(--color-subtext);">Champs inclus dans l'embed</span>
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        class="micro-btn"
+                        onclick={() => toggleAllFields(row.notifType, true)}
+                        aria-label="Tout activer"
+                      >Tout</button>
+                      <button
+                        type="button"
+                        class="micro-btn"
+                        onclick={() => toggleAllFields(row.notifType, false)}
+                        aria-label="Tout désactiver"
+                      >Aucun</button>
+                    </div>
+                  </div>
+
+                  <!-- Liste des champs -->
+                  <div class="fields-list">
+                    {#each (catalog[row.notifType] ?? []) as field}
+                      {@const enabled = isFieldEnabled(row.notifType, field.id)}
+                      <button
+                        type="button"
+                        class="field-chip"
+                        class:field-chip--on={enabled}
+                        aria-pressed={enabled}
+                        aria-label={field.label}
+                        onclick={() => toggleField(row.notifType, field.id)}
+                      >
+                        {#if enabled}
+                          <Check class="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
                         {/if}
+                        <span>{field.label}</span>
+                      </button>
+                    {/each}
+                  </div>
+
+                  <!-- Note personnalisée -->
+                  <div class="custom-note-block">
+                    <label class="font-mono text-[9px] uppercase tracking-wider"
+                           style="color: var(--color-subtext);"
+                           for="custom-note-{row.notifType}">
+                      📝 Note personnalisée
+                    </label>
+                    <textarea
+                      id="custom-note-{row.notifType}"
+                      bind:this={textareaRefs[row.notifType]}
+                      rows="2"
+                      maxlength="500"
+                      placeholder="Texte libre affiché en bas de l'embed (optionnel)…"
+                      class="custom-note-textarea"
+                      value={note}
+                      oninput={(e) => {
+                        form.discord_custom_notes[row.notifType] = (e.currentTarget as HTMLTextAreaElement).value;
+                        form.discord_custom_notes = { ...form.discord_custom_notes };
+                      }}
+                    ></textarea>
+                    <div class="custom-note-footer">
+                      <div class="custom-note-vars">
+                        {#each (NOTIF_VARS[row.notifType] ?? []) as v}
+                          <button
+                            type="button"
+                            class="var-chip"
+                            title="Cliquer pour insérer {v} dans la note"
+                            onclick={() => insertVariable(row.notifType, v)}
+                          >{v}</button>
+                        {/each}
+                      </div>
+                      <div class="custom-note-counter">
+                        {note.length}/500
                       </div>
                     </div>
                   </div>
-                </div>
 
-              </div>
-            {/if}
+                  <!-- Aperçu visuel embed Discord -->
+                  <div class="embed-preview" aria-label="Aperçu de l'embed Discord">
+                    <div class="embed-preview-label">Aperçu embed</div>
+                    <div class="embed-mock">
+                      <div class="embed-mock-bar"></div>
+                      <div class="embed-mock-body">
+                        <div class="embed-mock-meta">
+                          <span class="embed-mock-avatar" aria-hidden="true">🤖</span>
+                          <span class="embed-mock-botname">CleanEncode</span>
+                          <span class="embed-mock-bot-tag">BOT</span>
+                          <span class="embed-mock-timestamp">aujourd'hui à 14:32</span>
+                        </div>
+                        <div class="embed-mock-title">{row.embedTitle}</div>
+                        <div class="embed-mock-fields">
+                          {#each (catalog[row.notifType] ?? []) as field}
+                            {#if isFieldEnabled(row.notifType, field.id)}
+                              <div class="embed-mock-field">
+                                <div class="embed-mock-field-name">{field.label}</div>
+                                <div class="embed-mock-field-value">—</div>
+                              </div>
+                            {/if}
+                          {/each}
+                          {#if active === 0}
+                            <span class="font-mono text-[9px]" style="color: var(--color-subtext);">
+                              Aucun champ — embed vide
+                            </span>
+                          {/if}
+                          {#if note.trim()}
+                            <div class="embed-mock-field" style="grid-column: 1 / -1;">
+                              <div class="embed-mock-field-name">📝 Note</div>
+                              <div class="embed-mock-field-value" style="white-space: pre-wrap; word-break: break-word;">
+                                {note}
+                              </div>
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              {/if}
+            </div>
           {/each}
+          </div>
         </div>
+
 
         <!-- Test Discord -->
         <button
@@ -1259,22 +1333,6 @@
     opacity: 0;
   }
 
-  .color-swatch-preset {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 1px solid var(--color-border);
-    cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
-    transition: transform 0.12s, border-color 0.12s;
-  }
-  .color-swatch-preset:hover { transform: scale(1.15); }
-  .color-swatch-preset--active {
-    border: 2px solid var(--color-text);
-    transform: scale(1.15);
-  }
-
   /* ── Formulaire ───────────────────────────────────────────────────────────── */
 
   .field-label {
@@ -1305,33 +1363,73 @@
     cursor: pointer;
   }
 
-  /* ── Ligne de notification ─────────────────────────────────────────────────── */
+  /* ── Grille 2 colonnes ──────────────────────────────────────────────────────── */
 
-  .notif-row {
+  .notif-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    align-items: start;
+  }
+
+  /* ── Card de notification ──────────────────────────────────────────────────── */
+
+  .discord-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-panel2, var(--color-panel));
+    overflow: hidden;
+    transition: opacity 0.15s, border-color 0.15s;
+  }
+
+  .discord-card--off {
+    opacity: 0.55;
+  }
+
+  .discord-card-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 8px 0;
+    gap: 6px;
+    padding: 7px 9px;
   }
 
-  /* Bouton chevron dépliage */
-  .chevron-btn {
-    display: inline-flex;
+  .discord-card-header-main {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    border: none;
-    background: transparent;
-    color: var(--color-subtext);
-    cursor: pointer;
-    padding: 0;
-    border-radius: var(--radius-xs);
-    transition: color 0.1s;
+    gap: 6px;
+    min-width: 0;
   }
-  .chevron-btn:hover { color: var(--color-accent); }
+
+  .discord-card-icon {
+    font-size: 13px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .discord-card-title {
+    font-size: 11px;
+    color: var(--color-text);
+    display: block;
+  }
+
+  .discord-card-desc {
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    color: var(--color-subtext);
+    margin-top: 1px;
+  }
+
+  .discord-card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .discord-card-subfield {
+    padding: 0 9px 7px;
+  }
 
   /* Badge champs actifs */
   .field-badge {
@@ -1351,17 +1449,15 @@
     border-color: color-mix(in srgb, var(--color-danger, #E74C3C) 25%, transparent);
   }
 
-  /* ── Panneau de champs ─────────────────────────────────────────────────────── */
+  /* ── Corps de la card : champs, note, aperçu (toujours visible) ─────────────── */
 
-  .fields-panel {
-    margin: 0 0 4px 22px;
-    padding: 10px;
-    border-radius: var(--radius-sm);
+  .discord-card-body {
+    padding: 7px 9px 9px;
+    border-top: 1px solid var(--color-border);
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
 
   .fields-panel-header {
@@ -1392,6 +1488,66 @@
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
+  }
+
+  .custom-note-block {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+  }
+  .custom-note-footer {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .custom-note-vars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1;
+  }
+  .var-chip {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+    color: var(--color-accent);
+    cursor: pointer;
+    transition: background 0.1s, transform 0.08s;
+  }
+  .var-chip:hover {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  .var-chip:active {
+    transform: scale(0.95);
+  }
+  .custom-note-textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 46px;
+    padding: 7px 10px;
+    font-family: "DM Sans", sans-serif;
+    font-size: 11px;
+    line-height: 1.45;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .custom-note-textarea:focus { border-color: var(--color-accent); }
+  .custom-note-textarea::placeholder { color: var(--color-subtext2); }
+  .custom-note-counter {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+    text-align: right;
   }
 
   /* Chip individuel */
@@ -1454,33 +1610,78 @@
   }
 
   .embed-mock-body {
-    padding: 8px 10px;
+    padding: 5px 7px;
     flex: 1;
     min-width: 0;
   }
 
-  .embed-mock-title {
-    font-size: 11px;
+  .embed-mock-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .embed-mock-avatar {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--color-accent) 30%, #1e1f22);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 7px;
+    flex-shrink: 0;
+  }
+
+  .embed-mock-botname {
+    font-size: 9px;
     font-weight: 600;
     color: #f2f3f5;
-    margin-bottom: 6px;
+  }
+
+  .embed-mock-bot-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 6px;
+    font-weight: 700;
+    padding: 0px 2px;
+    border-radius: 2px;
+    background: var(--color-accent);
+    color: #1e1f22;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+
+  .embed-mock-timestamp {
+    font-family: "Geist Mono", monospace;
+    font-size: 7px;
+    color: #949ba4;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .embed-mock-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: #f2f3f5;
+    margin-bottom: 4px;
   }
 
   .embed-mock-fields {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 12px;
+    gap: 4px 8px;
   }
 
   .embed-mock-field {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 1px;
   }
 
   .embed-mock-field-name {
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 600;
     color: #b5bac1;
   }

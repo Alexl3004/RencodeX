@@ -72,7 +72,7 @@ fn thumbnail_for(color: u32) -> &'static str {
 /// `enabled_fields` contrôle quels champs sont inclus dans l'embed Discord.
 /// Champs disponibles : `files`, `gain`, `duration`, `saved`, `detail`.
 /// Si `enabled_fields` est vide, tous les champs sont affichés (comportement rétrocompatible).
-pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSummary, enabled_fields: &[String]) {
+pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSummary, enabled_fields: &[String], custom_note: &str) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let success   = summary.files.iter().filter(|f| f.status == "ok").count();
@@ -92,6 +92,18 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
 
     let saved_mb = summary.total_original_mb - summary.total_encoded_mb;
     let saved_gb = saved_mb / 1024.0;
+
+    // Résoudre les placeholders dans la note
+    let resolved_note = if !custom_note.is_empty() {
+        let saved_str = if saved_mb >= 1024.0 { format!("{:.2} GB", saved_gb) } else { format!("{:.0} MB", saved_mb) };
+        custom_note
+            .replace("{files}",    &total.to_string())
+            .replace("{success}",  &success.to_string())
+            .replace("{errors}",   &errors.to_string())
+            .replace("{gain}",     &format!("{:.1}%", gain_pct))
+            .replace("{saved}",    &saved_str)
+            .replace("{duration}", &duration_to_str(elapsed))
+    } else { String::new() };
 
     // Si enabled_fields est vide, tout est affiché (rétrocompat).
     let all = enabled_fields.is_empty();
@@ -167,6 +179,14 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
         }
     }
 
+    if !resolved_note.is_empty() {
+        fields.push(serde_json::json!({
+            "name": "📝 Note",
+            "value": resolved_note,
+            "inline": false
+        }));
+    }
+
     let embed = serde_json::json!({
         "title": if errors > 0 && success == 0 { "❌ Encodage échoué" }
                  else if errors > 0 { "⚠️ Encodage partiel" }
@@ -203,7 +223,7 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
 /// Notification de démarrage d'encodage.
 ///
 /// `enabled_fields` : `files`, `size`, `crf`, `preset`, `codec`, `audio`.
-pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str, enabled_fields: &[String]) {
+pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str, enabled_fields: &[String], custom_note: &str) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let total_size_str = if total_size_mb >= 1024.0 {
@@ -215,6 +235,14 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
     let all = enabled_fields.is_empty();
     let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
 
+    let resolved_note = if !custom_note.is_empty() {
+        custom_note
+            .replace("{files}",  &total_files.to_string())
+            .replace("{size}",   &total_size_str)
+            .replace("{crf}",    &crf.to_string())
+            .replace("{preset}", &preset.to_uppercase())
+    } else { String::new() };
+
     let mut fields: Vec<serde_json::Value> = Vec::new();
     if has("files")  { fields.push(serde_json::json!({ "name": "📁 Fichiers",      "value": format!("`{}` fichiers", total_files),            "inline": true })); }
     if has("size")   { fields.push(serde_json::json!({ "name": "💾 Taille totale", "value": format!("`{}`", total_size_str),                   "inline": true })); }
@@ -222,6 +250,9 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
     if has("preset") { fields.push(serde_json::json!({ "name": "⚡ Preset",         "value": format!("`{}`", preset.to_uppercase()),           "inline": true })); }
     if has("codec")  { fields.push(serde_json::json!({ "name": "🎨 Codec",          "value": "`H.265 NVENC`",                                  "inline": true })); }
     if has("audio")  { fields.push(serde_json::json!({ "name": "🔊 Audio",          "value": "`AAC 192k`",                                     "inline": true })); }
+    if !resolved_note.is_empty() {
+        fields.push(serde_json::json!({ "name": "📝 Note", "value": resolved_note, "inline": false }));
+    }
 
     let payload = serde_json::json!({
         "username": "RenCodeX",
@@ -241,7 +272,7 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
 /// Notification d'erreur d'encodage.
 ///
 /// `enabled_fields` : `file`, `error`.
-pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str, error_msg: &str, enabled_fields: &[String]) {
+pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str, error_msg: &str, enabled_fields: &[String], custom_note: &str) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let truncated_error = if error_msg.len() > 500 {
@@ -253,9 +284,18 @@ pub async fn discord_notify_error(token: &str, channel_id: &str, file_name: &str
     let all = enabled_fields.is_empty();
     let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
 
+    let resolved_note = if !custom_note.is_empty() {
+        custom_note
+            .replace("{file}",  file_name)
+            .replace("{error}", &truncated_error)
+    } else { String::new() };
+
     let mut fields: Vec<serde_json::Value> = Vec::new();
     if has("file")  { fields.push(serde_json::json!({ "name": "📁 Fichier", "value": format!("`{}`", file_name),                    "inline": false })); }
     if has("error") { fields.push(serde_json::json!({ "name": "🐛 Erreur",  "value": format!("```{}```", truncated_error),          "inline": false })); }
+    if !resolved_note.is_empty() {
+        fields.push(serde_json::json!({ "name": "📝 Note", "value": resolved_note, "inline": false }));
+    }
 
     let payload = serde_json::json!({
         "username": "RenCodeX",
@@ -286,6 +326,7 @@ pub async fn discord_notify_file_done(
     crf: u32,
     preset: &str,
     enabled_fields: &[String],
+    custom_note: &str,
 ) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
@@ -306,6 +347,18 @@ pub async fn discord_notify_file_done(
     let all = enabled_fields.is_empty();
     let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
 
+    let resolved_note = if !custom_note.is_empty() {
+        custom_note
+            .replace("{file}",        file_name)
+            .replace("{size_before}", &format!("{:.1} MB", original_mb))
+            .replace("{size_after}",  &format!("{:.1} MB", encoded_mb))
+            .replace("{gain}",        &format!("{:.1}%", gain_pct))
+            .replace("{saved}",       &saved_str)
+            .replace("{duration}",    &duration_str)
+            .replace("{crf}",         &crf.to_string())
+            .replace("{preset}",      &preset.to_uppercase())
+    } else { String::new() };
+
     let mut fields: Vec<serde_json::Value> = Vec::new();
     if has("file")     { fields.push(serde_json::json!({ "name": "📁 Fichier", "value": format!("`{}`", file_name),                                      "inline": false })); }
     if has("size")     { fields.push(serde_json::json!({ "name": "💾 Taille",  "value": format!("`{:.1} MB` → `{:.1} MB`", original_mb, encoded_mb),     "inline": true  })); }
@@ -313,6 +366,9 @@ pub async fn discord_notify_file_done(
     if has("duration") { fields.push(serde_json::json!({ "name": "⏱️ Temps",   "value": format!("`{}`", duration_str),                                    "inline": true  })); }
     if has("crf")      { fields.push(serde_json::json!({ "name": "🎚️ CRF",    "value": format!("`{}`", crf),                                             "inline": true  })); }
     if has("preset")   { fields.push(serde_json::json!({ "name": "⚡ Preset",  "value": format!("`{}`", preset.to_uppercase()),                           "inline": true  })); }
+    if !resolved_note.is_empty() {
+        fields.push(serde_json::json!({ "name": "📝 Note", "value": resolved_note, "inline": false }));
+    }
 
     let payload = serde_json::json!({
         "username": "RenCodeX",
@@ -390,6 +446,7 @@ pub async fn discord_notify_progress(
     remaining_secs: f64,
     _elapsed_secs: f64,
     enabled_fields: &[String],
+    custom_note: &str,
 ) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
@@ -400,6 +457,16 @@ pub async fn discord_notify_progress(
 
     let all = enabled_fields.is_empty();
     let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);
+
+    let resolved_note = if !custom_note.is_empty() {
+        custom_note
+            .replace("{file}",      file_name)
+            .replace("{index}",     &(file_index + 1).to_string())
+            .replace("{total}",     &file_total.to_string())
+            .replace("{percent}",   &format!("{:.1}%", percent))
+            .replace("{speed}",     &format!("{:.2}x", speed))
+            .replace("{remaining}", &remaining_str)
+    } else { String::new() };
 
     let mut fields: Vec<serde_json::Value> = Vec::new();
     if has("file") {
@@ -436,6 +503,9 @@ pub async fn discord_notify_progress(
             "value": format!("<t:{}:R>", ts),
             "inline": true
         }));
+    }
+    if !resolved_note.is_empty() {
+        fields.push(serde_json::json!({ "name": "📝 Note", "value": resolved_note, "inline": false }));
     }
 
     let payload = serde_json::json!({
