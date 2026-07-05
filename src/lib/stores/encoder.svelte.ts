@@ -1174,7 +1174,7 @@ function createEncoder() {
 
     try {
       summary = await invoke<EncodeSummary>("start_encoding", { jobs });
-      stats.recordSummary(summary);
+      await stats.recordSummary(summary);
       const ok = summary.files.filter((f) => f.status === "ok").length;
       const errors = summary.files.filter((f) => f.status === "error").length;
       const cancelled = summary.files.filter(

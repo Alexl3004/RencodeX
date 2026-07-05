@@ -254,10 +254,42 @@ pub struct EmailConfig {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct FileRecord {
+    #[serde(default)] pub name:        String,
+    #[serde(default)] pub original_mb: f64,
+    #[serde(default)] pub encoded_mb:  f64,
+    #[serde(default)] pub ratio_pct:   f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct EncodeSession {
+    #[serde(default)] pub date:      String,
+    #[serde(default)] pub files:     u32,
+    #[serde(default)] pub ratio_pct: f64,
+    #[serde(default)] pub saved_mb:  f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ExtractSession {
+    #[serde(default)] pub date:   String,
+    #[serde(default)] pub files:  u32,
+    #[serde(default)] pub tracks: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Stats {
-    pub total_files: u32,
-    pub total_original_mb: f64,
-    pub total_encoded_mb: f64,
-    pub sum_ratio_pct: f64,
-    pub last_updated: Option<String>,
+    #[serde(default)] pub total_files:             u32,
+    #[serde(default)] pub total_launched:           u32,
+    #[serde(default)] pub total_original_mb:        f64,
+    #[serde(default)] pub total_encoded_mb:         f64,
+    #[serde(default)] pub sum_ratio_pct:            f64,
+    #[serde(default)] pub total_secs:               f64,
+    #[serde(default)] pub last_updated:             Option<String>,
+    #[serde(default)] pub total_extracted_files:    u32,
+    #[serde(default)] pub total_extract_launched:   u32,
+    #[serde(default)] pub total_tracks_extracted:   u32,
+    #[serde(default)] pub record_heaviest:          Option<FileRecord>,
+    #[serde(default)] pub record_best_ratio:        Option<FileRecord>,
+    #[serde(default)] pub encode_sessions:          Vec<EncodeSession>,
+    #[serde(default)] pub extract_sessions:         Vec<ExtractSession>,
 }

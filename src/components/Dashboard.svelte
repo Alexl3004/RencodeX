@@ -3,17 +3,19 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import {
-    X,
     HardDrive,
     TrendingDown,
-    CheckCircle2,
     Clock,
-    Gauge,
     FileCheck2,
     Subtitles,
     BarChart3,
+    Timer,
+    Trophy,
+    Weight,
+    History,
   } from "@lucide/svelte";
   import { Popover, Portal } from "@skeletonlabs/skeleton-svelte";
+  import { Chart, Svg, Spline } from "layerchart";
 
   let { onClose }: { onClose?: () => void } = $props();
 
@@ -25,14 +27,17 @@
   let avgInputMb            = $derived(stats.avgInputMb);
   let avgOutputMb           = $derived(stats.avgOutputMb);
   let avgRatioPct           = $derived(stats.avgRatioPct);
-  let avgThroughputMbps     = $derived(stats.avgThroughputMbps);
-  let successRatePct        = $derived(stats.successRatePct);
+  let avgSecs               = $derived(stats.avgSecs);
   let totalSecs             = $derived(stats.totalSecs);
   let lastUpdated           = $derived(stats.lastUpdated);
   let totalExtractedFiles   = $derived(stats.totalExtractedFiles);
   let totalExtractLaunched  = $derived(stats.totalExtractLaunched);
   let totalTracksExtracted  = $derived(stats.totalTracksExtracted);
-  let extractSuccessRatePct = $derived(stats.extractSuccessRatePct);
+  let avgTracksPerFile      = $derived(stats.avgTracksPerFile);
+  let recordHeaviest        = $derived(stats.recordHeaviest);
+  let recordBestRatio       = $derived(stats.recordBestRatio);
+  let encodeSessions        = $derived(stats.encodeSessions);
+  let extractSessions       = $derived(stats.extractSessions);
   let hasData               = $derived(totalFiles > 0);
   let hasExtractData        = $derived(totalExtractLaunched > 0);
 
@@ -44,17 +49,6 @@
     { id: "encodage",   label: "Encodage",   icon: BarChart3,  desc: "Compression · succès" },
     { id: "extraction", label: "Extraction", icon: Subtitles,  desc: "Sous-titres extraits" },
   ];
-
-  // ── Donut SVG ──────────────────────────────────────────────────────────
-  const R    = 32;
-  const SW   = 8;
-  const CX   = 42;
-  const CY   = 42;
-  const CIRC = 2 * Math.PI * R;
-  function arcDash(pct: number) {
-    const f = Math.max(0, Math.min(pct, 100)) / 100 * CIRC;
-    return `${f} ${CIRC - f}`;
-  }
 
   // ── Formatters ─────────────────────────────────────────────────────────
   function formattedDate(iso: string | null): string {
@@ -74,26 +68,38 @@
     if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
     return `${s}s`;
   }
-  function formatThroughput(mbps: number): string {
-    if (mbps <= 0) return "--";
-    return mbps < 1 ? `${(mbps * 1024).toFixed(0)} KB/s` : `${mbps.toFixed(1)} MB/s`;
+
+  // ── Bar chart custom : hauteurs des barres ────────────────────────────
+  let barMaxVal  = $derived(Math.max(avgInputMb, 0.001));
+  let barInH     = $derived(Math.round((avgInputMb  / barMaxVal) * 80));
+  let barOutH    = $derived(Math.round((avgOutputMb / barMaxVal) * 80));
+  let encodeSparkData = $derived(
+    [...encodeSessions].reverse().map((s, i) => ({ x: i, y: s.ratio_pct }))
+  );
+
+  // ── LayerChart : sparkline sessions extraction (tracks) ────────────────
+  let extractSparkData = $derived(
+    [...extractSessions].reverse().map((s, i) => ({ x: i, y: s.tracks }))
+  );
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function truncName(name: string, max = 32): string {
+    if (!name) return "—";
+    if (name.length <= max) return name;
+    const ext = name.lastIndexOf(".");
+    if (ext > 0) {
+      const base = name.slice(0, ext);
+      const e    = name.slice(ext);
+      return base.slice(0, max - e.length - 1) + "…" + e;
+    }
+    return name.slice(0, max - 1) + "…";
   }
 
-  // ── Bar chart SVG simple ───────────────────────────────────────────────
-  // Hauteur max des barres en px
-  const BAR_H  = 72;
-  const BAR_W  = 44;
-  const GAP    = 20;
-  const SVG_W  = BAR_W * 2 + GAP + 48; // espace pour labels gauche
-  const SVG_H  = BAR_H + 28;            // + espace label bas
-
-  let barScale = $derived(avgInputMb > 0 ? BAR_H / (avgInputMb * 1.1) : 0);
-  let inH      = $derived(Math.round(avgInputMb  * barScale));
-  let outH     = $derived(Math.round(avgOutputMb * barScale));
-  // positions x des barres (laisser 40px à gauche pour axe Y)
-  const X_OFF  = 40;
-  let x1       = X_OFF;
-  let x2       = X_OFF + BAR_W + GAP;
+  function shortDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+      + " " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  }
 </script>
 
 <div class="page-root" class:page-root--horizontal={encoder.innerNavLayout === "horizontal"}>
@@ -168,95 +174,35 @@
           <!-- Charts row -->
           <div class="charts-row">
 
-            <!-- Bar chart SVG : Entrée vs Sortie -->
+            <!-- Bar chart LayerChart : Entrée vs Sortie -->
             <div class="field-block">
               <div class="field-label">Taille moyenne par fichier</div>
               <div class="bar-card">
-                <svg width={SVG_W} height={SVG_H} class="bar-svg">
-                  <!-- Ligne de base -->
-                  <line x1={X_OFF} y1={BAR_H} x2={SVG_W} y2={BAR_H}
-                    stroke="var(--color-border)" stroke-width="1" />
-
-                  <!-- Barre Entrée -->
-                  <rect
-                    x={x1} y={BAR_H - inH}
-                    width={BAR_W} height={inH}
-                    rx="3"
-                    fill="var(--color-subtext)"
-                    opacity="0.5"
-                  />
-                  <!-- Barre Sortie -->
-                  <rect
-                    x={x2} y={BAR_H - outH}
-                    width={BAR_W} height={outH}
-                    rx="3"
-                    fill="var(--color-accent)"
-                    opacity="0.85"
-                  />
-
-                  <!-- Labels valeurs au-dessus -->
-                  <text x={x1 + BAR_W / 2} y={BAR_H - inH - 5}
-                    text-anchor="middle"
-                    style="font-size:9px; font-family:monospace; fill:var(--color-subtext); font-weight:400;">
-                    {formatSize(avgInputMb)}
-                  </text>
-                  <text x={x2 + BAR_W / 2} y={BAR_H - outH - 5}
-                    text-anchor="middle"
-                    style="font-size:9px; font-family:monospace; fill:var(--color-accent); font-weight:400;">
-                    {formatSize(avgOutputMb)}
-                  </text>
-
-                  <!-- Labels catégories en bas -->
-                  <text x={x1 + BAR_W / 2} y={BAR_H + 16}
-                    text-anchor="middle"
-                    style="font-size:9px; font-family:monospace; fill:var(--color-subtext2); font-weight:400;">
-                    Entrée
-                  </text>
-                  <text x={x2 + BAR_W / 2} y={BAR_H + 16}
-                    text-anchor="middle"
-                    style="font-size:9px; font-family:monospace; fill:var(--color-subtext2); font-weight:400;">
-                    Sortie
-                  </text>
-
-                  <!-- Axe Y : quelques repères -->
-                  {#each [0.25, 0.5, 0.75, 1.0] as t}
-                    {@const yy = BAR_H - BAR_H * t}
-                    {@const val = avgInputMb * 1.1 * t}
-                    <line x1={X_OFF - 3} y1={yy} x2={SVG_W} y2={yy}
-                      stroke="var(--color-border)" stroke-width="0.5" stroke-dasharray="2 3" />
-                    <text x={X_OFF - 5} y={yy + 3}
-                      text-anchor="end"
-                      style="font-size:7px; font-family:monospace; fill:var(--color-subtext2);">
-                      {formatSize(val)}
-                    </text>
-                  {/each}
-                </svg>
-              </div>
-            </div>
-
-            <!-- Donut taux de succès -->
-            <div class="field-block">
-              <div class="field-label">Taux de succès</div>
-              <div class="donut-card">
-                <svg width="84" height="84" viewBox="0 0 84 84">
-                  <circle cx={CX} cy={CY} r={R} fill="none"
-                    stroke="var(--color-surface)" stroke-width={SW} />
-                  <circle cx={CX} cy={CY} r={R} fill="none"
-                    stroke="var(--color-success)"
-                    stroke-width={SW}
-                    stroke-dasharray={arcDash(successRatePct)}
-                    stroke-dashoffset={CIRC * 0.25}
-                    stroke-linecap="round" />
-                  <text x={CX} y={CY - 2} text-anchor="middle" dominant-baseline="middle"
-                    style="font-size:13px; font-weight:700; font-family:monospace; fill:var(--color-text);">
-                    {successRatePct.toFixed(0)}%
-                  </text>
-                  <text x={CX} y={CY + 13} text-anchor="middle"
-                    style="font-size:8px; font-family:monospace; fill:var(--color-subtext2);">
-                    {totalFiles}/{stats.totalLaunched}
-                  </text>
-                </svg>
-                <span class="donut-label">Encodage</span>
+                <div class="bar-chart-custom">
+                  <!-- Axe Y labels -->
+                  <div class="bar-y-axis">
+                    <span class="bar-y-label">{formatSize(barMaxVal)}</span>
+                    <span class="bar-y-label">{formatSize(barMaxVal * 0.5)}</span>
+                    <span class="bar-y-label">0</span>
+                  </div>
+                  <!-- Barres -->
+                  <div class="bar-columns">
+                    <div class="bar-col">
+                      <span class="bar-val">{formatSize(avgInputMb)}</span>
+                      <div class="bar-track">
+                        <div class="bar-fill bar-fill--input" style="height:{barInH}px;"></div>
+                      </div>
+                      <span class="bar-col-label">Entrée</span>
+                    </div>
+                    <div class="bar-col">
+                      <span class="bar-val bar-val--accent">{formatSize(avgOutputMb)}</span>
+                      <div class="bar-track">
+                        <div class="bar-fill bar-fill--output" style="height:{barOutH}px;"></div>
+                      </div>
+                      <span class="bar-col-label">Sortie</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -273,10 +219,10 @@
             </div>
             <div class="stat-card">
               <div class="stat-icon-row">
-                <Gauge class="w-3.5 h-3.5 stat-icon" />
-                <span class="stat-label">Débit moyen</span>
+                <Timer class="w-3.5 h-3.5 stat-icon" />
+                <span class="stat-label">Temps moyen / fichier</span>
               </div>
-              <div class="stat-value">{formatThroughput(avgThroughputMbps)}</div>
+              <div class="stat-value">{formatDuration(avgSecs)}</div>
             </div>
             <div class="stat-card">
               <div class="stat-icon-row">
@@ -293,6 +239,86 @@
               <div class="stat-value" style="color:var(--color-accent);">−{avgRatioPct.toFixed(1)}%</div>
             </div>
           </div>
+
+          <!-- ── Records ──────────────────────────────────────────────────── -->
+          {#if recordHeaviest || recordBestRatio}
+            <div class="subsection-title">
+              <Trophy class="w-3 h-3" />
+              Records
+            </div>
+            <div class="records-grid">
+              {#if recordHeaviest}
+                <div class="record-card">
+                  <div class="record-header">
+                    <Weight class="w-3 h-3 shrink-0" style="color:var(--color-subtext2);" />
+                    <span class="record-label">Fichier le plus lourd</span>
+                  </div>
+                  <div class="record-name" title={recordHeaviest.name}>{truncName(recordHeaviest.name)}</div>
+                  <div class="record-values">
+                    <span class="record-val">{formatSize(recordHeaviest.original_mb)}</span>
+                    <span class="record-arrow">→</span>
+                    <span class="record-val record-val--accent">{formatSize(recordHeaviest.encoded_mb)}</span>
+                    <span class="record-ratio">−{recordHeaviest.ratio_pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+              {/if}
+              {#if recordBestRatio}
+                <div class="record-card record-card--gold">
+                  <div class="record-header">
+                    <Trophy class="w-3 h-3 shrink-0" style="color:var(--color-warning);" />
+                    <span class="record-label">Meilleure compression</span>
+                  </div>
+                  <div class="record-name" title={recordBestRatio.name}>{truncName(recordBestRatio.name)}</div>
+                  <div class="record-values">
+                    <span class="record-val">{formatSize(recordBestRatio.original_mb)}</span>
+                    <span class="record-arrow">→</span>
+                    <span class="record-val record-val--accent">{formatSize(recordBestRatio.encoded_mb)}</span>
+                    <span class="record-ratio record-ratio--gold">−{recordBestRatio.ratio_pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- ── Historique sessions ───────────────────────────────────────── -->
+          {#if encodeSessions.length > 0}
+            <div class="subsection-title">
+              <History class="w-3 h-3" />
+              Dernières sessions
+            </div>
+            <div class="sessions-block">
+              <!-- Sparkline ratio — LayerChart -->
+              {#if encodeSessions.length >= 2}
+                <div class="spark-wrap">
+                  <div style="height: 44px;">
+                    <Chart
+                      data={encodeSparkData}
+                      x="x"
+                      y="y"
+                      yDomain={[0, null]}
+                      padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                    >
+                      <Svg>
+                        <Spline stroke="var(--color-accent)" strokeWidth={2} />
+                      </Svg>
+                    </Chart>
+                  </div>
+                  <span class="spark-label">Compression % / session</span>
+                </div>
+              {/if}
+              <!-- Liste -->
+              <div class="sessions-list">
+                {#each encodeSessions as s, i}
+                  <div class="session-row {i === 0 ? 'session-row--latest' : ''}">
+                    <span class="session-date">{shortDate(s.date)}</span>
+                    <span class="session-files">{s.files} fichier{s.files > 1 ? "s" : ""}</span>
+                    <span class="session-saved">{formatSize(s.saved_mb)} éco.</span>
+                    <span class="session-ratio">−{s.ratio_pct.toFixed(1)}%</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
 
         {/if}
       </section>
@@ -327,35 +353,6 @@
             <div class="hero-sub">{totalExtractedFiles} fichier{totalExtractedFiles > 1 ? "s" : ""} traité{totalExtractedFiles > 1 ? "s" : ""} avec succès</div>
           </div>
 
-          <!-- Charts row extraction -->
-          <div class="charts-row">
-            <!-- Donut taux extraction -->
-            <div class="field-block">
-              <div class="field-label">Taux de succès</div>
-              <div class="donut-card">
-                <svg width="84" height="84" viewBox="0 0 84 84">
-                  <circle cx={CX} cy={CY} r={R} fill="none"
-                    stroke="var(--color-surface)" stroke-width={SW} />
-                  <circle cx={CX} cy={CY} r={R} fill="none"
-                    stroke="var(--color-accent)"
-                    stroke-width={SW}
-                    stroke-dasharray={arcDash(extractSuccessRatePct)}
-                    stroke-dashoffset={CIRC * 0.25}
-                    stroke-linecap="round" />
-                  <text x={CX} y={CY - 2} text-anchor="middle" dominant-baseline="middle"
-                    style="font-size:13px; font-weight:700; font-family:monospace; fill:var(--color-text);">
-                    {extractSuccessRatePct.toFixed(0)}%
-                  </text>
-                  <text x={CX} y={CY + 13} text-anchor="middle"
-                    style="font-size:8px; font-family:monospace; fill:var(--color-subtext2);">
-                    {totalExtractedFiles}/{totalExtractLaunched}
-                  </text>
-                </svg>
-                <span class="donut-label">Extraction</span>
-              </div>
-            </div>
-          </div>
-
           <!-- Stats extraction -->
           <div class="stats-grid">
             <div class="stat-card">
@@ -370,11 +367,11 @@
             </div>
             <div class="stat-card accent-card">
               <div class="stat-icon-row">
-                <CheckCircle2 class="w-3.5 h-3.5" style="color:var(--color-accent);" />
-                <span class="stat-label">Succès</span>
+                <Subtitles class="w-3.5 h-3.5" style="color:var(--color-accent);" />
+                <span class="stat-label">Moy. pistes / fichier</span>
               </div>
               <div class="stat-value" style="color:var(--color-accent);">
-                {extractSuccessRatePct.toFixed(0)}%
+                {avgTracksPerFile.toFixed(1)}
               </div>
             </div>
             <div class="stat-card col-span-2">
@@ -385,6 +382,43 @@
               <div class="stat-value">{totalTracksExtracted}</div>
             </div>
           </div>
+
+          <!-- ── Historique sessions extraction ─────────────────────────── -->
+          {#if extractSessions.length > 0}
+            <div class="subsection-title">
+              <History class="w-3 h-3" />
+              Dernières sessions
+            </div>
+            <div class="sessions-block">
+              {#if extractSessions.length >= 2}
+                <div class="spark-wrap">
+                  <div style="height: 44px;">
+                    <Chart
+                      data={extractSparkData}
+                      x="x"
+                      y="y"
+                      yDomain={[0, null]}
+                      padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+                    >
+                      <Svg>
+                        <Spline stroke="var(--color-accent)" strokeWidth={2} />
+                      </Svg>
+                    </Chart>
+                  </div>
+                  <span class="spark-label">Pistes extraites / session</span>
+                </div>
+              {/if}
+              <div class="sessions-list">
+                {#each extractSessions as s, i}
+                  <div class="session-row {i === 0 ? 'session-row--latest' : ''}">
+                    <span class="session-date">{shortDate(s.date)}</span>
+                    <span class="session-files">{s.files} fichier{s.files > 1 ? "s" : ""}</span>
+                    <span class="session-ratio">{s.tracks} piste{s.tracks > 1 ? "s" : ""}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/if}
 
         {/if}
       </section>
@@ -709,30 +743,68 @@
     background: var(--color-panel);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    padding: 14px 14px 10px;
-    display: inline-flex;
+    padding: 14px 16px 12px;
   }
-  .bar-svg { display: block; overflow: visible; }
 
-  /* Donut */
-  .donut-card {
-    background: var(--color-panel);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    padding: 14px;
+  /* Custom bar chart (CSS-based, no SVG) */
+  .bar-chart-custom {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .bar-y-axis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 20px; /* align with bar-col-label height */
+  }
+  .bar-y-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    color: var(--color-subtext2);
+    white-space: nowrap;
+  }
+  .bar-columns {
+    display: flex;
+    gap: 20px;
+    align-items: flex-end;
+    flex: 1;
+  }
+  .bar-col {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+    flex: 1;
   }
-  .donut-label {
+  .bar-val {
     font-family: "Geist Mono", monospace;
     font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-subtext2);
+    color: var(--color-subtext);
+    white-space: nowrap;
   }
-
+  .bar-val--accent { color: var(--color-accent); }
+  .bar-track {
+    width: 100%;
+    height: 80px;
+    display: flex;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .bar-fill {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+  }
+  .bar-fill--input  { background: var(--color-subtext); opacity: 0.5; }
+  .bar-fill--output { background: var(--color-accent); opacity: 0.85; }
+  .bar-col-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+    padding-top: 2px;
+  }
   /* Stats grid */
   .stats-grid {
     display: grid;
@@ -775,6 +847,143 @@
   .accent-card {
     border-color: color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
     background: color-mix(in srgb, var(--color-accent) 5%, var(--color-panel));
+  }
+
+  /* ── Sous-titre de section ── */
+  .subsection-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--color-subtext2);
+    margin: 24px 0 10px;
+  }
+
+  /* ── Records ── */
+  .records-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .record-card {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .record-card--gold {
+    border-color: color-mix(in srgb, var(--color-warning) 30%, var(--color-border));
+    background: color-mix(in srgb, var(--color-warning) 5%, var(--color-panel));
+  }
+  .record-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .record-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-subtext);
+  }
+  .record-name {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+  }
+  .record-values {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+  .record-val {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--color-subtext);
+  }
+  .record-val--accent {
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+  .record-arrow {
+    font-size: 10px;
+    color: var(--color-subtext2);
+  }
+  .record-ratio {
+    margin-left: auto;
+    font-family: "Geist Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-success);
+  }
+  .record-ratio--gold {
+    color: var(--color-warning);
+  }
+
+  /* ── Sessions ── */
+  .sessions-block {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .spark-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px 8px;
+  }
+  .spark-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-subtext2);
+  }
+  .sessions-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .session-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    border-bottom: 1px solid var(--color-border);
+    transition: background 0.08s;
+  }
+  .session-row:last-child { border-bottom: none; }
+  .session-row--latest {
+    background: color-mix(in srgb, var(--color-accent) 5%, var(--color-panel));
+    color: var(--color-text);
+  }
+  .session-date  { min-width: 80px; color: var(--color-subtext2); }
+  .session-files { min-width: 60px; }
+  .session-saved { flex: 1; color: var(--color-success); }
+  .session-ratio {
+    font-weight: 700;
+    color: var(--color-accent);
   }
 
   /* ── Layout horizontal ──────────────────────────────────────────────────── */
