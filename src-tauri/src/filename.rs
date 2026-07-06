@@ -148,9 +148,13 @@ pub fn clean_filename(
         .map(|c| c[1].to_uppercase())
         .unwrap_or_default();
 
+    // L'année est dans le groupe 1 du nouveau pattern (le contexte avant n'est pas capturé)
     let year = regex::YEAR.captures(&base_raw)
         .map(|c| c[1].to_string())
         .unwrap_or_default();
+
+    // Détection explicite année entre parenthèses (film) — priorité sur l'heuristique
+    let year_in_paren = regex::YEAR_PAREN.is_match(&base_raw);
 
     let hdr = regex::HDR.captures(&base_raw)
         .map(|c| c[1].to_string())
@@ -209,7 +213,8 @@ pub fn clean_filename(
         }
     }
 
-    // 2d. Groupes connus (liste statique)
+    // 2d. Groupes connus — premier passage sur le nom brut nettoyé
+    // (attrape les formes " - GroupName" avant suppression des tech tags)
     for re in regex::KNOWN_GROUPS.iter() {
         base = re.replace_all(&base, " ").to_string();
     }
@@ -236,10 +241,28 @@ pub fn clean_filename(
     base = regex::RESOLUTION.replace_all(&base, " ").to_string();
     base = regex::RESOLUTION_NUM.replace_all(&base, " ").to_string();
 
-    // ── Phase 4 : Année ─────────────────────────────────────────────────
-    // Suppression de l'année du titre seulement si elle a été détectée.
+    // ── Phase 4 : Année ──────────────────────────────────────────────────────
+    // Suppression de l'année uniquement si c'est clairement un film.
+    // Si ce qui suit l'année dans le nom brut contient des tags techniques,
+    // c'est un millésime de série (ex: "HEROINES 2026 SUBFRENCH") — on garde.
     if !year.is_empty() {
-        base = regex::YEAR.replace_all(&base, " ").to_string();
+        let after_year_raw = regex::YEAR.find(&base_raw)
+            .map(|m| base_raw[m.end()..].trim())
+            .unwrap_or("");
+        let looks_technical = regex::RESOLUTION.is_match(after_year_raw)
+            || regex::SRC_WEBDL.is_match(after_year_raw)
+            || regex::SRC_WEBRIP.is_match(after_year_raw)
+            || regex::SRC_BLURAY.is_match(after_year_raw)
+            || regex::SRC_WEB.is_match(after_year_raw)
+            || {
+                let up = after_year_raw.to_uppercase();
+                up.contains("SUBFRENCH") || up.contains("VOSTFR")
+                || up.contains("FRENCH") || up.contains("MULTI")
+            };
+        if year_in_paren || !looks_technical {
+            base = regex::YEAR_CTX.replace_all(&base, "$1 $3").to_string();
+            base = regex::YEAR.replace_all(&base, " ").to_string();
+        }
     }
 
     // ── Phase 5 : Saison / Épisode ──────────────────────────────────────
@@ -356,6 +379,24 @@ pub fn clean_filename(
 
     base = regex::PROVIDER.replace_all(&base, " ").to_string();
 
+    // Second passage KNOWN_GROUPS : après suppression des tech tags,
+    // les formes collées type "x264-Tsundere-Raws" sont maintenant accessibles.
+    for re in regex::KNOWN_GROUPS.iter() {
+        base = re.replace_all(&base, " ").to_string();
+    }
+    // TRAIL_GROUP second passage : cas résiduels après nettoyage technique
+    if let Some(cap) = regex::TRAIL_GROUP.captures(&base) {
+        let matched = &cap[1];
+        let is_se = regex::S_E.is_match(matched)
+            || regex::S_E_MULTI.is_match(matched)
+            || regex::E_LONG.is_match(matched);
+        if !is_se {
+            base = regex::TRAIL_GROUP.replace(&base, "").to_string();
+        }
+    }
+    // TRAIL_GROUP_STUCK : groupe collé après un tag (ex: résidu "x264-Tsundere-Raws")
+    base = regex::TRAIL_GROUP_STUCK.replace(&base, "").to_string();
+
     // ── Phase 8 : Nettoyage final du titre ───────────────────────────────
 
     base = regex::TRAIL_DASH.replace(&base, "").to_string();
@@ -368,7 +409,33 @@ pub fn clean_filename(
 
     // ── Phase 10 : Construction du nom suggéré ───────────────────────────
 
-    let is_movie = season_episode.is_empty() && !year.is_empty();
+    // Un fichier est considéré comme un film si :
+    // - pas de saison/épisode détecté
+    // - l'année est entre parenthèses dans le nom original (ex: "Show (2026)")
+    //   OU l'année apparaît seule juste après le titre (pas entourée de tags techniques)
+    // Heuristique : on vérifie que l'année est dans YEAR_PAREN ou
+    // que le nom original contient "Titre Année " (pas "Titre Année SUBFRENCH").
+    let is_movie = season_episode.is_empty() && !year.is_empty() && {
+        if year_in_paren {
+            true
+        } else {
+            // L'année est suivie de tags techniques → c'est une série/anime avec millésime
+            let after_year = regex::YEAR.find(&base_raw)
+                .map(|m| base_raw[m.end()..].trim())
+                .unwrap_or("");
+            // Si ce qui suit l'année ressemble à des tags (résolution, source, codec…)
+            let looks_technical = regex::RESOLUTION.is_match(after_year)
+                || regex::SRC_WEBDL.is_match(after_year)
+                || regex::SRC_WEBRIP.is_match(after_year)
+                || regex::SRC_BLURAY.is_match(after_year)
+                || regex::SRC_WEB.is_match(after_year)
+                || after_year.to_uppercase().contains("SUBFRENCH")
+                || after_year.to_uppercase().contains("VOSTFR")
+                || after_year.to_uppercase().contains("FRENCH")
+                || after_year.to_uppercase().contains("MULTI");
+            !looks_technical
+        }
+    };
 
     let mut parts: Vec<String> = Vec::new();
     if !base.is_empty()  { parts.push(base.clone()); }

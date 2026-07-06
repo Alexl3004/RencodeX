@@ -106,8 +106,22 @@ pub static EDITION: Lazy<InnerRegex> = Lazy::new(||
 // ── Année ────────────────────────────────────────────────────────────────
 // FIX : couverture étendue jusqu'à 2099 (au lieu de 2029 dans l'original)
 // Exige des word-boundaries pour éviter de matcher dans 1920x1080 etc.
+/// Année de production/sortie — word-boundary simple.
+/// La logique film/série est gérée dans filename.rs.
 pub static YEAR: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"\b(19[0-9]{2}|20[0-9]{2})\b").unwrap()
+);
+
+/// Année entre parenthèses — signal fort que c'est un film.
+pub static YEAR_PAREN: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"\((19[0-9]{2}|20[0-9]{2})\)").unwrap()
+);
+
+/// Année dans un contexte séparateur (ctx_avant)(année)(ctx_après) — sans lookahead.
+/// groupe 1 = séparateur avant, groupe 2 = année, groupe 3 = séparateur après.
+/// Permet replace_all en restituant "$1$3" pour supprimer l'année sans le contexte.
+pub static YEAR_CTX: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"([\s._\(\[\-])(19[0-9]{2}|20[0-9]{2})([\s._\)\]\-])").unwrap()
 );
 
 // ── Fournisseurs de streaming ─────────────────────────────────────────────
@@ -151,8 +165,14 @@ pub static BRACKETS: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"[\[\(][^\]\)]*?[\]\)]").unwrap()
 );
 /// Groupe de release en fin de nom (ex: " - SubsPlease" ou " -RARBG")
+/// Groupe de release classique en fin de nom : " - SubsPlease" ou " -RARBG"
 pub static TRAIL_GROUP: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\s*-\s*([A-Za-z0-9][A-Za-z0-9_.]{2,})\s*$").unwrap()
+);
+/// Groupe de release collé à un tag technique en fin de nom : "x264-Tsundere-Raws$"
+/// Capture : [A-Za-z0-9]+ tiret groupe en fin de chaîne.
+pub static TRAIL_GROUP_STUCK: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"(?i)[A-Za-z0-9]+-([A-Za-z][A-Za-z0-9_.-]{2,})\s*$").unwrap()
 );
 /// Tirets/tirets cadratins résiduels en fin de chaîne
 pub static TRAIL_DASH: Lazy<InnerRegex> = Lazy::new(||
@@ -261,6 +281,14 @@ pub static KNOWN_GROUPS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
         "ZQ", "dAV1nci", "lvl99",
     ];
     GROUPS.iter()
-        .map(|g| InnerRegex::new(&format!(r"(?i)\s*[-–_]?\s*{}\s*[-–]?\s*$", regex::escape(g))).unwrap())
+        .flat_map(|g| {
+            let escaped = regex::escape(g);
+            // Pattern 1 : séparateur optionnel + groupe + séparateur optionnel en fin
+            let p1 = InnerRegex::new(&format!(r"(?i)\s*[-–_]?\s*{}\s*[-–]?\s*$", escaped)).unwrap();
+            // Pattern 2 : collé après un token alphanumérique (ex: "x264-Tsundere-Raws")
+            // Sans lookbehind : on matche [alnum]-groupe en fin de chaîne
+            let p2 = InnerRegex::new(&format!(r"(?i)[A-Za-z0-9]+-{}\s*$", escaped)).unwrap();
+            vec![p1, p2]
+        })
         .collect()
 });
