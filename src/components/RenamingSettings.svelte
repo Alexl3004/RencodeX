@@ -9,19 +9,22 @@
     type TitleCaseMode,
     type CodecFormat,
     type SourceCase,
+    type WebSourceFormat,
   } from "$lib/stores/encoder.svelte";
   import { ArrowUp, ArrowDown, GripVertical, RotateCcw, Tag, AlignLeft, Users, Eye } from "@lucide/svelte";
 
   let { onClose }: { onClose?: () => void } = $props();
 
-  let tagOrder     = $derived(encoder.tagOrder);
-  let disabledTags = $derived(encoder.disabledTags);
-  let resCase      = $derived(encoder.resolutionCase);
-  let titleCase    = $derived(encoder.titleCase);
-  let codecFmt     = $derived(encoder.codecFormat);
-  let sourceCase   = $derived(encoder.sourceCase);
-  let seFormat     = $derived(encoder.seasonEpisodeFormat);
-  let team         = $derived(encoder.team);
+  let tagOrder        = $derived(encoder.tagOrder);
+  let disabledTags    = $derived(encoder.disabledTags);
+  let resCase         = $derived(encoder.resolutionCase);
+  let titleCase       = $derived(encoder.titleCase);
+  let codecFmt        = $derived(encoder.codecFormat);
+  let sourceCase      = $derived(encoder.sourceCase);
+  let yearParentheses = $derived(encoder.yearParentheses);
+  let webSourceFmt    = $derived(encoder.webSourceFormat);
+  let seFormat        = $derived(encoder.seasonEpisodeFormat);
+  let team            = $derived(encoder.team);
 
   // ── Navigation sections ──────────────────────────────────────────────────
   type SectionId = "tags" | "format" | "team" | "preview";
@@ -352,16 +355,52 @@
           </div>
         </div>
 
-        <!-- Source -->
-        <div class="format-block format-block--last">
-          <div class="format-block-label">Source</div>
-          <div class="format-block-desc">Casse du tag de source (BluRay, WEB-DL…).</div>
+        <!-- Source (BluRay) -->
+        <div class="format-block">
+          <div class="format-block-label">Source — BluRay</div>
+          <div class="format-block-desc">Casse du tag BluRay dans le nom de fichier.</div>
           <div class="option-pair option-pair--3">
             {#each [["original","BluRay","Original"],["upper","BLURAY","Majuscules"],["lower","bluray","Minuscules"]] as [val, preview, lbl]}
               <button
                 type="button"
                 class="option-card {sourceCase === val ? 'option-card--active' : ''}"
                 onclick={() => encoder.setSourceCase(val as SourceCase)}
+              >
+                <span class="oc-preview">{preview}</span>
+                <span class="oc-label">{lbl}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Source (WEB) -->
+        <div class="format-block">
+          <div class="format-block-label">Source — WEB</div>
+          <div class="format-block-desc">Format du tag WEB (WEB-DL, WEBRip…) indépendant de la casse BluRay.</div>
+          <div class="option-pair option-pair--3">
+            {#each ([["WEB-DL","WEB-DL","Avec tiret"],["WEBDL","WEBDL","Sans tiret"],["Web-DL","Web-DL","Title case"]] as const) as [val, preview, lbl]}
+              <button
+                type="button"
+                class="option-card {webSourceFmt === val ? 'option-card--active' : ''}"
+                onclick={() => encoder.setWebSourceFormat(val as WebSourceFormat)}
+              >
+                <span class="oc-preview">{preview}</span>
+                <span class="oc-label">{lbl}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Année -->
+        <div class="format-block format-block--last">
+          <div class="format-block-label">Année (films)</div>
+          <div class="format-block-desc">Affichage de l'année détectée pour les films.</div>
+          <div class="option-pair option-pair--2">
+            {#each ([[true,"(2024)","Entre parenthèses"],[false,"2024","Sans parenthèses"]] as const) as [val, preview, lbl]}
+              <button
+                type="button"
+                class="option-card {yearParentheses === val ? 'option-card--active' : ''}"
+                onclick={() => encoder.setYearParentheses(val)}
               >
                 <span class="oc-preview">{preview}</span>
                 <span class="oc-label">{lbl}</span>
@@ -460,8 +499,16 @@
             <span class="pp-val">{codecFmt}</span>
           </div>
           <div class="pp-row">
-            <span class="pp-key">Source</span>
+            <span class="pp-key">Source BluRay</span>
             <span class="pp-val">{{ original: "BluRay", upper: "BLURAY", lower: "bluray" }[sourceCase]}</span>
+          </div>
+          <div class="pp-row">
+            <span class="pp-key">Source WEB</span>
+            <span class="pp-val">{{ "WEB-DL": "WEB-DL", "WEBDL": "WEBDL", "Web-DL": "Web-DL" }[webSourceFmt]}</span>
+          </div>
+          <div class="pp-row">
+            <span class="pp-key">Année film</span>
+            <span class="pp-val">{yearParentheses ? "(2024)" : "2024"}</span>
           </div>
           {#if team}
             <div class="pp-row">

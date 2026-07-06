@@ -179,6 +179,10 @@ pub struct EncodingPrefs {
     pub codec_format: String,
     #[serde(default = "default_source_case")]
     pub source_case: String,
+    #[serde(default = "default_year_parentheses")]
+    pub year_parentheses: bool,
+    #[serde(default = "default_web_source_format")]
+    pub web_source_format: String,
 }
 
 fn default_nav_layout() -> String { "vertical".to_string() }
@@ -201,10 +205,12 @@ fn default_sub_extract_format() -> String { "srt".to_string() }
 fn default_sub_extract_naming() -> String { "source".to_string() }
 fn default_sub_extract_path_mode() -> String { "source".to_string() }
 fn default_show_extract_button() -> bool { true }
-fn default_resolution_case() -> String { "upper".to_string() }
-fn default_title_case()      -> String { "original".to_string() }
-fn default_codec_format()    -> String { "H265".to_string() }
-fn default_source_case()     -> String { "original".to_string() }
+fn default_resolution_case()   -> String { "upper".to_string() }
+fn default_title_case()        -> String { "original".to_string() }
+fn default_codec_format()      -> String { "H265".to_string() }
+fn default_source_case()       -> String { "original".to_string() }
+fn default_year_parentheses()  -> bool   { true }
+fn default_web_source_format() -> String { "WEB-DL".to_string() }
 
 impl Default for EncodingPrefs {
     fn default() -> Self {
@@ -231,6 +237,8 @@ impl Default for EncodingPrefs {
             title_case: default_title_case(),
             codec_format: default_codec_format(),
             source_case: default_source_case(),
+            year_parentheses: default_year_parentheses(),
+            web_source_format: default_web_source_format(),
         }
     }
 }
