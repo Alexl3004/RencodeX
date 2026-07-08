@@ -276,6 +276,8 @@ export type TitleCaseMode   = "original" | "upper" | "lower" | "title";
 export type CodecFormat     = "H265" | "H.265" | "HEVC";
 export type SourceCase      = "original" | "upper" | "lower";
 export type WebSourceFormat = "WEB-DL" | "WEBDL" | "Web-DL";
+export type TagSeparator   = " " | "." | "_";
+export type ProviderCase   = "upper" | "lower" | "hidden";
 
 export interface NamingOptions {
   disabledTags?:    Set<TagId>;
@@ -285,6 +287,8 @@ export interface NamingOptions {
   sourceCase?:      SourceCase;
   yearParentheses?: boolean;
   webSourceFormat?: WebSourceFormat;
+  tagSeparator?:    TagSeparator;
+  providerCase?:    ProviderCase;
 }
 
 export const TAG_LABELS: Record<TagId, string> = {
@@ -317,6 +321,8 @@ export function buildOutputName(
     sourceCase      = "original",
     yearParentheses = true,
     webSourceFormat = "WEB-DL",
+    tagSeparator    = " ",
+    providerCase    = "upper",
   } = options;
 
   const applyTitleCase = (t: string): string => {
@@ -364,12 +370,27 @@ export function buildOutputName(
     ? (yearParentheses ? `(${cleaned.year})` : cleaned.year)
     : "";
 
+  // Le parseur peut renvoyer un titre qui contient déjà l'année
+  // (ex: title="A Quiet Place 2018", year="2018"). On la retire du
+  // titre pour éviter un doublon type "A Quiet Place 2018 (2018)".
+  const stripDuplicateYear = (t: string): string => {
+    if (!cleaned.year) return t;
+    const escapedYear = cleaned.year.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return t
+      .replace(new RegExp(`[\\s.,_-]*\\(?${escapedYear}\\)?\\s*$`), "")
+      .trim();
+  };
+
+  const titleBase = stripDuplicateYear(applyTitleCase(cleaned.title));
+
   const values: Record<TagId, string> = {
-    title:      applyTitleCase(cleaned.title) + (yearStr ? ` ${yearStr}` : ""),
+    title:      titleBase + (yearStr ? ` ${yearStr}` : ""),
     se:         formatSeasonEpisode(cleaned.season_episode, seFormat),
     audio:      tag,
     resolution: applyResCase(cleaned.resolution),
-    provider:   cleaned.provider,
+    provider:   providerCase === "hidden" ? "" :
+                providerCase === "lower"  ? cleaned.provider.toLowerCase() :
+                cleaned.provider.toUpperCase(),
     source:     applySourceCase(cleaned.source),
     codec:      codecFormat,
     bitdepth:   "10bit",
@@ -377,12 +398,19 @@ export function buildOutputName(
     team:       team.trim(),
   };
 
+  const sep = tagSeparator;
+  const escapedSep = sep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return tagOrder
     .filter((id) => !disabledTags.has(id))
     .map((id) => values[id])
     .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
+    // Normalise les séparateurs internes de CHAQUE valeur (ex: espaces
+    // dans le titre) vers le séparateur choisi, avant de tout joindre.
+    // Sans ça, un titre comme "A Quiet Place (2018)" gardait ses espaces
+    // même quand le séparateur global était "." ou "_".
+    .map((v) => (sep === " " ? v : v.replace(/\s+/g, sep)))
+    .join(sep)
+    .replace(new RegExp(`${escapedSep}{2,}`, "g"), sep)
     .trim();
 }
 
@@ -502,6 +530,8 @@ function createEncoder() {
   let sourceCase       = $state<SourceCase>("original");
   let yearParentheses  = $state<boolean>(true);
   let webSourceFormat  = $state<WebSourceFormat>("WEB-DL");
+  let tagSeparator     = $state<TagSeparator>(" ");
+  let providerCase     = $state<ProviderCase>("upper");
   let team = $state("");
 
   let audioMode = $state<AudioMode>("reencode");
@@ -590,6 +620,12 @@ function createEncoder() {
   }
   function setWebSourceFormat(value: WebSourceFormat) {
     webSourceFormat = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
+  }
+  function setTagSeparator(value: TagSeparator) {
+    tagSeparator = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
+  }
+  function setProviderCase(value: ProviderCase) {
+    providerCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
   }
   function setTeam(value: string) {
     team = value;
@@ -688,6 +724,8 @@ function createEncoder() {
     sourceCase      = "original";
     yearParentheses = true;
     webSourceFormat = "WEB-DL";
+    tagSeparator    = " ";
+    providerCase    = "upper";
     seasonEpisodeFormat = "S01E01";
     persistPrefs();
     refreshOutputNames();
@@ -710,6 +748,8 @@ function createEncoder() {
       source_case:       sourceCase,
       year_parentheses:  yearParentheses,
       web_source_format: webSourceFormat,
+      tag_separator:     tagSeparator,
+      provider_case:     providerCase,
       team,
       audio_mode: audioMode,
       audio_bitrate: audioBitrate,
@@ -772,6 +812,8 @@ function createEncoder() {
         source_case?: string;
         year_parentheses?: boolean;
         web_source_format?: string;
+        tag_separator?: string;
+        provider_case?: string;
       }>("load_encoding_prefs");
 
       if (typeof prefs.crf === "number") crf = prefs.crf;
@@ -806,6 +848,10 @@ function createEncoder() {
         yearParentheses = prefs.year_parentheses;
       if (["WEB-DL","WEBDL","Web-DL"].includes(prefs.web_source_format ?? ""))
         webSourceFormat = prefs.web_source_format as WebSourceFormat;
+      if ([" ", ".", "_"].includes(prefs.tag_separator ?? ""))
+        tagSeparator = prefs.tag_separator as TagSeparator;
+      if (["upper","lower","hidden"].includes(prefs.provider_case ?? ""))
+        providerCase = prefs.provider_case as ProviderCase;
       if (typeof prefs.team === "string") team = prefs.team;
       if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
         audioMode = prefs.audio_mode;
@@ -884,6 +930,8 @@ function createEncoder() {
         source_case:       sourceCase,
         year_parentheses:  yearParentheses,
         web_source_format: webSourceFormat,
+        tag_separator:     tagSeparator,
+        provider_case:     providerCase,
         team,
       }));
     } catch { /* storage indisponible */ }
@@ -919,6 +967,10 @@ function createEncoder() {
         yearParentheses = p.year_parentheses;
       if (["WEB-DL","WEBDL","Web-DL"].includes(p.web_source_format as string))
         webSourceFormat = p.web_source_format as WebSourceFormat;
+      if ([" ",".",  "_"].includes(p.tag_separator as string))
+        tagSeparator = p.tag_separator as TagSeparator;
+      if (["upper","lower","hidden"].includes(p.provider_case as string))
+        providerCase = p.provider_case as ProviderCase;
       if (typeof p.team === "string") team = p.team;
     } catch { /* JSON invalide */ }
   }
@@ -1058,6 +1110,8 @@ function createEncoder() {
             sourceCase:      sourceCase,
             yearParentheses: yearParentheses,
             webSourceFormat: webSourceFormat,
+            tagSeparator:    tagSeparator,
+            providerCase:    providerCase,
           },
         );
         const updated: AppFile = {
@@ -1445,6 +1499,8 @@ function createEncoder() {
     const _srcCase        = sourceCase;
     const _yearParen      = yearParentheses;
     const _webFmt         = webSourceFormat;
+    const _tagSep         = tagSeparator;
+    const _provCase       = providerCase;
     const _seFormat       = seasonEpisodeFormat;
     const _team           = team;
     const _selAudio       = selAudio;
@@ -1475,6 +1531,8 @@ function createEncoder() {
           sourceCase:      _srcCase,
           yearParentheses: _yearParen,
           webSourceFormat: _webFmt,
+          tagSeparator:    _tagSep,
+          providerCase:    _provCase,
         },
       );
       return { ...f, output_name: name };
@@ -1734,6 +1792,8 @@ function createEncoder() {
     get sourceCase() { return sourceCase; },
     get yearParentheses() { return yearParentheses; },
     get webSourceFormat() { return webSourceFormat; },
+    get tagSeparator()    { return tagSeparator; },
+    get providerCase()    { return providerCase; },
     get team() {
       return team;
     },
@@ -1801,7 +1861,7 @@ function createEncoder() {
     },
 
     getDisplayName(file: AppFile): string {
-      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase, yearParentheses, webSourceFormat });
+      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase, yearParentheses, webSourceFormat, tagSeparator, providerCase });
     },
     setCrf,
     setPreset,
@@ -1815,6 +1875,8 @@ function createEncoder() {
     setSourceCase,
     setYearParentheses,
     setWebSourceFormat,
+    setTagSeparator,
+    setProviderCase,
     resetTagOrder() {
       tagOrder = [...DEFAULT_TAG_ORDER];
       disabledTags = new Set();

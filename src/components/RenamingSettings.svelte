@@ -10,6 +10,8 @@
     type CodecFormat,
     type SourceCase,
     type WebSourceFormat,
+    type TagSeparator,
+    type ProviderCase,
   } from "$lib/stores/encoder.svelte";
   import { ArrowUp, ArrowDown, GripVertical, RotateCcw, Tag, AlignLeft, Users, Eye } from "@lucide/svelte";
 
@@ -23,6 +25,8 @@
   let sourceCase      = $derived(encoder.sourceCase);
   let yearParentheses = $derived(encoder.yearParentheses);
   let webSourceFmt    = $derived(encoder.webSourceFormat);
+  let tagSep          = $derived(encoder.tagSeparator);
+  let provCase        = $derived(encoder.providerCase);
   let seFormat        = $derived(encoder.seasonEpisodeFormat);
   let team            = $derived(encoder.team);
 
@@ -90,14 +94,34 @@
   }
 
   // ── Aperçu ───────────────────────────────────────────────────────────────
-  function previewName() {
+  // Deux aperçus : série et film (pour montrer l'année)
+  function previewName(mode: "series" | "movie" = "series") {
+    if (mode === "movie") {
+      return encoder.getDisplayName({
+        cleaned: {
+          title: "Inception",
+          year: "2010",
+          season_episode: "",
+          resolution: "1080P",
+          source: "BluRay",
+          provider: "AMZN",
+          audio_tags: "VOSTFR",
+          suggested: "",
+        },
+        output_name: "VOSTFR AAC",
+        path: "", filename: "", size_mb: 0, duration_secs: 0,
+        fps: 0, audio_langs: [], sub_langs: [], streams: [],
+        status: "ready", output_ext: ".mkv", sub_extract_status: "none",
+      });
+    }
     return encoder.getDisplayName({
       cleaned: {
         title: "Jujutsu Kaisen",
+        year: "",
         season_episode: "S03E01",
         resolution: "1080P",
         source: "BluRay",
-        provider: "",
+        provider: "NF",
         audio_tags: "VOSTFR",
         suggested: "",
       },
@@ -155,7 +179,7 @@
     <!-- Preview live en sidebar -->
     <div class="sidebar-preview">
       <div class="sp-label">APERÇU</div>
-      <div class="sp-name">{previewName()}</div>
+      <div class="sp-name">{previewName("series")}</div>
       <div class="sp-meta">{activeTagCount} tag{activeTagCount > 1 ? "s" : ""} actif{activeTagCount > 1 ? "s" : ""}</div>
     </div>
   </aside>
@@ -391,6 +415,50 @@
           </div>
         </div>
 
+        <!-- Séparateur de tags -->
+        <div class="format-block">
+          <div class="format-block-label">Séparateur de tags</div>
+          <div class="format-block-desc">Caractère utilisé pour séparer les tags dans le nom de fichier.</div>
+          <div class="option-pair option-pair--3">
+            {#each ([
+              [" ",  "Titre S01E01 BluRay", "Espace"],
+              [".", "Titre.S01E01.BluRay",  "Point"],
+              ["_", "Titre_S01E01_BluRay",  "Underscore"],
+            ] as const) as [val, preview, lbl]}
+              <button
+                type="button"
+                class="option-card {tagSep === val ? 'option-card--active' : ''}"
+                onclick={() => encoder.setTagSeparator(val as TagSeparator)}
+              >
+                <span class="oc-preview">{preview}</span>
+                <span class="oc-label">{lbl}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Provider -->
+        <div class="format-block">
+          <div class="format-block-label">Provider (AMZN, NF…)</div>
+          <div class="format-block-desc">Casse ou masquage du tag provider dans le nom de fichier.</div>
+          <div class="option-pair option-pair--3">
+            {#each ([
+              ["upper",  "AMZN",  "Majuscules"],
+              ["lower",  "amzn",  "Minuscules"],
+              ["hidden", "—",     "Masquer"],
+            ] as const) as [val, preview, lbl]}
+              <button
+                type="button"
+                class="option-card {provCase === val ? 'option-card--active' : ''}"
+                onclick={() => encoder.setProviderCase(val as ProviderCase)}
+              >
+                <span class="oc-preview">{preview}</span>
+                <span class="oc-label">{lbl}</span>
+              </button>
+            {/each}
+          </div>
+        </div>
+
         <!-- Année -->
         <div class="format-block format-block--last">
           <div class="format-block-label">Année (films)</div>
@@ -441,7 +509,7 @@
             <div class="tpb-value">{team}</div>
             <div class="tpb-example">
               <span class="tpb-ex-label">Exemple ·</span>
-              <span class="tpb-ex-name">{previewName()}</span>
+              <span class="tpb-ex-name">{previewName("series")}</span>
             </div>
           </div>
         {:else}
@@ -464,8 +532,10 @@
         </header>
 
         <div class="preview-name-box">
-          <div class="pnb-label">NOM GÉNÉRÉ</div>
-          <div class="pnb-name">{previewName()}</div>
+          <div class="pnb-label">SÉRIE · NOM GÉNÉRÉ</div>
+          <div class="pnb-name">{previewName("series")}</div>
+          <div class="pnb-label" style="margin-top:14px;">FILM · AVEC ANNÉE</div>
+          <div class="pnb-name">{previewName("movie")}</div>
         </div>
 
         <div class="preview-tags-grid">
@@ -505,6 +575,14 @@
           <div class="pp-row">
             <span class="pp-key">Source WEB</span>
             <span class="pp-val">{{ "WEB-DL": "WEB-DL", "WEBDL": "WEBDL", "Web-DL": "Web-DL" }[webSourceFmt]}</span>
+          </div>
+          <div class="pp-row">
+            <span class="pp-key">Séparateur</span>
+            <span class="pp-val">{{ " ": "Espace", ".": "Point", "_": "Underscore" }[tagSep]}</span>
+          </div>
+          <div class="pp-row">
+            <span class="pp-key">Provider</span>
+            <span class="pp-val">{{ upper: "AMZN", lower: "amzn", hidden: "Masqué" }[provCase]}</span>
           </div>
           <div class="pp-row">
             <span class="pp-key">Année film</span>
