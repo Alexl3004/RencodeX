@@ -85,6 +85,7 @@ export interface EncodeSummary {
 
 export interface CleanedName {
   title: string;
+  year: string;
   season_episode: string;
   resolution: string;
   source: string;

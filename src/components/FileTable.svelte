@@ -9,6 +9,7 @@
   import FileRenameModal from "$components/FileRenameModal.svelte";
   import FileLangModal from "$components/FileLangModal.svelte";
   import LangPopover from "$components/LangPopover.svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
     X,
     Search,
@@ -24,12 +25,64 @@
     MessageSquare,
     RotateCcw,
     FileDown,
+    Upload,
   } from "@lucide/svelte";
 
   let filterText = $state("");
   let filterStatus = $state<
     "all" | "ready" | "queued" | "encoding" | "done" | "error"
   >("all");
+
+  // ── Drag & drop natif Tauri ────────────────────────────────────────────────
+  let isDragOver = $state(false);
+  let dragEnterCount = 0; // compteur pour ignorer les events des enfants
+  let tableContainer = $state<HTMLDivElement | null>(null);
+
+  $effect(() => {
+    const unlisteners: UnlistenFn[] = [];
+
+    async function setup() {
+
+      const eventNames = [
+        "tauri://drag-drop",   // Tauri v2 probable
+        "tauri://file-drop",   // Tauri v1 / compat
+        "tauri://drop",        // Alias possible
+      ];
+
+      for (const name of eventNames) {
+        try {
+          const u = await listen<{ paths: string[]; position: { x: number; y: number } }>(
+            name,
+            (event) => {
+
+              const paths: string[] =
+                Array.isArray(event.payload)
+                  ? (event.payload as unknown as string[])  // v1 payload = string[]
+                  : event.payload?.paths ?? [];
+
+              // isDragOver est déjà false ici (ondragleave DOM fire avant Tauri)
+              // → on check uniquement encoding et paths
+              if (!encoder.encoding && paths.length > 0) {
+                encoder.addFiles(paths);
+              }
+
+              isDragOver = false;
+              dragEnterCount = 0;
+            }
+          );
+          unlisteners.push(u);
+        } catch (err) {
+        }
+      }
+
+    }
+
+    setup().catch(() => {});
+
+    return () => {
+      unlisteners.forEach((u) => u());
+    };
+  });
   // Sélection modale renommage — dérivée de encoder.files pour rester à jour
   // Modal info
   let infoPath = $state<string | null>(null);
@@ -441,9 +494,36 @@
 {/if}
 
 <div
-  class="flex flex-col rounded-[var(--radius-md)] h-full overflow-hidden"
-  style="border: 1px solid var(--color-border);"
+  bind:this={tableContainer}
+  role="region"
+  aria-label="Liste des fichiers — zone de dépôt"
+  class="flex flex-col rounded-[var(--radius-md)] h-full overflow-hidden relative"
+  style="border: 1px solid {isDragOver ? 'var(--color-accent)' : 'var(--color-border)'}; transition: border-color 0.15s;"
+  ondragenter={(e) => {
+    e.preventDefault();
+    dragEnterCount++;
+    if (!encoder.encoding) { isDragOver = true; }
+  }}
+  ondragover={(e) => { e.preventDefault(); }}
+  ondragleave={() => {
+    dragEnterCount = Math.max(0, dragEnterCount - 1);
+    if (dragEnterCount === 0) { isDragOver = false; }
+  }}
+  ondrop={(e) => {
+    e.preventDefault();
+    // ⚠️ Ne pas remettre isDragOver = false ici : Tauri lit isDragOver juste après
+  }}
 >
+  <!-- Overlay drop ─────────────────────────────────────────── -->
+  {#if isDragOver}
+    <div class="drop-overlay" aria-hidden="true">
+      <div class="drop-overlay-inner">
+        <Upload class="drop-icon" />
+        <span class="drop-label">Déposer les fichiers vidéo</span>
+        <span class="drop-hint">mp4 · mkv · avi · mov · flv</span>
+      </div>
+    </div>
+  {/if}
   <!-- Barre de filtres -->
     <div
       class="flex items-center gap-1.5 px-2 py-1.5 shrink-0 flex-wrap"
@@ -610,8 +690,6 @@
           >
         </div>
 
-
-
         <!-- Sélection globale des pistes -->
         <LangPopover />
       {/if}
@@ -673,9 +751,11 @@
         {#if encoder.files.length === 0}
           <tr>
             <td colspan="7" class="py-10 text-center">
-              <p class="text-[11px] font-mono uppercase tracking-widest" style="color: var(--color-subtext);">
-                Aucun fichier
-              </p>
+              <div class="empty-state">
+                <Upload class="empty-icon" />
+                <p class="empty-title">Aucun fichier</p>
+                <p class="empty-hint">Glissez des fichiers vidéo ici</p>
+              </div>
             </td>
           </tr>
         {:else if filteredFiles.length === 0}
@@ -1358,5 +1438,81 @@
     background: color-mix(in srgb, var(--color-success) 10%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-success) 25%, transparent);
     color: var(--color-success);
+  }
+
+  /* ── Empty state ──────────────────────────────────────────────────────── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .empty-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--color-subtext);
+    opacity: 0.3;
+    margin-bottom: 4px;
+  }
+  .empty-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-subtext);
+    opacity: 0.6;
+  }
+  .empty-hint {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    opacity: 0.4;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Drop overlay ─────────────────────────────────────────────────────── */
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+    backdrop-filter: blur(2px);
+    pointer-events: none;
+  }
+  .drop-overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .drop-icon {
+    width: 36px;
+    height: 36px;
+    color: var(--color-accent);
+    opacity: 0.85;
+    animation: drop-bounce 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes drop-bounce {
+    from { transform: translateY(0px); }
+    to   { transform: translateY(-6px); }
+  }
+  .drop-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-accent);
+  }
+  .drop-hint {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext);
+    opacity: 0.7;
+    letter-spacing: 0.06em;
   }
 </style>110px
