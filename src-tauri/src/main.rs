@@ -9,6 +9,7 @@ mod media;
 mod notify;
 mod commands;
 mod discord_fields;
+mod tests_extended;
 
 use crate::utils::resolve_config;
 use crate::commands::load_config;
