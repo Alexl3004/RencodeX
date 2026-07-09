@@ -21,32 +21,6 @@ use crate::notify::{
 };
 use crate::commands::load_config;
 
-async fn get_streams(ffprobe: &std::path::Path, path: &str, stream_type: &str) -> Vec<StreamInfo> {
-    let out = Command::new(ffprobe)
-        .args([
-            "-v", "error",
-            "-select_streams", stream_type,
-            "-show_entries", "stream=index,codec_type,codec_name,width,height:stream_tags=language",
-            "-of", "json",
-            path,
-        ])
-        .creation_flags(0x08000000)
-        .output()
-        .await;
-    let Ok(out) = out else { return vec![]; };
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(&out.stdout) else { return vec![]; };
-    json["streams"].as_array().unwrap_or(&vec![]).iter().map(|s| {
-        StreamInfo {
-            index: s["index"].as_u64().unwrap_or(0) as u32,
-            codec_type: s["codec_type"].as_str().unwrap_or("").to_string(),
-            codec_name: s["codec_name"].as_str().unwrap_or("").to_string(),
-            language: normalize_lang(s["tags"]["language"].as_str().unwrap_or("und")),
-            width: s["width"].as_u64().map(|v| v as u32),
-            height: s["height"].as_u64().map(|v| v as u32),
-        }
-    }).collect()
-}
-
 pub async fn analyze_file(path: String) -> Result<crate::models::FileAnalysis, String> {
     let ffprobe = ffprobe_path();
     let output = tokio::process::Command::new(&ffprobe)
@@ -142,7 +116,6 @@ pub async fn start_encoding(
     }
 
     let ffmpeg = ffmpeg_path();
-    let ffprobe = ffprobe_path();
     let total = jobs.len();
     let start_all = Instant::now();
     let mut results: Vec<FileResult> = Vec::new();
@@ -533,8 +506,6 @@ pub async fn start_encoding(
                 .unwrap_or(0.0)
         } else { 0.0 };
 
-        // Notification fichier terminé ou erreur (si activée)
-        let cfg = resolve_config(load_config());
         if cfg.discord_enabled && !cfg.discord_bot_token.is_empty() && !cfg.discord_log_channel_id.is_empty() {
             let token = cfg.discord_bot_token.clone();
             let channel = cfg.discord_log_channel_id.clone();
@@ -659,7 +630,6 @@ pub async fn start_encoding(
         s.start_time = None;
     }
 
-    let cfg = resolve_config(load_config());
     if cfg.discord_enabled
         && cfg.discord_notify_summary
         && !cfg.discord_bot_token.is_empty()
