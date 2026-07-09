@@ -317,7 +317,7 @@ pub async fn start_encoding(
         let mut child = match Command::new(&ffmpeg)
             .args(&cmd_args)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .creation_flags(0x08000000)
             .spawn()
         {
@@ -339,6 +339,24 @@ pub async fn start_encoding(
         let stdout = child.stdout.take().unwrap();
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
+
+        // Drainer stderr en arriere-plan pour capturer les erreurs ffmpeg.
+        let stderr_buf = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let stderr_buf_clone = stderr_buf.clone();
+        let stderr_task = {
+            let stderr = child.stderr.take().unwrap();
+            tokio::spawn(async move {
+                let mut stderr_reader = BufReader::new(stderr);
+                let mut err_line = String::new();
+                while let Ok(n) = stderr_reader.read_line(&mut err_line).await {
+                    if n == 0 { break; }
+                    if let Ok(mut buf) = stderr_buf_clone.lock() {
+                        buf.push_str(&err_line);
+                    }
+                    err_line.clear();
+                }
+            })
+        };
 
         let re_frame = Regex::new(r"^frame=(\d+)$").unwrap();
         let re_speed = Regex::new(r"speed=\s*([\d.]+)x").unwrap();
@@ -489,6 +507,11 @@ pub async fn start_encoding(
         }
 
         let status = child.wait().await;
+        // Attendre que la tâche stderr ait fini de lire avant d'utiliser le buffer.
+        let _ = stderr_task.await;
+        let ffmpeg_stderr: Option<String> = stderr_buf.lock().ok().and_then(|buf| {
+            if buf.trim().is_empty() { None } else { Some(buf.clone()) }
+        });
         let elapsed = file_start.elapsed().as_secs_f64();
         let cancelled = lock_encoder().cancel;
         let ok = status.map(|s| s.success()).unwrap_or(false) && !cancelled;
@@ -584,7 +607,8 @@ pub async fn start_encoding(
             status: if cancelled { "cancelled".to_string() }
                     else if ok { "ok".to_string() }
                     else { "error".to_string() },
-            original_mb, encoded_mb, duration_secs: elapsed, error_msg: None,
+            original_mb, encoded_mb, duration_secs: elapsed,
+            error_msg: if ok || cancelled { None } else { ffmpeg_stderr },
         });
 
         let _ = app.emit("encode-file-done", serde_json::json!({
