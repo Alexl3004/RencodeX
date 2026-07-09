@@ -149,7 +149,7 @@ pub async fn start_encoding(
 }
 
 #[tauri::command]
-pub fn cancel_encoding(app: AppHandle) {
+pub async fn cancel_encoding(app: AppHandle) {
     let (pid_opt, out_opt) = {
         let mut s = lock_encoder();
         s.cancel = true;
@@ -163,17 +163,21 @@ pub fn cancel_encoding(app: AppHandle) {
             .spawn();
     }
 
-    if let Some(out_path) = &out_opt {
-        { lock_encoder().current_out = None; }
-        std::thread::sleep(Duration::from_millis(500));
-        let deleted = delete_partial_output(out_path);
-        let out_name = filename_of(out_path);
-        if deleted {
-            let _ = app.emit("partial-file-deleted", serde_json::json!({
-                "path": out_path,
-                "name": out_name,
-            }));
-        }
+    // Nettoyage en arrière-plan — ne bloque plus l'UI
+    if let Some(out_path) = out_opt {
+        let app2 = app.clone();
+        tokio::spawn(async move {
+            { lock_encoder().current_out = None; }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let deleted = delete_partial_output(&out_path);
+            let out_name = filename_of(&out_path);
+            if deleted {
+                let _ = app2.emit("partial-file-deleted", serde_json::json!({
+                    "path": out_path,
+                    "name": out_name,
+                }));
+            }
+        });
     }
 
     let _ = app.notification()

@@ -224,7 +224,7 @@ function createEncodingStore() {
   }
 
   async function cancelEncoding() {
-    await invoke("cancel_encoding");
+    invoke("cancel_encoding");
     encoding = false;
     log("Encodage annulé par l'utilisateur", "warn");
     toasts.warn("Encodage annulé");
