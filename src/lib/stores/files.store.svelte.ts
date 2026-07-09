@@ -141,6 +141,7 @@ function createFilesStore() {
     else
       _log(`Ajout de ${valid.length} fichiers…`, "info");
 
+    // Ajouter tous les placeholders d'un coup
     for (const path of valid) {
       const placeholder: AppFile = {
         path,
@@ -159,66 +160,69 @@ function createFilesStore() {
       files = [...files, placeholder];
     }
 
-    for (const path of valid) {
-      const name = path.split(/[\\\/]/).pop() ?? path;
-      try {
-        const analysis = await invoke<FileAnalysis>("analyze_file", { path });
-        const idx = files.findIndex((f) => f.path === path);
-        if (idx < 0) continue;
+    // Analyser tous les fichiers en parallèle
+    await Promise.allSettled(
+      valid.map(async (path) => {
+        const name = path.split(/[\\\/]/).pop() ?? path;
+        try {
+          const analysis = await invoke<FileAnalysis>("analyze_file", { path });
+          const idx = files.findIndex((f) => f.path === path);
+          if (idx < 0) return;
 
-        const cleaned = await invoke<CleanedName>("clean_filename", {
-          raw: analysis.filename,
-          audioLangs: analysis.audio_langs,
-          subLangs: analysis.sub_langs,
-        });
+          const cleaned = await invoke<CleanedName>("clean_filename", {
+            raw: analysis.filename,
+            audioLangs: analysis.audio_langs,
+            subLangs: analysis.sub_langs,
+          });
 
-        const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
-        const audioTag = computeAudioTag(analysis.streams, selAudio, prefs.audioMode);
-        const outName  = buildOutputName(
-          cleaned,
-          tag,
-          prefs.seasonEpisodeFormat,
-          audioTag,
-          prefs.tagOrder,
-          prefs.team,
-          _buildOptions(),
-        );
-
-        const updated: AppFile = {
-          ...files[idx],
-          ...analysis,
-          status: "ready",
-          output_name: outName,
-          output_ext: ".mkv",
-          cleaned,
-          sub_extract_status: "none",
-        };
-        files = files.map((f, i) => (i === idx ? updated : f));
-
-        analysis.audio_langs.forEach((l) => (audioLangs = new Set([...audioLangs, l])));
-        analysis.sub_langs.forEach((l)   => (subLangs   = new Set([...subLangs, l])));
-
-        const dur   = formatDuration(analysis.duration_secs);
-        const size  = formatMb(analysis.size_mb);
-        const audio = analysis.audio_langs.map((l) => l.toUpperCase()).join("+") || "—";
-        const subs  = analysis.sub_langs.map((l) => l.toUpperCase()).join("+") || "aucun";
-        _log(
-          `Analysé : ${analysis.filename} — ${size}${dur ? `, ${dur}` : ""}, audio [${audio}], sous-titres [${subs}]`,
-          "info",
-        );
-        const audioMatch = analysis.audio_langs.some((l) => selAudio.has(l));
-        if (!audioMatch)
-          _log(
-            `  ⚠ Aucune piste audio sélectionnée présente dans ${name} — toutes les pistes seront conservées`,
-            "warn",
+          const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
+          const audioTag = computeAudioTag(analysis.streams, selAudio, prefs.audioMode);
+          const outName  = buildOutputName(
+            cleaned,
+            tag,
+            prefs.seasonEpisodeFormat,
+            audioTag,
+            prefs.tagOrder,
+            prefs.team,
+            _buildOptions(),
           );
-      } catch (e) {
-        const idx = files.findIndex((f) => f.path === path);
-        if (idx >= 0)
-          files = files.map((f, i) => (i === idx ? { ...f, status: "error" } : f));
-        _log(`Erreur analyse : ${name} — ${e}`, "error");
-      }
-    }
+
+          const updated: AppFile = {
+            ...files[idx],
+            ...analysis,
+            status: "ready",
+            output_name: outName,
+            output_ext: ".mkv",
+            cleaned,
+            sub_extract_status: "none",
+          };
+          files = files.map((f, i) => (i === idx ? updated : f));
+
+          analysis.audio_langs.forEach((l) => (audioLangs = new Set([...audioLangs, l])));
+          analysis.sub_langs.forEach((l)   => (subLangs   = new Set([...subLangs, l])));
+
+          const dur   = formatDuration(analysis.duration_secs);
+          const size  = formatMb(analysis.size_mb);
+          const audio = analysis.audio_langs.map((l) => l.toUpperCase()).join("+") || "—";
+          const subs  = analysis.sub_langs.map((l) => l.toUpperCase()).join("+") || "aucun";
+          _log(
+            `Analysé : ${analysis.filename} — ${size}${dur ? `, ${dur}` : ""}, audio [${audio}], sous-titres [${subs}]`,
+            "info",
+          );
+          const audioMatch = analysis.audio_langs.some((l) => selAudio.has(l));
+          if (!audioMatch)
+            _log(
+              `  ⚠ Aucune piste audio sélectionnée présente dans ${name} — toutes les pistes seront conservées`,
+              "warn",
+            );
+        } catch (e) {
+          const idx = files.findIndex((f) => f.path === path);
+          if (idx >= 0)
+            files = files.map((f, i) => (i === idx ? { ...f, status: "error" } : f));
+          _log(`Erreur analyse : ${name} — ${e}`, "error");
+        }
+      })
+    );
   }
 
   // ─── Suppression ─────────────────────────────────────────────────────────
