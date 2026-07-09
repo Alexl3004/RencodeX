@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { encoder, formatDuration } from "$lib/stores/encoder.svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
+  import { formatDuration } from "$lib/stores/naming";
   import type { AppFile } from "$lib/stores/encoder.svelte";
   import { formatSize } from "$lib/utils";
   import {

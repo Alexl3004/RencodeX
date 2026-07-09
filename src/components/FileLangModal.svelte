@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { encoder, LANG_ORDER, langName, type AppFile } from "$lib/stores/encoder.svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
+  import { LANG_ORDER, langName } from "$lib/stores/naming";
+  import type { AppFile } from "$lib/stores/types";
   import { untrack } from "svelte";
   import { X, Headphones, MessageSquare, RotateCcw, CircleCheck } from "@lucide/svelte";
 

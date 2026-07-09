@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { EncodeSummary } from "./encoder.svelte";
-
+import type { EncodeSummary } from "./types";
 // ── Record d'un fichier ────────────────────────────────────────────────────
 interface FileRecord {
   name:        string;
@@ -189,10 +188,12 @@ function createStats() {
     await persist();
   }
 
-  // Enregistre les résultats d'une session d'extraction terminée.
-  async function recordExtraction(files: Array<{ sub_extract_status: string; streams: Array<{ codec_type: string; language: string }> }>, selSubs: Set<string>) {
-    const launched = files.filter(f => f.sub_extract_status !== "none");
-    const ok = launched.filter(f => f.sub_extract_status === "done");
+    // Enregistre les résultats d'une session d'extraction terminée.
+  type ExtractFile = { sub_extract_status: string; streams: Array<{ codec_type: string; language: string }> };
+
+  async function recordExtraction(files: ExtractFile[], selSubs: Set<string>) {
+      const launched = files.filter((f: ExtractFile) => f.sub_extract_status !== "none");
+      const ok = launched.filter((f: ExtractFile) => f.sub_extract_status === "done");
 
     totalExtractLaunched += launched.length;
     totalExtractedFiles  += ok.length;

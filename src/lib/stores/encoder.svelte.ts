@@ -1,1745 +1,175 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { stats } from "./stats.svelte";
-import { toasts } from "$lib/stores/toasts.svelte";
+import { prefs } from "./prefs.store.svelte";
+import { filesStore } from "./files.store.svelte";
+import { encodingStore } from "./encoding.store.svelte";
+import { applySeFormat, DEFAULT_TAG_ORDER } from "./naming";
+import type { AppFile, NamingOptions } from "./types";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface StreamInfo {
-  index: number;
-  codec_type: string;
-  codec_name: string;
-  language: string;
-  width?: number;
-  height?: number;
-}
-
-export interface FileAnalysis {
-  path: string;
-  filename: string;
-  size_mb: number;
-  duration_secs: number;
-  fps: number;
-  streams: StreamInfo[];
-  audio_langs: string[];
-  sub_langs: string[];
-}
-
-export type AudioMode = "reencode" | "copy";
-export type MultipassMode = "disabled" | "qres" | "fullres";
-export type ContainerFormat = "mkv" | "mp4";
-
-export type SubExtractFormat = "srt" | "ass";
-export type SubExtractNaming = "source" | "cleaned";
-export type SubExtractPathMode = "source" | "downloads" | "custom";
-
-export interface EncodeJob {
-  input_path: string;
-  output_path: string;
-  audio_langs: string[];
-  sub_langs: string[];
-  audio_overrides: Record<string, string>;
-  sub_overrides: Record<string, string>;
-  audio_codec_overrides: Record<string, string>;
-  audio_bitrate_overrides: Record<string, string>;
-  duration_secs: number;
-  fps: number;
-  crf: number;
-  preset: string;
-  audio_mode: AudioMode;
-  audio_bitrate: number;
-  spatial_aq: boolean;
-  temporal_aq: boolean;
-  aq_strength: number;
-  multipass: MultipassMode;
-  container: ContainerFormat;
-}
-
-export interface ProgressEvent {
-  file_index: number;
-  file_total: number;
-  file_name: string;
-  percent: number;
-  speed: number;
-  remaining_file: number;
-  remaining_total: number;
-}
-
-export interface FileResult {
-  path: string;
-  name: string;
-  status: "ok" | "error" | "cancelled";
-  original_mb: number;
-  encoded_mb: number;
-  duration_secs: number;
-  error_msg?: string;
-}
-
-export interface EncodeSummary {
-  files: FileResult[];
-  total_original_mb: number;
-  total_encoded_mb: number;
-  total_secs: number;
-}
-
-export interface CleanedName {
-  title: string;
-  year: string;
-  season_episode: string;
-  resolution: string;
-  source: string;
-  provider: string;
-  audio_tags: string;
-  suggested: string;
-}
-
-export interface AppFile {
-  path: string;
-  filename: string;
-  size_mb: number;
-  duration_secs: number;
-  fps: number;
-  audio_langs: string[];
-  sub_langs: string[];
-  streams: StreamInfo[];
-  status:
-    | "pending"
-    | "analysing"
-    | "ready"
-    | "queued"
-    | "encoding"
-    | "done"
-    | "error";
-  output_name: string;
-  output_ext: string;
-  result?: FileResult;
-  cleaned?: CleanedName;
-  sub_extract_status: "none" | "extracting" | "done" | "error";
-  sub_extract_error?: string;
-}
-
-export interface SubExtractProgress {
-  file_index: number;
-  file_total: number;
-  file_name: string;
-  percent: number;
-}
-
-// ─── Format Saison/Épisode ──────────────────────────────────────────────────
-
-export type SeasonEpisodeFormat = "S01E01" | "S1E01" | "S1 E01" | "1x01";
-export const SEASON_EPISODE_FORMATS: {
-  value: SeasonEpisodeFormat;
-  label: string;
-  example: string;
-}[] = [
-  { value: "S01E01", label: "S01E01", example: "S01E01" },
-  { value: "S1E01", label: "S1E01", example: "S1E01" },
-  { value: "S1 E01", label: "S1 E01", example: "S1 E01" },
-  { value: "1x01", label: "1x01", example: "1x01" },
-];
-
-const SE_RANGE_RE = /^S(\d{2,})E(\d{2,})(?:-E(\d{2,}))?$/;
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-export function formatSeasonEpisode(
-  raw: string,
-  format: SeasonEpisodeFormat,
-): string {
-  if (!raw) return raw;
-  const m = raw.match(SE_RANGE_RE);
-  if (!m) return raw;
-  const season = parseInt(m[1], 10);
-  const ep1 = parseInt(m[2], 10);
-  const ep2 = m[3] !== undefined ? parseInt(m[3], 10) : null;
-  switch (format) {
-    case "S1E01":
-      return ep2 !== null
-        ? `S${season}E${pad2(ep1)}-E${pad2(ep2)}`
-        : `S${season}E${pad2(ep1)}`;
-    case "S1 E01":
-      return ep2 !== null
-        ? `S${season} E${pad2(ep1)}-E${pad2(ep2)}`
-        : `S${season} E${pad2(ep1)}`;
-    case "1x01":
-      return ep2 !== null
-        ? `${season}x${pad2(ep1)}-${pad2(ep2)}`
-        : `${season}x${pad2(ep1)}`;
-    case "S01E01":
-    default:
-      return raw;
-  }
-}
-
-// ─── Lang helpers ─────────────────────────────────────────────────────────────
-
-export const LANG_NAMES: Record<string, string> = {
-  fre: "Français",
-  eng: "Anglais",
-  jpn: "Japonais",
-  ger: "Allemand",
-  spa: "Espagnol",
-  kor: "Coréen",
-  ita: "Italien",
-  por: "Portugais",
-  rus: "Russe",
-  chi: "Chinois",
-  und: "Indéfini",
-};
-export const LANG_ORDER = [
-  "fre",
-  "eng",
-  "jpn",
-  "kor",
-  "ger",
-  "spa",
-  "ita",
-  "por",
-  "rus",
-  "chi",
-  "und",
-];
-export function langName(code: string): string {
-  return LANG_NAMES[code] ?? code.toUpperCase();
-}
-
-// ─── Tag helpers ──────────────────────────────────────────────────────────────
-
-export function computeTag(
-  fileAudioLangs: string[],
-  fileSubLangs: string[],
-  selAudio: Set<string>,
-  selSubs: Set<string>,
-): string {
-  const audio = fileAudioLangs.filter((l) => selAudio.has(l));
-  const subs = fileSubLangs.filter((l) => selSubs.has(l));
-  if (audio.length === 0 || audio.every((l) => l === "und")) return "";
-  if (audio.length > 1 || subs.length > 1) return "MULTI";
-  switch (audio[0]) {
-    case "fre":
-      return "VF";
-    case "eng":
-      return "VO";
-    case "jpn":
-      return "VOSTFR";
-    case "kor":
-      return "VOSTKR";
-    case "chi":
-      return "VOSTCH";
-    case "ger":
-      return "GER";
-    case "spa":
-      return "SPA";
-    case "ita":
-      return "ITA";
-    case "por":
-      return "POR";
-    case "rus":
-      return "RUS";
-    default:
-      return audio[0].toUpperCase();
-  }
-}
-
-// ─── Ordre des tags ──────────────────────────────────────────────────────────
-
-export type TagId =
-  | "title"
-  | "se"
-  | "audio"
-  | "resolution"
-  | "provider"
-  | "source"
-  | "codec"
-  | "bitdepth"
-  | "audioCodec"
-  | "team"
-  | "japver";
-
-export const DEFAULT_TAG_ORDER: TagId[] = [
-  "title",
-  "se",
-  "audio",
-  "resolution",
-  "provider",
-  "source",
-  "codec",
-  "bitdepth",
-  "audioCodec",
-  "team",
-  "japver"
-];
-
-export type ResolutionCase  = "upper" | "lower";
-export type TitleCaseMode   = "original" | "upper" | "lower" | "title";
-export type CodecFormat     = "H265" | "H.265" | "HEVC";
-export type SourceCase      = "original" | "upper" | "lower";
-export type WebSourceFormat = "WEB-DL" | "WEBDL" | "Web-DL";
-export type TagSeparator   = " " | "." | "_";
-export type ProviderCase   = "upper" | "lower" | "hidden";
-
-export interface NamingOptions {
-  disabledTags?:    Set<TagId>;
-  resolutionCase?:  ResolutionCase;
-  titleCase?:       TitleCaseMode;
-  codecFormat?:     CodecFormat;
-  sourceCase?:      SourceCase;
-  yearParentheses?: boolean;
-  webSourceFormat?: WebSourceFormat;
-  tagSeparator?:    TagSeparator;
-  providerCase?:    ProviderCase;
-  keepJapaneseVer?: boolean;
-}
-
-export const TAG_LABELS: Record<TagId, string> = {
-  title: "Titre",
-  se: "Saison/Épisode",
-  audio: "Tag audio (VOSTFR, VF…)",
-  resolution: "Résolution",
-  provider: "Provider",
-  source: "Source (BluRay, WEB-DL…)",
-  codec: "Codec vidéo (H265)",
-  bitdepth: "Profondeur (10bit)",
-  audioCodec: "Codec audio (AAC…)",
-  team: "Team",
-  japver: "(Japanese ver.)",
-};
-
-export function buildOutputName(
-  cleaned: CleanedName,
-  tag: string,
-  seFormat: SeasonEpisodeFormat = "S01E01",
-  audioTag: string = "AAC",
-  tagOrder: TagId[] = DEFAULT_TAG_ORDER,
-  team: string = "",
-  options: NamingOptions = {},
-): string {
-  const {
-    disabledTags    = new Set<TagId>(),
-    resolutionCase  = "upper",
-    titleCase       = "original",
-    codecFormat     = "H265",
-    sourceCase      = "original",
-    yearParentheses = true,
-    webSourceFormat = "WEB-DL",
-    tagSeparator    = " ",
-    providerCase    = "upper",
-    keepJapaneseVer = false,
-  } = options;
-
-  const applyTitleCase = (t: string): string => {
-    switch (titleCase) {
-      case "upper": return t.toUpperCase();
-      case "lower": return t.toLowerCase();
-      case "title": return t.replace(/\b\w/g, (c) => c.toUpperCase());
-      default:      return t;
-    }
-  };
-  const applyResCase = (r: string): string =>
-    resolutionCase === "lower" ? r.toLowerCase() : r.toUpperCase();
-
-  // Applique le format WEB aux sources de type WEB-* / WEB
-  const applyWebFormat = (s: string): string => {
-    switch (webSourceFormat) {
-      case "WEBDL":
-        return s.replace(/[-\s]/g, "").toUpperCase(); // WEB-DL→WEBDL, WEBRip→WEBRIP
-      case "Web-DL": {
-        const map: Record<string, string> = {
-          "WEB-DL": "Web-DL",
-          "WEBRip": "Web-Rip",
-          "WEB":    "Web",
-        };
-        return map[s] ?? s;
-      }
-      default: // "WEB-DL" — original
-        return s;
-    }
-  };
-
-  const applySourceCase = (s: string): string => {
-    // Les sources WEB sont gérées par webSourceFormat, indépendamment de sourceCase
-    if (/^WEB/i.test(s)) return applyWebFormat(s);
-    switch (sourceCase) {
-      case "upper": return s.toUpperCase();
-      case "lower": return s.toLowerCase();
-      default:      return s;
-    }
-  };
-
-  // Année : ajoutée au titre pour les films (pas de season_episode)
-  const isMovieYear = !cleaned.season_episode && cleaned.year;
-  const yearStr = isMovieYear
-    ? (yearParentheses ? `(${cleaned.year})` : cleaned.year)
-    : "";
-
-  // Le parseur peut renvoyer un titre qui contient déjà l'année
-  // (ex: title="A Quiet Place 2018", year="2018"). On la retire du
-  // titre pour éviter un doublon type "A Quiet Place 2018 (2018)".
-  const stripDuplicateYear = (t: string): string => {
-    if (!cleaned.year) return t;
-    const escapedYear = cleaned.year.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return t
-      .replace(new RegExp(`[\\s.,_-]*\\(?${escapedYear}\\)?\\s*$`), "")
-      .trim();
-  };
-
-  const titleBase = stripDuplicateYear(applyTitleCase(cleaned.title));
-
-  const values: Record<TagId, string> = {
-    title:      titleBase + (yearStr ? ` ${yearStr}` : ""),
-    se:         formatSeasonEpisode(cleaned.season_episode, seFormat),
-    audio:      tag,
-    resolution: applyResCase(cleaned.resolution),
-    provider:   providerCase === "hidden" ? "" :
-                providerCase === "lower"  ? cleaned.provider.toLowerCase() :
-                cleaned.provider.toUpperCase(),
-    source:     applySourceCase(cleaned.source),
-    codec:      codecFormat,
-    bitdepth:   "10bit",
-    audioCodec: audioTag,
-    team:       team.trim(),
-    japver:     keepJapaneseVer ? "(Japanese ver.)" : "",
-  };
-
-  const sep = tagSeparator;
-  const escapedSep = sep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return tagOrder
-    .filter((id) => !disabledTags.has(id))
-    .map((id) => values[id])
-    .filter(Boolean)
-    // Normalise les séparateurs internes de CHAQUE valeur (ex: espaces
-    // dans le titre) vers le séparateur choisi, avant de tout joindre.
-    // Sans ça, un titre comme "A Quiet Place (2018)" gardait ses espaces
-    // même quand le séparateur global était "." ou "_".
-    .map((v) => (sep === " " ? v : v.replace(/\s+/g, sep)))
-    .join(sep)
-    .replace(new RegExp(`${escapedSep}{2,}`, "g"), sep)
-    .trim();
-}
-
-export function computeAudioTag(
-  streams: StreamInfo[],
-  selAudio: Set<string>,
-  audioMode: AudioMode,
-): string {
-  if (audioMode === "reencode") return "AAC";
-  const codecs = new Set(
-    streams
-      .filter((s) => s.codec_type === "audio" && selAudio.has(s.language))
-      .map((s) => s.codec_name.toUpperCase()),
-  );
-  if (codecs.size === 0) return "AAC";
-  return [...codecs].sort().join("-");
-}
-
-export function applySeFormat(
-  file: AppFile,
-  seFormat: SeasonEpisodeFormat,
-  tagOrder: TagId[] = DEFAULT_TAG_ORDER,
-  team: string = "",
-  options: NamingOptions = {},
-): string {
-  if (file.cleaned) {
-    const tag =
-      file.output_name.match(
-        /\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/,
-      )?.[1] ?? "";
-    // Extraire le codec audio depuis le nom — on cherche un token connu
-    // plutôt que de prendre aveuglément le dernier mot (qui peut être `team`).
-    const AUDIO_CODECS = ["AAC", "AC3", "EAC3", "DTS", "FLAC", "OPUS", "MP3", "TrueHD"];
-    const audioTag =
-      AUDIO_CODECS.find((c) =>
-        new RegExp(`\\b${c}\\b`, "i").test(file.output_name),
-      ) ?? "AAC";
-    return buildOutputName(
-      file.cleaned,
-      tag,
-      seFormat,
-      audioTag,
-      tagOrder,
-      team,
-      options,
-    );
-  }
-  return file.output_name.replace(
-    /S(\d{1,2})E(\d{2,})(?:-E(\d{2,}))?/gi,
-    (_, s, e1, e2) => {
-      const raw = e2
-        ? `S${s.padStart(2, "0")}E${e1}-E${e2}`
-        : `S${s.padStart(2, "0")}E${e1}`;
-      return formatSeasonEpisode(raw, seFormat);
-    },
-  );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-export function formatDuration(secs: number): string {
-  if (!secs || secs <= 0) return "";
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  if (h > 0)
-    return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
-  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
-  return `${s}s`;
-}
-function formatMb(mb: number): string {
-  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
-  return `${mb.toFixed(0)} MB`;
-}
-function joinPath(dir: string, name: string): string {
-  const d = dir.replace(/[\\/]+$/, "");
-  return `${d}\\${name}`;
-}
-
-const COPY_BY_DEFAULT = ["aac", "opus", "ac3", "eac3", "mp3", "flac"];
-export function codecDefault(codecName: string): string {
-  return COPY_BY_DEFAULT.includes(codecName.toLowerCase()) ? "copy" : "aac";
-}
-
-// ─── Store ────────────────────────────────────────────────────────────────────
+// ─── Façade encoder ───────────────────────────────────────────────────────────
+// Colle les trois stores ensemble et expose l'API publique utilisée par les
+// composants Svelte. Gère aussi init, outputDir, navLayout, reset, clearSession.
 
 function createEncoder() {
-  let files = $state<AppFile[]>([]);
-  let audioLangs = $state<Set<string>>(new Set());
-  let subLangs = $state<Set<string>>(new Set());
-  let selAudio = $state<Set<string>>(new Set(["fre", "eng", "jpn"]));
-  let selSubs  = $state<Set<string>>(new Set(["fre"]));
-  // Surcharges par fichier (chemin → Set de langues sélectionnées)
-  let fileSelAudio = $state<Map<string, Set<string>>>(new Map());
-  let fileSelSubs  = $state<Map<string, Set<string>>>(new Map());
-  let audioOverrides = $state<Record<string, Record<string, string>>>({});
-  let subOverrides = $state<Record<string, Record<string, string>>>({});
-  let globalCodecOverride = $state<Record<string, string>>({});
-  let outputDir = $state("");
-  let navLayout = $state<"vertical" | "horizontal">("vertical");
+  let outputDir      = $state("");
+  let navLayout      = $state<"vertical" | "horizontal">("vertical");
   let innerNavLayout = $state<"vertical" | "horizontal">("vertical");
-  let encoding = $state(false);
-  let progress = $state<ProgressEvent | null>(null);
-  let summary = $state<EncodeSummary | null>(null);
-  let logs = $state<
-    { msg: string; level: "info" | "warn" | "error" | "success" }[]
-  >([]);
+  let outputDirPresets = $state<string[]>([]);
+  let forceUpdateCounter = $state(0);
 
-  let crf = $state(28);
-  let preset = $state("p5");
-  let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
-  let tagOrder = $state<TagId[]>([...DEFAULT_TAG_ORDER]);
-  let disabledTags   = $state<Set<TagId>>(new Set());
-  let resolutionCase = $state<ResolutionCase>("upper");
-  let titleCase      = $state<TitleCaseMode>("original");
-  let codecFormat      = $state<CodecFormat>("H265");
-  let sourceCase       = $state<SourceCase>("original");
-  let yearParentheses  = $state<boolean>(true);
-  let webSourceFormat  = $state<WebSourceFormat>("WEB-DL");
-  let tagSeparator     = $state<TagSeparator>(" ");
-  let providerCase     = $state<ProviderCase>("upper");
-  let team = $state("");
-  let keepJapaneseVer = $state<boolean>(false);
+  // Câble le logger des fichiers sur le log de l'encodage
+  filesStore.setLogger((msg, level) => encodingStore.log(msg, level));
 
-  let audioMode = $state<AudioMode>("reencode");
-  let audioBitrate = $state(192);
-  let spatialAq = $state(false);
-  let temporalAq = $state(false);
-  let aqStrength = $state(8);
-  let multipass = $state<MultipassMode>("disabled");
-  let container = $state<ContainerFormat>("mkv");
+  // ─── Init ─────────────────────────────────────────────────────────────────
 
-  let subExtractFormat = $state<SubExtractFormat>("srt");
-  let subExtractNaming = $state<SubExtractNaming>("source");
-  let subExtractPathMode = $state<SubExtractPathMode>("source");
-  let subExtractCustomPath = $state<string>("");
-
-  // ─── États extraction sous-titres ────────────────────────────────────────
-  let extractingSubs = $state(false);
-  let subExtractProgress = $state<SubExtractProgress | null>(null);
-  let showExtractButton = $state(true);
-  let cancelExtraction = $state(false);
-  let selectedForExtraction = $state<Set<string>>(new Set());
-  let extractSelectionMode = $state(false);
-
-  // ─── Chemins de sortie ────────────────────────────────────────────────────
-  let outputDirPresets  = $state<string[]>([]);
-
-  // ─── États sélection encodage ─────────────────────────────────────────────
-  let encodeSelectionMode = $state(false);
-  let selectedForEncoding = $state<Set<string>>(new Set());
-  // Chemins des fichiers du batch en cours (pour résoudre file_index → path)
-  let encodingFilePaths = $state<string[]>([]);
-
-  let _unlisten: UnlistenFn[] = [];
-
-  // ─── Setters ──────────────────────────────────────────────────────────────
-
-  function setCrf(value: number) {
-    crf = value;
-    persistPrefs();
-  }
-  function setPreset(value: string) {
-    preset = value;
-    persistPrefs();
-  }
-  function setSeasonEpisodeFormat(value: SeasonEpisodeFormat) {
-    seasonEpisodeFormat = value;
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function setTagOrder(value: TagId[]) {
-    tagOrder = value;
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function moveTag(id: TagId, dir: -1 | 1) {
-    const idx = tagOrder.indexOf(id);
-    if (idx < 0) return;
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= tagOrder.length) return;
-    const next = [...tagOrder];
-    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
-    setTagOrder(next);
-  }
-  function toggleTag(id: TagId) {
-    const next = new Set(disabledTags);
-    next.has(id) ? next.delete(id) : next.add(id);
-    disabledTags = next;
-    saveRenamingPrefs();
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function setResolutionCase(value: ResolutionCase) {
-    resolutionCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setTitleCase(value: TitleCaseMode) {
-    titleCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setCodecFormat(value: CodecFormat) {
-    codecFormat = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setSourceCase(value: SourceCase) {
-    sourceCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setYearParentheses(value: boolean) {
-    yearParentheses = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setWebSourceFormat(value: WebSourceFormat) {
-    webSourceFormat = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setTagSeparator(value: TagSeparator) {
-    tagSeparator = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setProviderCase(value: ProviderCase) {
-    providerCase = value; saveRenamingPrefs(); persistPrefs(); refreshOutputNames();
-  }
-  function setTeam(value: string) {
-    team = value;
-    saveRenamingPrefs();
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function setKeepJapaneseVer(value: boolean) {
-    keepJapaneseVer = value;
-    saveRenamingPrefs();
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function setAudioMode(value: AudioMode) {
-    audioMode = value;
-    persistPrefs();
-    refreshOutputNames();
-  }
-  function setAudioBitrate(value: number) {
-    audioBitrate = value;
-    persistPrefs();
-  }
-  function setSpatialAq(value: boolean) {
-    spatialAq = value;
-    persistPrefs();
-  }
-  function setTemporalAq(value: boolean) {
-    temporalAq = value;
-    persistPrefs();
-  }
-  function setAqStrength(value: number) {
-    aqStrength = value;
-    persistPrefs();
-  }
-  function setMultipass(value: MultipassMode) {
-    multipass = value;
-    persistPrefs();
-  }
-  function setContainer(value: ContainerFormat) {
-    container = value;
-    persistPrefs();
-  }
-  function setSubExtractFormat(value: SubExtractFormat) {
-    subExtractFormat = value;
-    persistPrefs();
-  }
-  function setSubExtractNaming(value: SubExtractNaming) {
-    subExtractNaming = value;
-    persistPrefs();
-  }
-  function setSubExtractPathMode(value: SubExtractPathMode) {
-    subExtractPathMode = value;
-    persistPrefs();
-  }
-  function setSubExtractCustomPath(value: string) {
-    subExtractCustomPath = value;
-    persistPrefs();
-  }
-  function setShowExtractButton(value: boolean) {
-    showExtractButton = value;
-    persistPrefs();
+  async function init() {
+    outputDir = await invoke<string>("get_default_output_dir");
+    await loadDirConfig();
+    await prefs.load();
+    prefs.loadRenamingPrefs(); // override Tauri avec localStorage si plus récent
+    encodingStore.log(`Dossier de sortie : ${outputDir}`, "info");
+    await encodingStore.listenEvents();
+    window.addEventListener("beforeunload", () => {
+      prefs.flush();
+      prefs.saveRenamingPrefs();
+    });
   }
 
-  // ─── Sélection extraction ─────────────────────────────────────────────────
-  function setExtractSelectionMode(value: boolean) {
-    extractSelectionMode = value;
-    if (!value) selectedForExtraction = new Set();
-  }
-  function toggleExtractSelection(path: string) {
-    const s = new Set(selectedForExtraction);
-    s.has(path) ? s.delete(path) : s.add(path);
-    selectedForExtraction = s;
-  }
-  function setExtractSelection(paths: string[]) {
-    selectedForExtraction = new Set(paths);
-  }
-  function clearExtractSelection() {
-    selectedForExtraction = new Set();
-  }
-
-  // ─── Sélection encodage ───────────────────────────────────────────────────
-  function setEncodeSelectionMode(value: boolean) {
-    encodeSelectionMode = value;
-    if (!value) selectedForEncoding = new Set();
-  }
-  function toggleEncodeSelection(path: string) {
-    const s = new Set(selectedForEncoding);
-    s.has(path) ? s.delete(path) : s.add(path);
-    selectedForEncoding = s;
-  }
-  function setEncodeSelection(paths: string[]) {
-    selectedForEncoding = new Set(paths);
-  }
-  function clearEncodeSelection() {
-    selectedForEncoding = new Set();
-  }
-
-  function resetFormatOptions() {
-    resolutionCase  = "upper";
-    titleCase       = "original";
-    codecFormat     = "H265";
-    sourceCase      = "original";
-    yearParentheses = true;
-    webSourceFormat = "WEB-DL";
-    tagSeparator    = " ";
-    providerCase    = "upper";
-    seasonEpisodeFormat = "S01E01";
-    persistPrefs();
-    refreshOutputNames();
-  }
-
-  // ─── Persistance préférences ──────────────────────────────────────────────
-
-  let _persistTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function currentPrefs() {
-    return {
-      crf,
-      preset,
-      se_format: seasonEpisodeFormat,
-      tag_order: tagOrder,
-      disabled_tags: [...disabledTags],
-      resolution_case:   resolutionCase,
-      title_case:        titleCase,
-      codec_format:      codecFormat,
-      source_case:       sourceCase,
-      year_parentheses:  yearParentheses,
-      web_source_format: webSourceFormat,
-      tag_separator:     tagSeparator,
-      provider_case:     providerCase,
-      team,
-      keep_japanese_ver: keepJapaneseVer,
-      audio_mode: audioMode,
-      audio_bitrate: audioBitrate,
-      spatial_aq: spatialAq,
-      temporal_aq: temporalAq,
-      aq_strength: aqStrength,
-      multipass,
-      container,
-      sub_extract_format: subExtractFormat,
-      sub_extract_naming: subExtractNaming,
-      sub_extract_path_mode: subExtractPathMode,
-      sub_extract_custom_path: subExtractCustomPath,
-      show_extract_button: showExtractButton,
-    };
-  }
-
-  async function flushPrefs() {
-    if (_persistTimer) {
-      clearTimeout(_persistTimer);
-      _persistTimer = null;
-    }
-    try {
-      await invoke("save_encoding_prefs", { prefs: currentPrefs() });
-    } catch (e) {
-      log(`Erreur sauvegarde préférences : ${e}`, "error");
-    }
-  }
-
-  function persistPrefs() {
-    if (_persistTimer) clearTimeout(_persistTimer);
-    _persistTimer = setTimeout(() => {
-      flushPrefs();
-    }, 300);
-  }
-
-  async function loadEncodingSettings() {
-    try {
-      const prefs = await invoke<{
-        crf: number;
-        preset: string;
-        se_format: string;
-        tag_order: string[];
-        team: string;
-        audio_mode: string;
-        audio_bitrate: number;
-        spatial_aq: boolean;
-        temporal_aq: boolean;
-        aq_strength: number;
-        multipass: string;
-        container: string;
-        sub_extract_format?: string;
-        sub_extract_naming?: string;
-        sub_extract_path_mode?: string;
-        sub_extract_custom_path?: string;
-        show_extract_button?: boolean;
-        disabled_tags?: string[];
-        resolution_case?: string;
-        title_case?: string;
-        codec_format?: string;
-        source_case?: string;
-        year_parentheses?: boolean;
-        web_source_format?: string;
-        tag_separator?: string;
-        provider_case?: string;
-        keep_japanese_ver?: boolean;
-      }>("load_encoding_prefs");
-
-      if (typeof prefs.crf === "number") crf = prefs.crf;
-      if (prefs.preset) preset = prefs.preset;
-      if (
-        prefs.se_format &&
-        SEASON_EPISODE_FORMATS.some((f) => f.value === prefs.se_format)
-      ) {
-        seasonEpisodeFormat = prefs.se_format as SeasonEpisodeFormat;
-      }
-      const parsedOrder = prefs.tag_order as TagId[] | undefined;
-      const isValidOrder =
-        Array.isArray(parsedOrder) &&
-        parsedOrder.length === DEFAULT_TAG_ORDER.length &&
-        DEFAULT_TAG_ORDER.every((id) => parsedOrder.includes(id));
-      if (isValidOrder) tagOrder = parsedOrder!;
-      if (Array.isArray(prefs.disabled_tags)) {
-        const valid = (prefs.disabled_tags as string[]).filter((id) =>
-          DEFAULT_TAG_ORDER.includes(id as TagId)
-        );
-        disabledTags = new Set(valid as TagId[]);
-      }
-      if (prefs.resolution_case === "upper" || prefs.resolution_case === "lower")
-        resolutionCase = prefs.resolution_case;
-      if (["original","upper","lower","title"].includes(prefs.title_case ?? ""))
-        titleCase = prefs.title_case as TitleCaseMode;
-      if (["H265","H.265","HEVC"].includes(prefs.codec_format ?? ""))
-        codecFormat = prefs.codec_format as CodecFormat;
-      if (["original","upper","lower"].includes(prefs.source_case ?? ""))
-        sourceCase = prefs.source_case as SourceCase;
-      if (typeof prefs.year_parentheses === "boolean")
-        yearParentheses = prefs.year_parentheses;
-      if (["WEB-DL","WEBDL","Web-DL"].includes(prefs.web_source_format ?? ""))
-        webSourceFormat = prefs.web_source_format as WebSourceFormat;
-      if ([" ", ".", "_"].includes(prefs.tag_separator ?? ""))
-        tagSeparator = prefs.tag_separator as TagSeparator;
-      if (["upper","lower","hidden"].includes(prefs.provider_case ?? ""))
-        providerCase = prefs.provider_case as ProviderCase;
-      if (typeof prefs.team === "string") team = prefs.team;
-      if (typeof prefs.keep_japanese_ver === "boolean")
-        keepJapaneseVer = prefs.keep_japanese_ver;
-      if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
-        audioMode = prefs.audio_mode;
-      if (typeof prefs.audio_bitrate === "number")
-        audioBitrate = prefs.audio_bitrate;
-      if (typeof prefs.spatial_aq === "boolean") spatialAq = prefs.spatial_aq;
-      if (typeof prefs.temporal_aq === "boolean")
-        temporalAq = prefs.temporal_aq;
-      if (typeof prefs.aq_strength === "number") aqStrength = prefs.aq_strength;
-      if (
-        prefs.multipass === "disabled" ||
-        prefs.multipass === "qres" ||
-        prefs.multipass === "fullres"
-      ) {
-        multipass = prefs.multipass;
-      }
-      if (prefs.container === "mkv" || prefs.container === "mp4")
-        container = prefs.container;
-      if (
-        prefs.sub_extract_format === "srt" ||
-        prefs.sub_extract_format === "ass"
-      )
-        subExtractFormat = prefs.sub_extract_format;
-      if (
-        prefs.sub_extract_naming === "source" ||
-        prefs.sub_extract_naming === "cleaned"
-      )
-        subExtractNaming = prefs.sub_extract_naming;
-      if (
-        prefs.sub_extract_path_mode === "source" ||
-        prefs.sub_extract_path_mode === "downloads" ||
-        prefs.sub_extract_path_mode === "custom"
-      ) {
-        subExtractPathMode = prefs.sub_extract_path_mode;
-      }
-      if (typeof prefs.sub_extract_custom_path === "string")
-        subExtractCustomPath = prefs.sub_extract_custom_path;
-      if (typeof prefs.show_extract_button === "boolean")
-        showExtractButton = prefs.show_extract_button;
-    } catch (e) {
-      log(`Erreur chargement préférences : ${e}`, "error");
-    }
-  }
-
-  // ─── Chemins de sortie — chargement & persistance ─────────────────────────
-
-  /** Charge les presets depuis AppConfig (backend). */
   async function loadDirConfig() {
     try {
       const cfg = await invoke<Record<string, any>>("load_config");
-    if (cfg.nav_layout) navLayout = cfg.nav_layout as "vertical" | "horizontal";
-    if (cfg.inner_nav_layout) innerNavLayout = cfg.inner_nav_layout as "vertical" | "horizontal";
+      if (cfg.nav_layout)       navLayout      = cfg.nav_layout as "vertical" | "horizontal";
+      if (cfg.inner_nav_layout) innerNavLayout = cfg.inner_nav_layout as "vertical" | "horizontal";
       const g = (snake: string, camel: string) => cfg[snake] ?? cfg[camel];
-      outputDirPresets = (g("output_dir_presets", "outputDirPresets") as string[] | undefined) ?? [];
+      outputDirPresets =
+        (g("output_dir_presets", "outputDirPresets") as string[] | undefined) ?? [];
     } catch {
       outputDirPresets = [];
     }
   }
 
-  // ─── Initialisation ───────────────────────────────────────────────────────
+  // ─── Helpers nommage (délégués à prefs + files) ───────────────────────────
 
-  // ─── Persistance prefs renommage — localStorage ──────────────────────────
-  // Tauri ne garantit pas que beforeunload se déclenche à la fermeture native.
-  // localStorage est synchrone et toujours écrit avant que la webview disparaisse.
-
-  const RENAMING_KEY = "rencodeX:renaming";
-
-  function saveRenamingPrefs(): void {
-    try {
-      localStorage.setItem(RENAMING_KEY, JSON.stringify({
-        tag_order:         tagOrder,
-        disabled_tags:     [...disabledTags],
-        resolution_case:   resolutionCase,
-        title_case:        titleCase,
-        codec_format:      codecFormat,
-        source_case:       sourceCase,
-        year_parentheses:  yearParentheses,
-        web_source_format: webSourceFormat,
-        tag_separator:     tagSeparator,
-        provider_case:     providerCase,
-        team,
-        keepJapaneseVer,
-      }));
-    } catch { /* storage indisponible */ }
+  function getDisplayName(file: AppFile): string {
+    return applySeFormat(file, prefs.seasonEpisodeFormat, prefs.tagOrder, prefs.team, {
+      disabledTags:    prefs.disabledTags,
+      resolutionCase:  prefs.resolutionCase,
+      titleCase:       prefs.titleCase,
+      codecFormat:     prefs.codecFormat,
+      sourceCase:      prefs.sourceCase,
+      yearParentheses: prefs.yearParentheses,
+      webSourceFormat: prefs.webSourceFormat,
+      tagSeparator:    prefs.tagSeparator,
+      providerCase:    prefs.providerCase,
+      keepJapaneseVer: prefs.keepJapaneseVer,
+    } satisfies NamingOptions);
   }
 
-  function loadRenamingPrefs(): void {
-    try {
-      const raw = localStorage.getItem(RENAMING_KEY);
-      if (!raw) return;
-      const p = JSON.parse(raw) as Record<string, unknown>;
+  // ─── Tag order helpers ────────────────────────────────────────────────────
 
-      if (
-        Array.isArray(p.tag_order) &&
-        (p.tag_order as string[]).every((id) => DEFAULT_TAG_ORDER.includes(id as TagId))
-      ) tagOrder = p.tag_order as TagId[];
-
-      if (Array.isArray(p.disabled_tags))
-        disabledTags = new Set(
-          (p.disabled_tags as string[]).filter((id) =>
-            DEFAULT_TAG_ORDER.includes(id as TagId)
-          ) as TagId[]
-        );
-
-      if (p.resolution_case === "upper" || p.resolution_case === "lower")
-        resolutionCase = p.resolution_case;
-      if (["original","upper","lower","title"].includes(p.title_case as string))
-        titleCase = p.title_case as TitleCaseMode;
-      if (["H265","H.265","HEVC"].includes(p.codec_format as string))
-        codecFormat = p.codec_format as CodecFormat;
-      if (["original","upper","lower"].includes(p.source_case as string))
-        sourceCase = p.source_case as SourceCase;
-      if (typeof p.year_parentheses === "boolean")
-        yearParentheses = p.year_parentheses;
-      if (["WEB-DL","WEBDL","Web-DL"].includes(p.web_source_format as string))
-        webSourceFormat = p.web_source_format as WebSourceFormat;
-      if ([" ",".",  "_"].includes(p.tag_separator as string))
-        tagSeparator = p.tag_separator as TagSeparator;
-      if (["upper","lower","hidden"].includes(p.provider_case as string))
-        providerCase = p.provider_case as ProviderCase;
-      if (typeof p.team === "string") team = p.team;
-      if (typeof p.keepJapaneseVer === "boolean")
-        keepJapaneseVer = p.keepJapaneseVer;
-    } catch { /* JSON invalide */ }
+  function moveTag(id: import("./types").TagId, dir: -1 | 1) {
+    const order  = prefs.tagOrder;
+    const idx    = order.indexOf(id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= order.length) return;
+    const next = [...order];
+    [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+    prefs.setTagOrder(next);
+    filesStore.refreshOutputNames();
   }
 
-    async function init() {
-    outputDir = await invoke<string>("get_default_output_dir");
-    await loadDirConfig();
-    await loadEncodingSettings();
-    loadRenamingPrefs();  // override Tauri avec localStorage si plus récent
-    await stats.init();
-    log(`Dossier de sortie : ${outputDir}`, "info");
-    await listenEvents();
-    window.addEventListener("beforeunload", () => {
-      flushPrefs();
-      saveRenamingPrefs();
-    });
+  function toggleTag(id: import("./types").TagId) {
+    const next = new Set(prefs.disabledTags);
+    next.has(id) ? next.delete(id) : next.add(id);
+    prefs.setDisabledTags(next);
+    filesStore.refreshOutputNames();
   }
 
-  async function listenEvents() {
-    const u1 = await listen<ProgressEvent>("encode-progress", (e) => {
-      progress = e.payload;
-      const activeIdx = e.payload.file_index;
-      // Résoudre le chemin via la liste des jobs (et non l'index global de files)
-      const activePath = encodingFilePaths[activeIdx];
-      files = files.map((f) => {
-        if (f.status === "queued" || f.status === "encoding") {
-          return {
-            ...f,
-            status: f.path === activePath ? "encoding" : "queued",
-          };
-        }
-        return f;
-      });
-    });
-    const u2 = await listen<any>("encode-file-done", (e) => {
-      const p = e.payload;
-      const f = files.find((f) => f.path === p.path || f.filename === p.name);
-      if (f) {
-        f.status = p.status === "ok" ? "done" : "error";
-        if (p.status === "ok") f.result = p;
-      }
-      if (p.status === "ok") {
-        const gain =
-          p.original_mb > 0
-            ? (((p.original_mb - p.encoded_mb) / p.original_mb) * 100).toFixed(
-                1,
-              )
-            : null;
-        const dur = formatDuration(p.duration_secs);
-        log(
-          `✓ ${p.name}` +
-            (gain ? ` — gain ${gain}%` : "") +
-            ` (${formatMb(p.encoded_mb)}` +
-            (dur ? `, ${dur}` : "") +
-            `)`,
-          "success",
-        );
-      } else {
-        log(
-          `✗ ${p.name} — échec${p.error_msg ? ` : ${p.error_msg}` : ""}`,
-          "error",
-        );
-      }
-    });
-    _unlisten = [u1, u2];
+  function resetTagOrder() {
+    prefs.setTagOrder([...DEFAULT_TAG_ORDER]);
+    prefs.setDisabledTags(new Set());
+    filesStore.refreshOutputNames();
   }
 
-  // ─── Ajout / suppression de fichiers ─────────────────────────────────────
+  // ─── Wrappers setters prefs qui déclenchent refreshOutputNames ────────────
 
-  async function addFiles(paths: string[]) {
-    const ignored = paths.filter((p) => !/\.(mp4|mkv|avi|mov|flv)$/i.test(p));
-    ignored.forEach((p) => {
-      const name = p.split(/[\\/]/).pop() ?? p;
-      log(`Ignoré : ${name} (format non supporté)`, "warn");
-    });
-    const valid = paths.filter(
-      (p) =>
-        /\.(mp4|mkv|avi|mov|flv)$/i.test(p) && !files.find((f) => f.path === p),
-    );
-    if (valid.length === 0) return;
-    if (valid.length === 1)
-      log(`Ajout : ${valid[0].split(/[\\/]/).pop()}`, "info");
-    else log(`Ajout de ${valid.length} fichiers…`, "info");
-
-    for (const path of valid) {
-      const placeholder: AppFile = {
-        path,
-        filename: path.split(/[\\/]/).pop() ?? path,
-        size_mb: 0,
-        duration_secs: 0,
-        fps: 25,
-        audio_langs: [],
-        sub_langs: [],
-        streams: [],
-        status: "analysing",
-        output_name:
-          path
-            .split(/[\\/]/)
-            .pop()
-            ?.replace(/\.[^.]+$/, "") ?? "",
-        output_ext: ".mkv",
-        sub_extract_status: "none",
-      };
-      files = [...files, placeholder];
-    }
-
-    for (const path of valid) {
-      const name = path.split(/[\\/]/).pop() ?? path;
-      try {
-        const analysis = await invoke<FileAnalysis>("analyze_file", { path });
-        const idx = files.findIndex((f) => f.path === path);
-        if (idx < 0) continue;
-        const cleaned = await invoke<CleanedName>("clean_filename", {
-          raw: analysis.filename,
-          audioLangs: analysis.audio_langs,
-          subLangs: analysis.sub_langs,
-        });
-        const tag = computeTag(
-          analysis.audio_langs,
-          analysis.sub_langs,
-          selAudio,
-          selSubs,
-        );
-        const audioTag = computeAudioTag(analysis.streams, selAudio, audioMode);
-        const outName = buildOutputName(
-          cleaned,
-          tag,
-          seasonEpisodeFormat,
-          audioTag,
-          tagOrder,
-          team,
-          {
-            disabledTags:    disabledTags,
-            resolutionCase:  resolutionCase,
-            titleCase:       titleCase,
-            codecFormat:     codecFormat,
-            sourceCase:      sourceCase,
-            yearParentheses: yearParentheses,
-            webSourceFormat: webSourceFormat,
-            tagSeparator:    tagSeparator,
-            providerCase:    providerCase,
-            keepJapaneseVer,
-          },
-        );
-        const updated: AppFile = {
-          ...files[idx],
-          ...analysis,
-          status: "ready",
-          output_name: outName,
-          output_ext: ".mkv",
-          cleaned,
-          sub_extract_status: "none",
-        };
-        files = files.map((f, i) => (i === idx ? updated : f));
-        analysis.audio_langs.forEach(
-          (l) => (audioLangs = new Set([...audioLangs, l])),
-        );
-        analysis.sub_langs.forEach(
-          (l) => (subLangs = new Set([...subLangs, l])),
-        );
-        const dur = formatDuration(analysis.duration_secs);
-        const size = formatMb(analysis.size_mb);
-        const audio =
-          analysis.audio_langs.map((l) => l.toUpperCase()).join("+") || "—";
-        const subs =
-          analysis.sub_langs.map((l) => l.toUpperCase()).join("+") || "aucun";
-        log(
-          `Analysé : ${analysis.filename} — ${size}${dur ? `, ${dur}` : ""}, audio [${audio}], sous-titres [${subs}]`,
-          "info",
-        );
-        const audioMatch = analysis.audio_langs.some((l) => selAudio.has(l));
-        if (!audioMatch)
-          log(
-            `  ⚠ Aucune piste audio sélectionnée présente dans ${name} — toutes les pistes seront conservées`,
-            "warn",
-          );
-      } catch (e) {
-        const idx = files.findIndex((f) => f.path === path);
-        if (idx >= 0)
-          files = files.map((f, i) =>
-            i === idx ? { ...f, status: "error" } : f,
-          );
-        log(`Erreur analyse : ${name} — ${e}`, "error");
-      }
-    }
+  function setSeasonEpisodeFormat(v: import("./types").SeasonEpisodeFormat) {
+    prefs.setSeasonEpisodeFormat(v);
+    filesStore.refreshOutputNames();
+  }
+  function setTagOrder(v: import("./types").TagId[]) {
+    prefs.setTagOrder(v);
+    filesStore.refreshOutputNames();
+  }
+  function setResolutionCase(v: import("./types").ResolutionCase) {
+    prefs.setResolutionCase(v);
+    filesStore.refreshOutputNames();
+  }
+  function setTitleCase(v: import("./types").TitleCaseMode) {
+    prefs.setTitleCase(v);
+    filesStore.refreshOutputNames();
+  }
+  function setCodecFormat(v: import("./types").CodecFormat) {
+    prefs.setCodecFormat(v);
+    filesStore.refreshOutputNames();
+  }
+  function setSourceCase(v: import("./types").SourceCase) {
+    prefs.setSourceCase(v);
+    filesStore.refreshOutputNames();
+  }
+  function setYearParentheses(v: boolean) {
+    prefs.setYearParentheses(v);
+    filesStore.refreshOutputNames();
+  }
+  function setWebSourceFormat(v: import("./types").WebSourceFormat) {
+    prefs.setWebSourceFormat(v);
+    filesStore.refreshOutputNames();
+  }
+  function setTagSeparator(v: import("./types").TagSeparator) {
+    prefs.setTagSeparator(v);
+    filesStore.refreshOutputNames();
+  }
+  function setProviderCase(v: import("./types").ProviderCase) {
+    prefs.setProviderCase(v);
+    filesStore.refreshOutputNames();
+  }
+  function setTeam(v: string) {
+    prefs.setTeam(v);
+    filesStore.refreshOutputNames();
+  }
+  function setKeepJapaneseVer(v: boolean) {
+    prefs.setKeepJapaneseVer(v);
+    filesStore.refreshOutputNames();
+  }
+  function setAudioMode(v: import("./types").AudioMode) {
+    prefs.setAudioMode(v);
+    filesStore.refreshOutputNames();
+  }
+  function resetFormatOptions() {
+    prefs.resetFormatOptions();
+    filesStore.refreshOutputNames();
   }
 
-  function removeFile(path: string) {
-    const f = files.find((f) => f.path === path);
-    if (f) log(`Retiré : ${f.filename}`, "info");
-    files = files.filter((f) => f.path !== path);
-    // Nettoyer des sélections si le fichier était sélectionné
-    const es = new Set(selectedForExtraction);
-    es.delete(path);
-    selectedForExtraction = es;
-    const cs = new Set(selectedForEncoding);
-    cs.delete(path);
-    selectedForEncoding = cs;
-    rebuildLangs();
-  }
+  // ─── Reset global ─────────────────────────────────────────────────────────
 
-  function rebuildLangs() {
-    const a = new Set<string>(),
-      s = new Set<string>();
-    files.forEach((f) => {
-      f.audio_langs.forEach((l) => a.add(l));
-      f.sub_langs.forEach((l) => s.add(l));
-    });
-    audioLangs = a;
-    subLangs = s;
-  }
-
-  function clearAll() {
-    files = [];
-    audioLangs = new Set();
-    subLangs = new Set();
-    selAudio = new Set(["fre", "eng", "jpn"]);
-    selSubs = new Set(["fre"]);
-    audioOverrides = {};
-    subOverrides = {};
-    globalCodecOverride = {};
-    summary = null;
-    progress = null;
-    logs = [];
-    extractingSubs = false;
-    subExtractProgress = null;
-    selectedForExtraction = new Set();
-    selectedForEncoding = new Set();
-  }
-
-  function clearLogs() {
-    logs = [];
-  }
-
-  // ─── Encodage ──────────────────────────────────────────────────────────────
-
-  async function startEncoding() {
-    if (!files.length || encoding) return;
-    encoding = true;
-    summary = null;
-
-    // Si le mode sélection est actif et qu'il y a des fichiers sélectionnés,
-    // n'encoder que ceux-là ; sinon encoder tous les fichiers prêts.
-    const readyFiles = files.filter((f) => f.status === "ready");
-    const targetFiles =
-      encodeSelectionMode && selectedForEncoding.size > 0
-        ? readyFiles.filter((f) => selectedForEncoding.has(f.path))
-        : readyFiles;
-
-    if (targetFiles.length === 0) {
-      encoding = false;
-      return;
-    }
-
-    const jobs: EncodeJob[] = targetFiles.map((f) => {
-      const audioCodecOvr: Record<string, string> = {};
-      f.streams
-        .filter((s) => s.codec_type === "audio")
-        .forEach((s) => {
-          const target = globalCodecOverride[s.codec_name.toLowerCase()];
-          if (target && target !== codecDefault(s.codec_name)) {
-            audioCodecOvr[s.index.toString()] = target;
-          }
-        });
-      const outExt = container === "mp4" ? ".mp4" : ".mkv";
-      return {
-        input_path: f.path,
-        output_path: joinPath(
-          outputDir,
-          `${f.output_name}${outExt}`,
-        ),
-        audio_langs: [...(fileSelAudio.get(f.path) ?? selAudio)],
-        sub_langs:   [...(fileSelSubs.get(f.path)  ?? selSubs)],
-        audio_overrides: audioOverrides[f.path] ?? {},
-        sub_overrides: subOverrides[f.path] ?? {},
-        audio_codec_overrides: audioCodecOvr,
-        audio_bitrate_overrides: {},
-        duration_secs: f.duration_secs,
-        fps: f.fps ?? 25,
-        crf,
-        preset,
-        audio_mode: audioMode,
-        audio_bitrate: audioBitrate,
-        spatial_aq: spatialAq,
-        temporal_aq: temporalAq,
-        aq_strength: aqStrength,
-        multipass,
-        container,
-      };
-    });
-
-    const totalSize = formatMb(targetFiles.reduce((s, f) => s + f.size_mb, 0));
-    const selLabel =
-      encodeSelectionMode && selectedForEncoding.size > 0
-        ? ` (sélection : ${selectedForEncoding.size}/${readyFiles.length})`
-        : "";
-    log(
-      `── Démarrage de l'encodage — ${jobs.length} fichier${jobs.length > 1 ? "s" : ""}${selLabel} (${totalSize}) ──`,
-      "info",
-    );
-
-    // Marquer uniquement les fichiers cibles en file
-    files = files.map((f) =>
-      targetFiles.some((t) => t.path === f.path) && f.status === "ready"
-        ? { ...f, status: "queued" }
-        : f,
-    );
-    jobs.forEach((j, i) => {
-      const name = j.input_path.split(/[\\/]/).pop() ?? j.input_path;
-      log(`  [${i + 1}/${jobs.length}] En file : ${name}`, "info");
-    });
-
-    // Mémoriser l'ordre des chemins du batch pour résoudre file_index dans les événements
-    encodingFilePaths = targetFiles.map((f) => f.path);
-
-    try {
-      summary = await invoke<EncodeSummary>("start_encoding", { jobs });
-      await stats.recordSummary(summary);
-      const ok = summary.files.filter((f) => f.status === "ok").length;
-      const errors = summary.files.filter((f) => f.status === "error").length;
-      const cancelled = summary.files.filter(
-        (f) => f.status === "cancelled",
-      ).length;
-      const gain =
-        summary.total_original_mb > 0
-          ? (
-              ((summary.total_original_mb - summary.total_encoded_mb) /
-                summary.total_original_mb) *
-              100
-            ).toFixed(1)
-          : null;
-      const savedMb = summary.total_original_mb - summary.total_encoded_mb;
-      const dur = formatDuration(summary.total_secs);
-      log(
-        `── Encodage terminé — ${ok}/${jobs.length} réussi${ok > 1 ? "s" : ""}` +
-          (errors > 0 ? `, ${errors} erreur${errors > 1 ? "s" : ""}` : "") +
-          (cancelled > 0
-            ? `, ${cancelled} annulé${cancelled > 1 ? "s" : ""}`
-            : "") +
-          (gain ? ` — gain global ${gain}%` : "") +
-          (dur ? ` — durée ${dur}` : "") +
-          ` ──`,
-        errors > 0 && ok === 0 ? "error" : "success",
-      );
-      if (errors > 0 && ok === 0)
-        toasts.error(`Batch échoué — ${errors}/${jobs.length} erreurs`);
-      else if (errors > 0 || cancelled > 0)
-        toasts.warn(
-          `${ok}/${jobs.length} réussis` +
-            (gain ? ` · −${gain}%` : "") +
-            (errors > 0 ? ` · ${errors} erreur${errors > 1 ? "s" : ""}` : ""),
-        );
-      else
-        toasts.success(
-          `${ok} fichier${ok > 1 ? "s" : ""} encodé${ok > 1 ? "s" : ""}` +
-            (gain ? ` · −${gain}% (${formatMb(savedMb)})` : "") +
-            (dur ? ` · ${dur}` : ""),
-        );
-    } catch (e) {
-      log(`Erreur fatale encodage : ${e}`, "error");
-      toasts.error(`Erreur fatale : ${e}`);
-    } finally {
-      encoding = false;
-      progress = null;
-      encodingFilePaths = [];
-      selectedForEncoding = new Set();
-      encodeSelectionMode = false;
-    }
-  }
-
-  async function cancelEncoding() {
-    await invoke("cancel_encoding");
-    encoding = false;
-    log("Encodage annulé par l'utilisateur", "warn");
-    toasts.warn("Encodage annulé");
-  }
-
-  function cancelSubtitleExtraction() {
-    if (!extractingSubs) return;
-    cancelExtraction = true;
-    log("Annulation de l'extraction demandée…", "warn");
-  }
-
-  // ─── Extraction des sous-titres ──────────────────────────────────────────
-
-  async function startSubtitleExtraction() {
-    const readyFiles = files.filter((f) => f.status === "ready");
-    if (readyFiles.length === 0 || selSubs.size === 0 || extractingSubs) return;
-
-    const targetFiles =
-      selectedForExtraction.size > 0
-        ? readyFiles.filter((f) => selectedForExtraction.has(f.path))
-        : readyFiles;
-    if (targetFiles.length === 0) return;
-
-    extractingSubs = true;
-    cancelExtraction = false;
-    subExtractProgress = null;
-    files = files.map((f) => ({
-      ...f,
-      sub_extract_status: targetFiles.some((t) => t.path === f.path)
-        ? "none"
-        : f.sub_extract_status,
-      sub_extract_error: targetFiles.some((t) => t.path === f.path)
-        ? undefined
-        : f.sub_extract_error,
-    }));
-
-    try {
-      const total = targetFiles.length;
-      for (let i = 0; i < total; i++) {
-        if (cancelExtraction) {
-          log("Extraction annulée par l'utilisateur", "warn");
-          toasts.warn("Extraction annulée");
-          break;
-        }
-        const file = targetFiles[i];
-        subExtractProgress = {
-          file_index: i,
-          file_total: total,
-          file_name: file.filename,
-          percent: 0,
-        };
-        files = files.map((f) =>
-          f.path === file.path ? { ...f, sub_extract_status: "extracting" } : f,
-        );
-
-        try {
-          const tracks = await invoke<
-            { index: number; language: string; codec: string }[]
-          >("list_subtitle_tracks", { path: file.path });
-
-          let dir = "";
-          if (subExtractPathMode === "source") {
-            dir = file.path.split(/[\\/]/).slice(0, -1).join("\\");
-          } else if (subExtractPathMode === "downloads") {
-            try {
-              const pathApi = await import("@tauri-apps/api/path");
-              dir = await pathApi.downloadDir();
-            } catch {
-              dir = outputDir;
-            }
-          } else {
-            dir = subExtractCustomPath || outputDir;
-          }
-          dir = dir.replace(/[\\/]+$/, "");
-
-          let baseName = "";
-          if (subExtractNaming === "source") {
-            baseName =
-              file.path
-                .split(/[\\/]/)
-                .pop()
-                ?.replace(/\.[^.]+$/, "") ?? "subtitles";
-          } else {
-            if (file.cleaned && file.cleaned.title) {
-              baseName =
-                `${file.cleaned.title} ${file.cleaned.season_episode} ${file.cleaned.source}`
-                  .replace(/\s+/g, " ")
-                  .trim();
-            } else {
-              baseName =
-                file.path
-                  .split(/[\\/]/)
-                  .pop()
-                  ?.replace(/\.[^.]+$/, "") ?? "subtitles";
-            }
-          }
-
-          // Override par fichier si disponible, sinon sélection globale
-          const activeSubs = fileSelSubs.get(file.path) ?? selSubs;
-          const extracted: string[] = [];
-          for (const track of tracks) {
-            if (!activeSubs.has(track.language)) continue;
-            const outputPath = `${dir}\\${baseName}.${track.language}.${subExtractFormat}`;
-            await invoke("extract_subtitles", {
-              sourcePath: file.path,
-              trackIndex: track.index,
-              outputPath,
-            });
-            extracted.push(track.language.toUpperCase());
-          }
-
-          files = files.map((f) =>
-            f.path === file.path ? { ...f, sub_extract_status: "done" } : f,
-          );
-          if (extracted.length > 0) {
-            toasts.success(
-              `${extracted.join(", ")} · ${subExtractFormat.toUpperCase()} extrait${extracted.length > 1 ? "s" : ""}`,
-              { title: file.output_name },
-            );
-          } else {
-            toasts.warn("Aucune piste correspondant à la sélection", { title: file.output_name });
-          }
-          log(`Sous-titres extraits pour ${file.filename} [${extracted.join(", ")}]`, "success");
-        } catch (e) {
-          const errMsg = String(e);
-          files = files.map((f) =>
-            f.path === file.path
-              ? { ...f, sub_extract_status: "error", sub_extract_error: errMsg }
-              : f,
-          );
-          toasts.error(errMsg, { title: `Erreur — ${file.output_name}` });
-          log(`Erreur extraction pour ${file.filename} : ${errMsg}`, "error");
-        }
-      }
-      await stats.recordExtraction(files, selSubs);
-    } catch (e) {
-      log(`Erreur globale lors de l'extraction : ${e}`, "error");
-    } finally {
-      extractingSubs = false;
-      cancelExtraction = false;
-      subExtractProgress = null;
-    }
-  }
-
-  // ─── Rafraîchissement des noms ────────────────────────────────────────────
-
-  function refreshOutputNames() {
-    // Snapshot explicite : garantit la lecture des valeurs $state courantes
-    // avant d'entrer dans le .map() (sécurité Svelte 5 closures).
-    const _tagOrder       = tagOrder;
-    const _disabled       = disabledTags;
-    const _resCase        = resolutionCase;
-    const _titleCase      = titleCase;
-    const _codecFmt       = codecFormat;
-    const _srcCase        = sourceCase;
-    const _yearParen      = yearParentheses;
-    const _webFmt         = webSourceFormat;
-    const _tagSep         = tagSeparator;
-    const _provCase       = providerCase;
-    const _seFormat       = seasonEpisodeFormat;
-    const _team           = team;
-    const _selAudio       = selAudio;
-    const _selSubs        = selSubs;
-    const _fileSelAudio   = fileSelAudio;
-    const _fileSelSubs    = fileSelSubs;
-    const _keepJapVer     = keepJapaneseVer;
-
-    files = files.map((f) => {
-      if (!f.cleaned || f.status === "encoding" || f.status === "done")
-        return f;
-      // Utiliser la sélection par fichier si elle existe, sinon la globale
-      const effAudio = _fileSelAudio.get(f.path) ?? _selAudio;
-      const effSubs  = _fileSelSubs.get(f.path)  ?? _selSubs;
-      const tag = computeTag(f.audio_langs, f.sub_langs, effAudio, effSubs);
-      const audioTag = computeAudioTag(f.streams, effAudio, audioMode);
-      const name = buildOutputName(
-        f.cleaned,
-        tag,
-        _seFormat,
-        audioTag,
-        _tagOrder,
-        _team,
-        {
-          disabledTags:    _disabled,
-          resolutionCase:  _resCase,
-          titleCase:       _titleCase,
-          codecFormat:     _codecFmt,
-          sourceCase:      _srcCase,
-          yearParentheses: _yearParen,
-          webSourceFormat: _webFmt,
-          tagSeparator:    _tagSep,
-          providerCase:    _provCase,
-          keepJapaneseVer: _keepJapVer,
-        },
-      );
-      return { ...f, output_name: name };
-    });
-  }
-
-  function setFileLangSel(
-    path: string,
-    audio: Set<string> | null,
-    subs: Set<string> | null,
-  ) {
-    if (audio !== null) {
-      const m = new Map(fileSelAudio);
-      if (audio.size === 0) m.delete(path); else m.set(path, audio);
-      fileSelAudio = m;
-    }
-    if (subs !== null) {
-      const m = new Map(fileSelSubs);
-      if (subs.size === 0) m.delete(path); else m.set(path, subs);
-      fileSelSubs = m;
-    }
-    refreshOutputNames();
-  }
-
-  function clearFileLangSel(path: string) {
-    const ma = new Map(fileSelAudio); ma.delete(path);
-    const ms = new Map(fileSelSubs);  ms.delete(path);
-    fileSelAudio = ma;
-    fileSelSubs  = ms;
-    refreshOutputNames();
-  }
-
-  function toggleAudioLang(lang: string) {
-    const s = new Set(selAudio);
-    s.has(lang) ? s.delete(lang) : s.add(lang);
-    selAudio = s;
-    refreshOutputNames();
-    log(
-      `Piste audio : ${langName(lang)} ${s.has(lang) ? "activée" : "désactivée"}`,
-      "info",
-    );
-  }
-
-  function toggleSubLang(lang: string) {
-    const s = new Set(selSubs);
-    s.has(lang) ? s.delete(lang) : s.add(lang);
-    selSubs = s;
-    refreshOutputNames();
-    log(
-      `Sous-titres : ${langName(lang)} ${s.has(lang) ? "activés" : "désactivés"}`,
-      "info",
-    );
-  }
-
-  function setAudioOverride(
-    filePath: string,
-    streamIndex: number,
-    newLang: string,
-  ) {
-    audioOverrides = {
-      ...audioOverrides,
-      [filePath]: {
-        ...(audioOverrides[filePath] ?? {}),
-        [streamIndex]: newLang,
-      },
-    };
-    const name = files.find((f) => f.path === filePath)?.filename ?? filePath;
-    log(
-      `Override audio stream ${streamIndex} → ${newLang.toUpperCase()} sur ${name}`,
-      "info",
-    );
-  }
-
-  function setSubOverride(
-    filePath: string,
-    streamIndex: number,
-    newLang: string,
-  ) {
-    subOverrides = {
-      ...subOverrides,
-      [filePath]: { ...(subOverrides[filePath] ?? {}), [streamIndex]: newLang },
-    };
-    const name = files.find((f) => f.path === filePath)?.filename ?? filePath;
-    log(
-      `Override sous-titre stream ${streamIndex} → ${newLang.toUpperCase()} sur ${name}`,
-      "info",
-    );
-  }
-
-  function setGlobalCodecOverride(sourceCodec: string, targetCodec: string) {
-    globalCodecOverride = {
-      ...globalCodecOverride,
-      [sourceCodec]: targetCodec,
-    };
-    log(
-      `Codec audio : toutes les pistes ${sourceCodec.toUpperCase()} → ${targetCodec}`,
-      "info",
-    );
-  }
-
-  function renameFile(path: string, newName: string) {
-    const f = files.find((f) => f.path === path);
-    if (f) log(`Renommé : ${f.output_name} → ${newName}`, "info");
-    files = files.map((f) =>
-      f.path === path ? { ...f, output_name: newName } : f,
-    );
-  }
-
-  function log(
-    msg: string,
-    level: "info" | "warn" | "error" | "success" = "info",
-  ) {
-    const ts = new Date().toLocaleTimeString("fr-FR");
-    logs = [...logs, { msg: `[${ts}] ${msg}`, level }];
-    if (logs.length > 500) logs = logs.slice(-400);
-  }
-
-  let forceUpdateCounter = $state(0);
-  function forceUpdate() {
-    forceUpdateCounter++;
-  }
+  function forceUpdate() { forceUpdateCounter++; }
 
   function resetToDefault() {
-    files = [];
-    audioLangs = new Set();
-    subLangs = new Set();
-    selAudio = new Set(["fre", "eng", "jpn"]);
-    selSubs = new Set(["fre"]);
-    crf = 28;
-    preset = "p5";
-    seasonEpisodeFormat = "S01E01";
-    tagOrder = [...DEFAULT_TAG_ORDER];
-    disabledTags = new Set<TagId>(["japver"]);
-    team = "";
-    keepJapaneseVer = false;
-    audioOverrides = {};
-    subOverrides = {};
-    globalCodecOverride = {};
-    summary = null;
-    progress = null;
-    audioMode = "reencode";
-    audioBitrate = 192;
-    spatialAq = false;
-    temporalAq = false;
-    aqStrength = 8;
-    multipass = "disabled";
-    container = "mkv";
-    subExtractFormat = "srt";
-    subExtractNaming = "source";
-    subExtractPathMode = "source";
-    subExtractCustomPath = "";
-    extractingSubs = false;
-    subExtractProgress = null;
-    showExtractButton = true;
-    cancelExtraction = false;
-    selectedForExtraction = new Set();
-    extractSelectionMode = false;
-    selectedForEncoding = new Set();
-    encodeSelectionMode = false;
-    flushPrefs();
-    logs = [];
-    log("Interface réinitialisée aux paramètres par défaut", "info");
+    filesStore.clearAll();
+    encodingStore.clearSummary();
+    encodingStore.clearLogs();
+    prefs.resetToDefault();
+    filesStore.refreshOutputNames();
+    encodingStore.log("Interface réinitialisée aux paramètres par défaut", "info");
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
     forceUpdate();
   }
 
   function clearSession() {
-    files = [];
-    audioLangs = new Set();
-    subLangs = new Set();
-    audioOverrides = {};
-    subOverrides = {};
-    globalCodecOverride = {};
-    summary = null;
-    progress = null;
-    extractingSubs = false;
-    subExtractProgress = null;
-    cancelExtraction = false;
-    selectedForExtraction = new Set();
-    extractSelectionMode = false;
-    selectedForEncoding = new Set();
-    encodeSelectionMode = false;
-    logs = [];
-    log("Session réinitialisée", "info");
+    filesStore.clearSession();
+    encodingStore.clearSummary();
+    encodingStore.clearLogs();
+    encodingStore.log("Session réinitialisée", "info");
     setTimeout(() => window.dispatchEvent(new Event("resize")), 10);
     forceUpdate();
   }
@@ -1747,159 +177,102 @@ function createEncoder() {
   // ─── Exports ──────────────────────────────────────────────────────────────
 
   return {
-    get files() {
-      return files;
-    },
-    get audioLangs() {
-      return audioLangs;
-    },
-    get subLangs() {
-      return subLangs;
-    },
-    get selAudio() {
-      return selAudio;
-    },
-    get selSubs() {
-      return selSubs;
-    },
-    get fileSelAudio() { return fileSelAudio; },
-    get fileSelSubs()  { return fileSelSubs; },
-    setFileLangSel,
-    clearFileLangSel,
-    get outputDir() {
-      return outputDir;
-    },
-    set outputDir(v) {
-      outputDir = v;
-    },
-    get outputDirPresets() {
-      return outputDirPresets;
-    },
+    // État layout / répertoire
+    get outputDir()        { return outputDir; },
+    set outputDir(v)       { outputDir = v; },
+    get outputDirPresets() { return outputDirPresets; },
+    get navLayout()        { return navLayout; },
+    set navLayout(v: "vertical" | "horizontal") { navLayout = v; },
+    get innerNavLayout()   { return innerNavLayout; },
+    set innerNavLayout(v: "vertical" | "horizontal") { innerNavLayout = v; },
+    get forceUpdateCounter() { return forceUpdateCounter; },
     loadDirConfig,
-    get navLayout() {
-      return navLayout;
-    },
-    set navLayout(v: "vertical" | "horizontal") {
-      navLayout = v;
-    },
-    get innerNavLayout() {
-      return innerNavLayout;
-    },
-    set innerNavLayout(v: "vertical" | "horizontal") {
-      innerNavLayout = v;
-    },
-    get encoding() {
-      return encoding;
-    },
-    get progress() {
-      return progress;
-    },
-    get summary() {
-      return summary;
-    },
-    get logs() {
-      return logs;
-    },
-    get crf() {
-      return crf;
-    },
-    get preset() {
-      return preset;
-    },
-    get seasonEpisodeFormat() {
-      return seasonEpisodeFormat;
-    },
-    get tagOrder() { return tagOrder; },
-    get disabledTags() { return disabledTags; },
-    get resolutionCase() { return resolutionCase; },
-    get titleCase() { return titleCase; },
-    get codecFormat() { return codecFormat; },
-    get sourceCase() { return sourceCase; },
-    get yearParentheses() { return yearParentheses; },
-    get webSourceFormat() { return webSourceFormat; },
-    get tagSeparator()    { return tagSeparator; },
-    get providerCase()    { return providerCase; },
-    get team() {
-      return team;
-    },
-    get keepJapaneseVer() { return keepJapaneseVer; },
-    get audioMode() {
-      return audioMode;
-    },
-    get audioBitrate() {
-      return audioBitrate;
-    },
-    get spatialAq() {
-      return spatialAq;
-    },
-    get temporalAq() {
-      return temporalAq;
-    },
-    get aqStrength() {
-      return aqStrength;
-    },
-    get multipass() {
-      return multipass;
-    },
-    get container() {
-      return container;
-    },
-    get forceUpdateCounter() {
-      return forceUpdateCounter;
-    },
-    get globalCodecOverride() {
-      return globalCodecOverride;
-    },
-    get subExtractFormat() {
-      return subExtractFormat;
-    },
-    get subExtractNaming() {
-      return subExtractNaming;
-    },
-    get subExtractPathMode() {
-      return subExtractPathMode;
-    },
-    get subExtractCustomPath() {
-      return subExtractCustomPath;
-    },
-    get extractingSubs() {
-      return extractingSubs;
-    },
-    get subExtractProgress() {
-      return subExtractProgress;
-    },
-    get showExtractButton() {
-      return showExtractButton;
-    },
-    // Sélection extraction
-    get selectedForExtraction() {
-      return selectedForExtraction;
-    },
-    get extractSelectionMode() {
-      return extractSelectionMode;
-    },
-    // Sélection encodage
-    get encodeSelectionMode() {
-      return encodeSelectionMode;
-    },
-    get selectedForEncoding() {
-      return selectedForEncoding;
-    },
 
-    getDisplayName(file: AppFile): string {
-      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, {
-        disabledTags, resolutionCase, titleCase, codecFormat,
-        sourceCase, yearParentheses, webSourceFormat, tagSeparator,
-        providerCase,
-        keepJapaneseVer,
-      });
-    },
-    setCrf,
-    setPreset,
+    // Délégation fichiers
+    get files()      { return filesStore.files; },
+    get audioLangs() { return filesStore.audioLangs; },
+    get subLangs()   { return filesStore.subLangs; },
+    get selAudio()   { return filesStore.selAudio; },
+    get selSubs()    { return filesStore.selSubs; },
+    get fileSelAudio()          { return filesStore.fileSelAudio; },
+    get fileSelSubs()           { return filesStore.fileSelSubs; },
+    get audioOverrides()        { return filesStore.audioOverrides; },
+    get subOverrides()          { return filesStore.subOverrides; },
+    get globalCodecOverride()   { return filesStore.globalCodecOverride; },
+    get selectedForExtraction() { return filesStore.selectedForExtraction; },
+    get extractSelectionMode()  { return filesStore.extractSelectionMode; },
+    get encodeSelectionMode()   { return filesStore.encodeSelectionMode; },
+    get selectedForEncoding()   { return filesStore.selectedForEncoding; },
+    addFiles:                  (paths: string[]) => filesStore.addFiles(paths),
+    removeFile:                (path: string)    => filesStore.removeFile(path),
+    clearAll:                  ()               => filesStore.clearAll(),
+    toggleAudioLang:           (l: string)      => filesStore.toggleAudioLang(l),
+    toggleSubLang:             (l: string)      => filesStore.toggleSubLang(l),
+    setFileLangSel:            filesStore.setFileLangSel,
+    clearFileLangSel:          filesStore.clearFileLangSel,
+    setAudioOverride:          filesStore.setAudioOverride,
+    setSubOverride:            filesStore.setSubOverride,
+    setGlobalCodecOverride:    filesStore.setGlobalCodecOverride,
+    renameFile:                filesStore.renameFile,
+    setExtractSelectionMode:   filesStore.setExtractSelectionMode,
+    toggleExtractSelection:    filesStore.toggleExtractSelection,
+    setExtractSelection:       filesStore.setExtractSelection,
+    clearExtractSelection:     filesStore.clearExtractSelection,
+    setEncodeSelectionMode:    filesStore.setEncodeSelectionMode,
+    toggleEncodeSelection:     filesStore.toggleEncodeSelection,
+    setEncodeSelection:        filesStore.setEncodeSelection,
+    clearEncodeSelection:      filesStore.clearEncodeSelection,
+
+    // Délégation encodage
+    get encoding()           { return encodingStore.encoding; },
+    get progress()           { return encodingStore.progress; },
+    get summary()            { return encodingStore.summary; },
+    get logs()               { return encodingStore.logs; },
+    get extractingSubs()     { return encodingStore.extractingSubs; },
+    get subExtractProgress() { return encodingStore.subExtractProgress; },
+    startEncoding:            () => encodingStore.startEncoding(outputDir),
+    cancelEncoding:           () => encodingStore.cancelEncoding(),
+    startSubtitleExtraction:  () => encodingStore.startSubtitleExtraction(outputDir),
+    cancelSubtitleExtraction: () => encodingStore.cancelSubtitleExtraction(),
+    clearLogs:                () => encodingStore.clearLogs(),
+    log:                      (m: string, l?: "info"|"warn"|"error"|"success") =>
+                                encodingStore.log(m, l),
+
+    // Délégation prefs
+    get crf()                  { return prefs.crf; },
+    get preset()               { return prefs.preset; },
+    get seasonEpisodeFormat()  { return prefs.seasonEpisodeFormat; },
+    get tagOrder()             { return prefs.tagOrder; },
+    get disabledTags()         { return prefs.disabledTags; },
+    get resolutionCase()       { return prefs.resolutionCase; },
+    get titleCase()            { return prefs.titleCase; },
+    get codecFormat()          { return prefs.codecFormat; },
+    get sourceCase()           { return prefs.sourceCase; },
+    get yearParentheses()      { return prefs.yearParentheses; },
+    get webSourceFormat()      { return prefs.webSourceFormat; },
+    get tagSeparator()         { return prefs.tagSeparator; },
+    get providerCase()         { return prefs.providerCase; },
+    get team()                 { return prefs.team; },
+    get keepJapaneseVer()      { return prefs.keepJapaneseVer; },
+    get audioMode()            { return prefs.audioMode; },
+    get audioBitrate()         { return prefs.audioBitrate; },
+    get spatialAq()            { return prefs.spatialAq; },
+    get temporalAq()           { return prefs.temporalAq; },
+    get aqStrength()           { return prefs.aqStrength; },
+    get multipass()            { return prefs.multipass; },
+    get container()            { return prefs.container; },
+    get subExtractFormat()     { return prefs.subExtractFormat; },
+    get subExtractNaming()     { return prefs.subExtractNaming; },
+    get subExtractPathMode()   { return prefs.subExtractPathMode; },
+    get subExtractCustomPath() { return prefs.subExtractCustomPath; },
+    get showExtractButton()    { return prefs.showExtractButton; },
+    setCrf:                prefs.setCrf,
+    setPreset:             prefs.setPreset,
     setSeasonEpisodeFormat,
     setTagOrder,
     moveTag,
     toggleTag,
+    resetTagOrder,
     setResolutionCase,
     setTitleCase,
     setCodecFormat,
@@ -1908,53 +281,29 @@ function createEncoder() {
     setWebSourceFormat,
     setTagSeparator,
     setProviderCase,
-    resetTagOrder() {
-      tagOrder = [...DEFAULT_TAG_ORDER];
-      disabledTags = new Set();
-      persistPrefs();
-      refreshOutputNames();
-    },
     setTeam,
     setKeepJapaneseVer,
     setAudioMode,
-    setAudioBitrate,
-    setSpatialAq,
-    setTemporalAq,
-    setAqStrength,
-    setMultipass,
-    setContainer,
-    setSubExtractFormat,
-    setSubExtractNaming,
-    setSubExtractPathMode,
-    setSubExtractCustomPath,
-    setShowExtractButton,
+    setAudioBitrate:       prefs.setAudioBitrate,
+    setSpatialAq:          prefs.setSpatialAq,
+    setTemporalAq:         prefs.setTemporalAq,
+    setAqStrength:         prefs.setAqStrength,
+    setMultipass:          prefs.setMultipass,
+    setContainer:          prefs.setContainer,
+    setSubExtractFormat:   prefs.setSubExtractFormat,
+    setSubExtractNaming:   prefs.setSubExtractNaming,
+    setSubExtractPathMode: prefs.setSubExtractPathMode,
+    setSubExtractCustomPath: prefs.setSubExtractCustomPath,
+    setShowExtractButton:  prefs.setShowExtractButton,
+    resetFormatOptions,
+
+    // Nommage
+    getDisplayName,
+
+    // Lifecycle
     init,
-    addFiles,
-    removeFile,
-    clearAll,
-    clearLogs,
-    startEncoding,
-    cancelEncoding,
-    startSubtitleExtraction,
-    cancelSubtitleExtraction,
-    setExtractSelectionMode,
-    toggleExtractSelection,
-    setExtractSelection,
-    clearExtractSelection,
-    setEncodeSelectionMode,
-    toggleEncodeSelection,
-    setEncodeSelection,
-    clearEncodeSelection,
-    toggleAudioLang,
-    toggleSubLang,
-    setAudioOverride,
-    setSubOverride,
-    setGlobalCodecOverride,
-    renameFile,
-    log,
     resetToDefault,
     clearSession,
-    resetFormatOptions,
   };
 }
 

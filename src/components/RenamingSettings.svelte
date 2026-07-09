@@ -1,18 +1,20 @@
 <script lang="ts">
-  import {
-    encoder,
-    TAG_LABELS,
-    SEASON_EPISODE_FORMATS,
-    formatSeasonEpisode,
-    type TagId,
-    type ResolutionCase,
-    type TitleCaseMode,
-    type CodecFormat,
-    type SourceCase,
-    type WebSourceFormat,
-    type TagSeparator,
-    type ProviderCase,
-  } from "$lib/stores/encoder.svelte";
+import { encoder } from "$lib/stores/encoder.svelte";
+import {
+  TAG_LABELS,
+  SEASON_EPISODE_FORMATS,
+  formatSeasonEpisode,
+} from "$lib/stores/naming";
+import type {
+  TagId,
+  ResolutionCase,
+  TitleCaseMode,
+  CodecFormat,
+  SourceCase,
+  WebSourceFormat,
+  TagSeparator,
+  ProviderCase,
+} from "$lib/stores/types";
   import { ArrowUp, ArrowDown, GripVertical, RotateCcw, Tag, AlignLeft, Users, Eye,   Monitor, Type, Calendar, Film, Disc, Globe, Minus, Building, Languages, CalendarDays, } from "@lucide/svelte";
 
 

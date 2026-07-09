@@ -1,9 +1,6 @@
 <script lang="ts">
-  import {
-    encoder,
-    type AppFile,
-    formatDuration,
-  } from "$lib/stores/encoder.svelte";
+  import { encoder, type AppFile} from "$lib/stores/encoder.svelte";
+  import { formatDuration } from "$lib/stores/naming";
   import { formatSize } from "$lib/utils";
   import FileModal from "$components/FileModal.svelte";
   import FileRenameModal from "$components/FileRenameModal.svelte";

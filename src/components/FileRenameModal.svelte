@@ -1,10 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import {
-    encoder,
-    buildOutputName,
-    computeTag,
-  } from "$lib/stores/encoder.svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
+  import { buildOutputName, computeTag } from "$lib/stores/naming";
   import type { AppFile, CleanedName } from "$lib/stores/encoder.svelte";
   import { Loader2, RefreshCw, CircleCheck, X, Pencil } from "@lucide/svelte";
 

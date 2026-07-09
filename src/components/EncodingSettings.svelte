@@ -6,7 +6,6 @@
     type SubExtractNaming,
     type SubExtractPathMode,
   } from "$lib/stores/encoder.svelte";
-  import { formatSize } from "$lib/utils";
   import { FolderOpen, Gauge, Volume2, Cpu, Box, Subtitles, BarChart3 } from "@lucide/svelte";
 
   let { onClose }: { onClose?: () => void } = $props();
