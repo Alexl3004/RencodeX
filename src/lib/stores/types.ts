@@ -35,6 +35,7 @@ export interface EncodeJob {
   sub_langs: string[];
   audio_overrides: Record<string, string>;
   sub_overrides: Record<string, string>;
+  streams: StreamInfo[];
   audio_codec_overrides: Record<string, string>;
   audio_bitrate_overrides: Record<string, string>;
   duration_secs: number;

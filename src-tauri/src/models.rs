@@ -31,6 +31,7 @@ pub struct EncodeJob {
     pub sub_langs: Vec<String>,
     pub audio_overrides: HashMap<String, String>,
     pub sub_overrides: HashMap<String, String>,
+    pub streams: Vec<StreamInfo>,
     pub duration_secs: f64,
     pub fps: f64,
     pub crf:             u32,

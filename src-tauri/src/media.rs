@@ -202,7 +202,7 @@ pub async fn start_encoding(
             "-map".into(), "0:v:0".into(),
         ];
 
-        let audio_streams = get_streams(&ffprobe, &job.input_path, "a").await;
+        let audio_streams: Vec<&StreamInfo> = job.streams.iter().filter(|s| s.codec_type == "audio").collect();
         let mut audio_codec_args: Vec<String> = Vec::new();
         let mut audio_index = 0usize;
         for stream in &audio_streams {
@@ -245,7 +245,7 @@ pub async fn start_encoding(
             }
         }
 
-        let sub_streams = get_streams(&ffprobe, &job.input_path, "s").await;
+        let sub_streams: Vec<&StreamInfo> = job.streams.iter().filter(|s| s.codec_type == "subtitle").collect();
         let mut sub_mapped = false;
         let mut sub_index = 0usize;
         let mut sub_meta: Vec<String> = Vec::new();

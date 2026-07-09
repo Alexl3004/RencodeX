@@ -130,6 +130,7 @@ function createEncodingStore() {
         sub_langs:               [...(filesStore.fileSelSubs.get(f.path)  ?? filesStore.selSubs)],
         audio_overrides:         filesStore.audioOverrides[f.path] ?? {},
         sub_overrides:           filesStore.subOverrides[f.path]   ?? {},
+        streams: f.streams,
         audio_codec_overrides:   audioCodecOvr,
         audio_bitrate_overrides: {},
         duration_secs:           f.duration_secs,
