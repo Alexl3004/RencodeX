@@ -266,6 +266,8 @@ function createEncoder() {
     get subExtractPathMode()   { return prefs.subExtractPathMode; },
     get subExtractCustomPath() { return prefs.subExtractCustomPath; },
     get showExtractButton()    { return prefs.showExtractButton; },
+    get activePresetId() { return prefs.activePresetId; },
+    applyPreset:           (id: string) => { prefs.applyPreset(id); filesStore.refreshOutputNames(); },
     setCrf:                prefs.setCrf,
     setPreset:             prefs.setPreset,
     setSeasonEpisodeFormat,

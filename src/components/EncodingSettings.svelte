@@ -1,17 +1,47 @@
 <script lang="ts">
-  import {
-    encoder,
-    type MultipassMode,
-    type SubExtractFormat,
-    type SubExtractNaming,
-    type SubExtractPathMode,
-  } from "$lib/stores/encoder.svelte";
-  import { FolderOpen, Gauge, Volume2, Cpu, Box, Subtitles, BarChart3 } from "@lucide/svelte";
+  import { encoder } from "$lib/stores/encoder.svelte";
+  import { BUILTIN_PRESETS } from "$lib/stores/prefs.store.svelte";
+  import type {
+    MultipassMode,
+    SubExtractFormat,
+    SubExtractNaming,
+    SubExtractPathMode,
+  } from "$lib/stores/types";
+  import { FolderOpen, Zap, Volume2, Box, Subtitles, SlidersHorizontal, Languages } from "@lucide/svelte";
+  import { prefs } from "$lib/stores/prefs.store.svelte";
+  import { filesStore } from "$lib/stores/files.store.svelte";
+  import { LANG_NAMES } from "$lib/stores/naming";
+
+  // ── Ordre des langues ─────────────────────────────────────────────────────
+  let langOrder = $state<string[]>([...prefs.langOrder]);
+  $effect(() => { langOrder = [...prefs.langOrder]; });
+
+  function langLabel(code: string) { return LANG_NAMES[code] ?? code.toUpperCase(); }
+
+  // ── Langues sélectionnées par défaut ──────────────────────────────────────
+  let defaultAudioLangs = $state<string[]>([...prefs.defaultAudioLangs]);
+  let defaultSubLangs   = $state<string[]>([...prefs.defaultSubLangs]);
+
+  $effect(() => { defaultAudioLangs = [...prefs.defaultAudioLangs]; });
+  $effect(() => { defaultSubLangs   = [...prefs.defaultSubLangs]; });
+
+  function toggleDefaultAudio(code: string) {
+    const next = defaultAudioLangs.includes(code)
+      ? defaultAudioLangs.filter(c => c !== code)
+      : [...defaultAudioLangs, code];
+    defaultAudioLangs = next;
+    prefs.setDefaultAudioLangs(next);
+  }
+  function toggleDefaultSub(code: string) {
+    const next = defaultSubLangs.includes(code)
+      ? defaultSubLangs.filter(c => c !== code)
+      : [...defaultSubLangs, code];
+    defaultSubLangs = next;
+    prefs.setDefaultSubLangs(next);
+  }
 
   let { onClose }: { onClose?: () => void } = $props();
 
-  let crf          = $derived(encoder.crf);
-  let preset       = $derived(encoder.preset);
   let audioMode    = $derived(encoder.audioMode);
   let audioBitrate = $derived(encoder.audioBitrate);
   let spatialAq    = $derived(encoder.spatialAq);
@@ -20,62 +50,62 @@
   let multipass    = $derived(encoder.multipass);
   let container    = $derived(encoder.container);
 
-  let totalOriginalMb = $derived(
-    encoder.files.reduce((s: number, f: any) => s + (f.size_mb || 0), 0),
-  );
+  // ── État de l'onglet Préréglages ───────────────────────────────────────────
+  // "custom" = mode personnalisé (sous-panneau avec tous les contrôles fins)
+  type PresetPanelId = string | "custom";
+  let selectedPanel = $state<PresetPanelId>(encoder.activePresetId ?? "custom");
 
-  let estimatedRatio = $derived.by(() => {
-    const crfBase = 0.25 + (28 - crf) * 0.025;
-    const pf: Record<string, number> = {
-      p1: 1.3, p2: 1.2, p3: 1.1, p4: 1.05, p5: 1.0, p6: 0.92, p7: 0.85,
-    };
-    return Math.min(0.7, crfBase * (pf[preset] || 1.0));
-  });
-
-  let estimatedTotalMb = $derived(totalOriginalMb * estimatedRatio);
-  let estimatedGainPct = $derived(
-    totalOriginalMb > 0
-      ? ((totalOriginalMb - estimatedTotalMb) / totalOriginalMb) * 100
-      : 0,
-  );
-
-  const presetMeta: Record<string, { label: string; desc: string; speed: number }> = {
-    p1: { label: "Ultra rapide", desc: "Encodage rapide, compression minimale",        speed: 7 },
-    p2: { label: "Très rapide",  desc: "Bon compromis pour les tests",                 speed: 6 },
-    p3: { label: "Rapide",       desc: "Rapide avec bonne qualité",                    speed: 5 },
-    p4: { label: "Normal+",      desc: "Équilibre vitesse / compression",              speed: 4 },
-    p5: { label: "Normal",       desc: "Recommandé — meilleur ratio qualité/taille",   speed: 3 },
-    p6: { label: "Lent",         desc: "Fichier plus petit, temps plus long",          speed: 2 },
-    p7: { label: "Très lent",    desc: "Compression maximale, très lent",              speed: 1 },
+  // Descriptions des presets
+  const PRESET_DESCS: Record<string, { desc: string; tags: string[] }> = {
+    fast:     { desc: "Encodage rapide, taille réduite. Idéal pour un visionnage immédiat.", tags: ["CRF 30", "p3", "Audio copy"] },
+    balanced: { desc: "Bon équilibre entre vitesse et qualité pour un usage quotidien.",      tags: ["CRF 28", "p5", "AAC 192k"] },
+    quality:  { desc: "Haute fidélité visuelle, temps d'encodage plus long.",                 tags: ["CRF 24", "p7", "AQ spatial+temporel"] },
+    archive:  { desc: "Compression maximale pour le stockage longue durée.",                  tags: ["CRF 20", "p7", "Multipass fullres"] },
   };
 
+  // Contrôles fins pour le mode personnalisé
   const crfBands = [
-    { range: [18, 20], label: "Archivage",    quality: "Transparente",  color: "#6ee7b7" },
-    { range: [21, 23], label: "Home cinéma",  quality: "Excellente",    color: "#86efac" },
-    { range: [24, 26], label: "Usage général",quality: "Très bonne",    color: "#fbbf24" },
-    { range: [27, 29], label: "Web / Mobile", quality: "Bonne",         color: "#fb923c" },
-    { range: [30, 35], label: "Compact",      quality: "Correcte",      color: "#f87171" },
+    { range: [18, 20], label: "Archivage",     quality: "Transparente", color: "#6ee7b7" },
+    { range: [21, 23], label: "Home cinéma",   quality: "Excellente",   color: "#86efac" },
+    { range: [24, 26], label: "Usage général", quality: "Très bonne",   color: "#fbbf24" },
+    { range: [27, 29], label: "Web / Mobile",  quality: "Bonne",        color: "#fb923c" },
+    { range: [30, 35], label: "Compact",       quality: "Correcte",     color: "#f87171" },
   ];
   let currentBand = $derived(
-    crfBands.find(b => crf >= b.range[0] && crf <= b.range[1]) ?? crfBands[2]
+    crfBands.find(b => encoder.crf >= b.range[0] && encoder.crf <= b.range[1]) ?? crfBands[2]
   );
 
+  const speedMeta: Record<string, { label: string; speed: number }> = {
+    p1: { label: "Ultra rapide", speed: 7 },
+    p2: { label: "Très rapide",  speed: 6 },
+    p3: { label: "Rapide",       speed: 5 },
+    p4: { label: "Normal+",      speed: 4 },
+    p5: { label: "Normal",       speed: 3 },
+    p6: { label: "Lent",         speed: 2 },
+    p7: { label: "Très lent",    speed: 1 },
+  };
+
+  function applyBuiltinPreset(id: string) {
+    encoder.applyPreset(id);
+    selectedPanel = id;
+  }
+
+  function selectCustom() {
+    selectedPanel = "custom";
+  }
+
   // ── Navigation sections ────────────────────────────────────────────────────
-  type SectionId = "quality" | "speed" | "audio" | "nvenc" | "container" | "subtitles";
+  type SectionId = "presets" | "audio" | "container" | "subtitles" | "languages";
 
   const SECTIONS: { id: SectionId; label: string; icon: any; desc: string }[] = [
-    { id: "quality",   label: "Qualité",       icon: Gauge,       desc: "CRF & compression" },
-    { id: "speed",     label: "Vitesse",        icon: BarChart3,   desc: "Preset encodeur" },
-    { id: "audio",     label: "Audio",          icon: Volume2,     desc: "Codec & débit" },
-    { id: "nvenc",     label: "NVENC",          icon: Cpu,         desc: "AQ & multipass" },
-    { id: "container", label: "Conteneur",      icon: Box,         desc: "MKV / MP4" },
-    { id: "subtitles", label: "Sous-titres",    icon: Subtitles,   desc: "Extraction" },
+    { id: "presets",   label: "Préréglages",   icon: Zap,       desc: "Qualité & vitesse" },
+    { id: "audio",     label: "Audio",          icon: Volume2,   desc: "Codec & débit" },
+    { id: "container", label: "Conteneur",      icon: Box,       desc: "MKV / MP4" },
+    { id: "subtitles", label: "Sous-titres",    icon: Subtitles, desc: "Extraction" },
+    { id: "languages", label: "Pistes",        icon: Languages, desc: "Ordre de priorité" },
   ];
 
-  let activeSection = $state<SectionId>("quality");
-
-  // ── Compression bar width ──────────────────────────────────────────────────
-  let barWidth = $derived(Math.round(100 - estimatedGainPct));
+  let activeSection = $state<SectionId>("presets");
 </script>
 
 <div class="page-root" class:page-root--horizontal={encoder.innerNavLayout === "horizontal"}>
@@ -113,101 +143,190 @@
 
   <!-- ── Content panel ───────────────────────────────────────────────────── -->
   <div class="content-panel">
-
-    <!-- ═══════════════ QUALITÉ ═══════════════ -->
-    {#if activeSection === "quality"}
+    <!-- ═══════════════ PRÉRÉGLAGES ═══════════════ -->
+    {#if activeSection === "presets"}
       <section class="content-section">
         <header class="section-header">
           <div>
-            <h2 class="section-title">Qualité CRF</h2>
+            <h2 class="section-title">Préréglages d'encodage</h2>
             <p class="section-desc">
-              Contrôle le taux de compression vidéo. Une valeur basse préserve plus de détails,
-              une valeur haute réduit davantage la taille du fichier.
+              Choisissez un profil prédéfini ou configurez chaque paramètre manuellement.
             </p>
-          </div>
-          <div class="section-badge" style="--badge-color: {currentBand.color}">
-            <span class="badge-value">{crf}</span>
-            <span class="badge-label">{currentBand.label}</span>
           </div>
         </header>
 
-        <div class="field-block">
-          <div class="crf-track-wrap">
-            <input
-              type="range"
-              value={crf}
-              oninput={(e: Event) => encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
-              min="18" max="35" step="1"
-              class="crf-slider"
-              aria-label="Valeur CRF"
-            />
-            <div class="crf-scale">
-              <span>18</span>
-              <span class="crf-scale-label">← Qualité · Taille →</span>
-              <span>35</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="band-grid">
-          {#each crfBands as band}
-            {@const active = crf >= band.range[0] && crf <= band.range[1]}
-            <div class="band-card {active ? 'band-card--active' : ''}" style="--c: {band.color}">
-              <div class="band-range">{band.range[0]}–{band.range[1]}</div>
-              <div class="band-name">{band.label}</div>
-              <div class="band-quality">{band.quality}</div>
-            </div>
+        <!-- Cartes de préréglages -->
+        <div class="bp-grid">
+          {#each BUILTIN_PRESETS as p}
+            {@const meta = PRESET_DESCS[p.id]}
+            {@const isActive = selectedPanel === p.id}
+            <button
+              type="button"
+              class="bp-card {isActive ? 'bp-card--active' : ''}"
+              onclick={() => applyBuiltinPreset(p.id)}
+            >
+              <div class="bp-card-top">
+                <span class="bp-label">{p.label}</span>
+                {#if p.id === "balanced"}
+                  <span class="bp-rec">REC</span>
+                {/if}
+              </div>
+              <p class="bp-desc">{meta?.desc ?? ""}</p>
+              <div class="bp-tags">
+                {#each meta?.tags ?? [] as tag}
+                  <span class="bp-tag">{tag}</span>
+                {/each}
+              </div>
+            </button>
           {/each}
+
+          <!-- Carte Personnalisé -->
+          <button
+            type="button"
+            class="bp-card bp-card--custom {selectedPanel === 'custom' ? 'bp-card--active' : ''}"
+            onclick={selectCustom}
+          >
+            <div class="bp-card-top">
+              <span class="bp-label">Personnalisé</span>
+              <SlidersHorizontal class="w-3 h-3" style="color: var(--color-subtext2)" />
+            </div>
+            <p class="bp-desc">Configurez CRF, preset encodeur et AQ manuellement.</p>
+            <div class="bp-tags">
+              <span class="bp-tag">CRF {encoder.crf}</span>
+              <span class="bp-tag">{encoder.preset.toUpperCase()}</span>
+            </div>
+          </button>
         </div>
-      </section>
 
-    <!-- ═══════════════ VITESSE ═══════════════ -->
-    {:else if activeSection === "speed"}
-      <section class="content-section">
-        <header class="section-header">
-          <div>
-            <h2 class="section-title">Vitesse d'encodage</h2>
-            <p class="section-desc">
-              Détermine le temps passé par l'encodeur à optimiser chaque image.
-              Un preset plus lent produit un fichier plus compact à qualité égale.
-            </p>
-          </div>
-          <div class="active-preset-badge">
-            <span class="apb-id">{preset.toUpperCase()}</span>
-            <span class="apb-label">{presetMeta[preset].label}</span>
-          </div>
-        </header>
+        <!-- Panneau personnalisé -->
+        {#if selectedPanel === "custom"}
+          <div class="custom-panel">
+            <div class="cp-divider">
+              <span class="cp-divider-label">Paramètres personnalisés</span>
+            </div>
 
-        <div class="field-block">
-          <div class="preset-grid">
-            {#each ["p1","p2","p3","p4","p5","p6","p7"] as p}
-              {@const meta = presetMeta[p]}
-              {@const isActive = preset === p}
-              <button
-                type="button"
-                class="preset-card {isActive ? 'preset-card--active' : ''}"
-                onclick={() => encoder.setPreset(p)}
-              >
-                <div class="preset-card-top">
-                  <span class="preset-id">{p.toUpperCase()}</span>
-                  {#if p === "p5"}
-                    <span class="preset-rec">REC</span>
-                  {/if}
+            <!-- CRF -->
+            <div class="field-block">
+              <div class="field-label-row">
+                <span class="field-label">Qualité CRF</span>
+                <div class="section-badge" style="--badge-color: {currentBand.color}">
+                  <span class="badge-value">{encoder.crf}</span>
+                  <span class="badge-label">{currentBand.label}</span>
                 </div>
-                <div class="preset-name">{meta.label}</div>
-                <div class="preset-speed-bar">
-                  {#each Array(7) as _, i}
-                    <div class="speed-dot {i < meta.speed ? 'speed-dot--on' : ''}"></div>
-                  {/each}
+              </div>
+              <div class="crf-track-wrap">
+                <input
+                  type="range"
+                  value={encoder.crf}
+                  oninput={(e: Event) => encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
+                  min="18" max="35" step="1"
+                  class="crf-slider"
+                  aria-label="Valeur CRF"
+                />
+                <div class="crf-scale">
+                  <span>18</span>
+                  <span class="crf-scale-label">← Qualité · Taille →</span>
+                  <span>35</span>
                 </div>
-              </button>
-            {/each}
-          </div>
+              </div>
+              <div class="band-grid band-grid--compact">
+                {#each crfBands as band}
+                  {@const active = encoder.crf >= band.range[0] && encoder.crf <= band.range[1]}
+                  <div class="band-card {active ? 'band-card--active' : ''}" style="--c: {band.color}">
+                    <div class="band-range">{band.range[0]}–{band.range[1]}</div>
+                    <div class="band-name">{band.label}</div>
+                  </div>
+                {/each}
+              </div>
+            </div>
 
-          <div class="preset-desc-box">
-            <p class="pdb-text">{presetMeta[preset].desc}</p>
+            <!-- Preset encodeur (vitesse) -->
+            <div class="field-block">
+              <div class="field-label">Vitesse d'encodage</div>
+              <div class="speed-grid">
+                {#each ["p1","p2","p3","p4","p5","p6","p7"] as p}
+                  {@const meta = speedMeta[p]}
+                  {@const isActive = encoder.preset === p}
+                  <button
+                    type="button"
+                    class="speed-btn {isActive ? 'speed-btn--active' : ''}"
+                    onclick={() => encoder.setPreset(p)}
+                  >
+                    <span class="speed-id">{p.toUpperCase()}</span>
+                    <span class="speed-name">{meta.label}</span>
+                    <div class="speed-dots">
+                      {#each Array(7) as _, i}
+                        <div class="speed-dot {i < meta.speed ? 'speed-dot--on' : ''}"></div>
+                      {/each}
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            <!-- AQ -->
+            <div class="field-block">
+              <div class="field-label">Adaptive Quantization</div>
+              <div class="toggle-row">
+                <button
+                  type="button"
+                  class="toggle-opt {spatialAq ? 'toggle-opt--active' : ''}"
+                  onclick={() => encoder.setSpatialAq(!spatialAq)}
+                >
+                  <span class="toggle-opt-title">AQ spatiale</span>
+                  <span class="toggle-opt-sub">zones complexes dans l'image</span>
+                </button>
+                <button
+                  type="button"
+                  class="toggle-opt {temporalAq ? 'toggle-opt--active' : ''}"
+                  onclick={() => encoder.setTemporalAq(!temporalAq)}
+                >
+                  <span class="toggle-opt-title">AQ temporelle</span>
+                  <span class="toggle-opt-sub">cohérence entre les frames</span>
+                </button>
+              </div>
+              {#if spatialAq || temporalAq}
+                <div class="field-label-row" style="margin-top:10px">
+                  <span class="field-label">Force AQ</span>
+                  <span class="field-value-badge">{aqStrength}</span>
+                </div>
+                <input
+                  type="range"
+                  value={aqStrength}
+                  oninput={(e: Event) => encoder.setAqStrength(parseInt((e.target as HTMLInputElement).value))}
+                  min="1" max="15" step="1"
+                  class="crf-slider"
+                  aria-label="Force AQ"
+                />
+                <div class="slider-hints">
+                  <span>Doux</span>
+                  <span>Agressif</span>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Multipass -->
+            <div class="field-block">
+              <div class="field-label">Multipass</div>
+              <div class="multipass-row">
+                {#each [
+                  { val: "disabled", label: "Aucun",        sub: "passe unique" },
+                  { val: "qres",     label: "¼ résolution", sub: "analyse rapide" },
+                  { val: "fullres",  label: "Pleine rés.",   sub: "qualité max" },
+                ] as opt}
+                  <button
+                    type="button"
+                    class="multipass-btn {multipass === opt.val ? 'multipass-btn--active' : ''}"
+                    onclick={() => encoder.setMultipass(opt.val as MultipassMode)}
+                  >
+                    <span class="mp-label">{opt.label}</span>
+                    <span class="mp-sub">{opt.sub}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
           </div>
-        </div>
+        {/if}
       </section>
 
     <!-- ═══════════════ AUDIO ═══════════════ -->
@@ -266,83 +385,6 @@
             La piste audio source est conservée telle quelle — aucune dégradation supplémentaire.
           </div>
         {/if}
-      </section>
-
-    <!-- ═══════════════ NVENC ═══════════════ -->
-    {:else if activeSection === "nvenc"}
-      <section class="content-section">
-        <header class="section-header">
-          <div>
-            <h2 class="section-title">NVENC avancé</h2>
-            <p class="section-desc">
-              L'AQ adaptative améliore la distribution des bits sur les zones complexes.
-              Le multipass analyse l'image en plusieurs passes pour affiner la compression.
-            </p>
-          </div>
-        </header>
-
-        <div class="field-block">
-          <div class="field-label">Adaptive Quantization</div>
-          <div class="toggle-row">
-            <button
-              type="button"
-              class="toggle-opt {spatialAq ? 'toggle-opt--active' : ''}"
-              onclick={() => encoder.setSpatialAq(!spatialAq)}
-            >
-              <span class="toggle-opt-title">AQ spatiale</span>
-              <span class="toggle-opt-sub">zones complexes dans l'image</span>
-            </button>
-            <button
-              type="button"
-              class="toggle-opt {temporalAq ? 'toggle-opt--active' : ''}"
-              onclick={() => encoder.setTemporalAq(!temporalAq)}
-            >
-              <span class="toggle-opt-title">AQ temporelle</span>
-              <span class="toggle-opt-sub">cohérence entre les frames</span>
-            </button>
-          </div>
-        </div>
-
-        {#if spatialAq || temporalAq}
-          <div class="field-block">
-            <div class="field-label-row">
-              <span class="field-label">Force AQ</span>
-              <span class="field-value-badge">{aqStrength}</span>
-            </div>
-            <input
-              type="range"
-              value={aqStrength}
-              oninput={(e: Event) => encoder.setAqStrength(parseInt((e.target as HTMLInputElement).value))}
-              min="1" max="15" step="1"
-              class="crf-slider"
-              aria-label="Force AQ"
-            />
-            <div class="slider-hints">
-              <span>Doux</span>
-              <span>Agressif</span>
-            </div>
-          </div>
-        {/if}
-
-        <div class="field-block">
-          <div class="field-label">Multipass</div>
-          <div class="multipass-row">
-            {#each [
-              { val: "disabled", label: "Aucun",       sub: "passe unique" },
-              { val: "qres",     label: "¼ résolution", sub: "analyse rapide" },
-              { val: "fullres",  label: "Pleine rés.",  sub: "qualité max" },
-            ] as opt}
-              <button
-                type="button"
-                class="multipass-btn {multipass === opt.val ? 'multipass-btn--active' : ''}"
-                onclick={() => encoder.setMultipass(opt.val as MultipassMode)}
-              >
-                <span class="mp-label">{opt.label}</span>
-                <span class="mp-sub">{opt.sub}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
       </section>
 
     <!-- ═══════════════ CONTENEUR ═══════════════ -->
@@ -493,6 +535,75 @@
               </button>
             </div>
           {/if}
+        </div>
+      </section>
+
+    <!-- ═══════════════ LANGUES ═══════════════ -->
+    {:else if activeSection === "languages"}
+      <section class="content-section">
+        <header class="section-header">
+          <div>
+            <h2 class="section-title">Langues par défaut</h2>
+            <p class="section-desc">
+              Pistes activées automatiquement à l'ouverture d'un fichier.
+            </p>
+          </div>
+        </header>
+
+        <div class="lang-grid">
+          <!-- ── Colonne Audio ── -->
+          <div class="lang-col">
+            <div class="lang-col-header">
+              <Volume2 class="w-3.5 h-3.5" />
+              <span>Audio</span>
+            </div>
+            <ul class="lang-toggle-list" aria-label="Langues audio par défaut">
+              {#each langOrder as code (code)}
+                {@const on = defaultAudioLangs.includes(code)}
+                <li>
+                  <button
+                    type="button"
+                    class="lang-toggle {on ? 'lang-toggle--on' : ''}"
+                    onclick={() => toggleDefaultAudio(code)}
+                    aria-pressed={on}
+                  >
+                    <span class="lang-toggle-name">{langLabel(code)}</span>
+                    <span class="lang-toggle-code">{code}</span>
+                    <span class="lang-toggle-pill" aria-hidden="true">
+                      <span class="lang-toggle-thumb"></span>
+                    </span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </div>
+
+          <!-- ── Colonne Sous-titres ── -->
+          <div class="lang-col">
+            <div class="lang-col-header">
+              <Subtitles class="w-3.5 h-3.5" />
+              <span>Sous-titres</span>
+            </div>
+            <ul class="lang-toggle-list" aria-label="Langues sous-titres par défaut">
+              {#each langOrder as code (code)}
+                {@const on = defaultSubLangs.includes(code)}
+                <li>
+                  <button
+                    type="button"
+                    class="lang-toggle {on ? 'lang-toggle--on' : ''}"
+                    onclick={() => toggleDefaultSub(code)}
+                    aria-pressed={on}
+                  >
+                    <span class="lang-toggle-name">{langLabel(code)}</span>
+                    <span class="lang-toggle-code">{code}</span>
+                    <span class="lang-toggle-pill" aria-hidden="true">
+                      <span class="lang-toggle-thumb"></span>
+                    </span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </div>
         </div>
       </section>
     {/if}
@@ -700,32 +811,6 @@
     transition: color 0.3s;
   }
 
-  /* Active preset badge */
-  .active-preset-badge {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 16px;
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
-    border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
-    gap: 2px;
-  }
-  .apb-id {
-    font-family: "Geist Mono", monospace;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--color-accent);
-    line-height: 1;
-  }
-  .apb-label {
-    font-size: 10px;
-    color: var(--color-subtext);
-    white-space: nowrap;
-  }
-
   /* ── Field blocks ───────────────────────────────────────────────────────── */
   .field-block {
     margin-bottom: 24px;
@@ -812,6 +897,7 @@
     grid-template-columns: repeat(5, 1fr);
     gap: 6px;
   }
+  .band-grid--compact .band-card { padding: 7px 6px; }
   .band-card {
     padding: 10px 8px;
     border-radius: var(--radius-sm);
@@ -839,98 +925,170 @@
     margin-bottom: 2px;
   }
   .band-card--active .band-name { color: var(--color-text); }
-  .band-quality {
+
+  /* ── Builtin preset cards ────────────────────────────────────────────────── */
+  .bp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .bp-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .bp-card:hover { border-color: var(--color-subtext2); }
+  .bp-card--active {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 7%, var(--color-surface));
+  }
+  .bp-card--custom {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .bp-card--custom .bp-desc { flex: 1; }
+
+  .bp-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .bp-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+  .bp-card--active .bp-label { color: var(--color-accent); }
+  .bp-rec {
     font-family: "Geist Mono", monospace;
-    font-size: 8px;
+    font-size: 7px;
+    letter-spacing: 0.05em;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--color-success, #4dbb6a) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-success, #4dbb6a) 30%, transparent);
+    color: var(--color-success, #4dbb6a);
+    line-height: 1.4;
+  }
+  .bp-desc {
+    font-size: 11px;
+    color: var(--color-subtext);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .bp-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .bp-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
     color: var(--color-subtext2);
   }
+  .bp-card--active .bp-tag {
+    border-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-border));
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel));
+  }
 
-  /* ── Preset grid ────────────────────────────────────────────────────────── */
-  .preset-grid {
+  /* ── Custom panel ────────────────────────────────────────────────────────── */
+  .custom-panel {
+    animation: fade-in 0.15s ease;
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .cp-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cp-divider::before,
+  .cp-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+  }
+  .cp-divider-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-subtext2);
+    white-space: nowrap;
+  }
+
+  /* ── Speed grid (dans custom panel) ─────────────────────────────────────── */
+  .speed-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
-    margin-bottom: 14px;
+    gap: 5px;
   }
-  .preset-card {
+  .speed-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 5px;
-    padding: 10px 4px;
+    gap: 4px;
+    padding: 9px 3px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
   }
-  .preset-card:hover { border-color: var(--color-subtext2); }
-  .preset-card--active {
+  .speed-btn:hover { border-color: var(--color-subtext2); }
+  .speed-btn--active {
     border-color: var(--color-accent);
     background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   }
-
-  .preset-card-top {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-  }
-  .preset-id {
+  .speed-id {
     font-family: "Geist Mono", monospace;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--color-subtext);
     transition: color 0.15s;
   }
-  .preset-card--active .preset-id { color: var(--color-accent); }
-
-  .preset-rec {
-    font-family: "Geist Mono", monospace;
-    font-size: 7px;
-    letter-spacing: 0.04em;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: color-mix(in srgb, var(--color-success) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
-    color: var(--color-success);
-    line-height: 1.4;
-  }
-
-  .preset-name {
-    font-size: 9px;
+  .speed-btn--active .speed-id { color: var(--color-accent); }
+  .speed-name {
+    font-size: 8px;
     color: var(--color-subtext2);
     text-align: center;
     line-height: 1.2;
   }
-
-  .preset-speed-bar {
+  .speed-dots {
     display: flex;
     gap: 2px;
     align-items: center;
   }
   .speed-dot {
-    width: 4px;
-    height: 4px;
+    width: 3px;
+    height: 3px;
     border-radius: 50%;
     background: var(--color-border);
     transition: background 0.15s;
   }
   .speed-dot--on { background: var(--color-accent); opacity: 0.7; }
-  .preset-card--active .speed-dot--on { opacity: 1; }
-
-  .preset-desc-box {
-    padding: 12px 14px;
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-  }
-  .pdb-text {
-    font-size: 12px;
-    color: var(--color-subtext);
-    margin: 0;
-    line-height: 1.5;
-  }
+  .speed-btn--active .speed-dot--on { opacity: 1; }
 
   /* ── Toggle options (paire) ─────────────────────────────────────────────── */
   .toggle-row {
@@ -1319,5 +1477,110 @@
   .page-root--horizontal .content-section {
     width: 100%;
     max-width: 720px;
+  }
+
+  /* ── Grille langues (2 colonnes) ────────────────────────────────────────── */
+  .lang-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .lang-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .lang-col-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-subtext2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 2px 4px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 2px;
+  }
+  .lang-toggle-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  /* ── Toggle row (bouton complet) ─────────────────────────────────────────── */
+  .lang-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.12s, background 0.12s;
+    user-select: none;
+  }
+  .lang-toggle:hover {
+    border-color: var(--color-subtext2);
+    background: color-mix(in srgb, var(--color-accent) 3%, var(--color-surface));
+  }
+  .lang-toggle--on {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
+  }
+  .lang-toggle--on:hover {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+  }
+  .lang-toggle-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lang-toggle-code {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    color: var(--color-subtext2);
+    flex-shrink: 0;
+  }
+
+  /* ── Pill (toggle switch visuel) ─────────────────────────────────────────── */
+  .lang-toggle-pill {
+    position: relative;
+    width: 28px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--color-border);
+    flex-shrink: 0;
+    transition: background 0.18s;
+  }
+  .lang-toggle--on .lang-toggle-pill {
+    background: var(--color-accent);
+  }
+  .lang-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    transition: transform 0.18s;
+  }
+  .lang-toggle--on .lang-toggle-thumb {
+    transform: translateX(12px);
   }
 </style>

@@ -15,12 +15,68 @@ import type {
   SubExtractFormat,
   SubExtractNaming,
   SubExtractPathMode,
+  EncodePreset,
 } from "./types";
-import { DEFAULT_TAG_ORDER, SEASON_EPISODE_FORMATS } from "./naming";
+import { DEFAULT_TAG_ORDER, LANG_ORDER, SEASON_EPISODE_FORMATS } from "./naming";
 
 // ─── Persistance localStorage (renommage) ─────────────────────────────────────
 
-const RENAMING_KEY = "rencodeX:renaming";
+const RENAMING_KEY      = "rencodeX:renaming";
+const ACTIVE_PRESET_KEY = "rencodeX:activePresetId";
+
+// ─── Préréglages d'encodage intégrés ─────────────────────────────────────────
+// Extensible plus tard : ajouter des presets custom dans localStorage/Tauri.
+
+export const BUILTIN_PRESETS: EncodePreset[] = [
+  {
+    id:           "fast",
+    label:        "Rapide",
+    crf:          30,
+    preset:       "p3",
+    audioMode:    "copy",
+    audioBitrate: 192,
+    spatialAq:    false,
+    temporalAq:   false,
+    aqStrength:   8,
+    multipass:    "disabled",
+  },
+  {
+    id:           "balanced",
+    label:        "Équilibré",
+    crf:          28,
+    preset:       "p5",
+    audioMode:    "reencode",
+    audioBitrate: 192,
+    spatialAq:    false,
+    temporalAq:   false,
+    aqStrength:   8,
+    multipass:    "disabled",
+  },
+  {
+    id:           "quality",
+    label:        "Haute qualité",
+    crf:          24,
+    preset:       "p7",
+    audioMode:    "reencode",
+    audioBitrate: 320,
+    spatialAq:    true,
+    temporalAq:   true,
+    aqStrength:   8,
+    multipass:    "qres",
+  },
+  {
+    id:           "archive",
+    label:        "Archive",
+    crf:          20,
+    preset:       "p7",
+    audioMode:    "copy",
+    audioBitrate: 192,
+    spatialAq:    true,
+    temporalAq:   true,
+    aqStrength:   8,
+    multipass:    "fullres",
+  },
+];
 
 // ─── Store préférences ────────────────────────────────────────────────────────
 
@@ -28,6 +84,13 @@ function createPrefsStore() {
   // Encodage
   let crf     = $state(28);
   let preset  = $state("p5");
+
+  // Préréglage actif (null = paramètres personnalisés)
+  let activePresetId = $state<string | null>(
+    typeof localStorage !== "undefined"
+      ? localStorage.getItem(ACTIVE_PRESET_KEY)
+      : null
+  );
 
   // Nommage
   let seasonEpisodeFormat = $state<SeasonEpisodeFormat>("S01E01");
@@ -43,6 +106,9 @@ function createPrefsStore() {
   let providerCase        = $state<ProviderCase>("upper");
   let team                = $state("");
   let keepJapaneseVer     = $state<boolean>(false);
+  let langOrder           = $state<string[]>([...LANG_ORDER]);
+  let defaultAudioLangs   = $state<string[]>(["fre", "eng", "jpn"]);
+  let defaultSubLangs     = $state<string[]>(["fre"]);
 
   // Audio / vidéo
   let audioMode    = $state<AudioMode>("reencode");
@@ -83,6 +149,9 @@ function createPrefsStore() {
       provider_case:           providerCase,
       team,
       keep_japanese_ver:       keepJapaneseVer,
+      lang_order:              langOrder,
+      default_audio_langs:     defaultAudioLangs,
+      default_sub_langs:       defaultSubLangs,
       audio_mode:              audioMode,
       audio_bitrate:           audioBitrate,
       spatial_aq:              spatialAq,
@@ -132,6 +201,9 @@ function createPrefsStore() {
         provider_case:     providerCase,
         team,
         keepJapaneseVer,
+        lang_order:          langOrder,
+        default_audio_langs: defaultAudioLangs,
+        default_sub_langs:   defaultSubLangs,
       }));
     } catch { /* storage indisponible */ }
   }
@@ -173,6 +245,12 @@ function createPrefsStore() {
       if (typeof p.team === "string") team = p.team;
       if (typeof p.keepJapaneseVer === "boolean")
         keepJapaneseVer = p.keepJapaneseVer;
+      if (Array.isArray(p.lang_order) && (p.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0))
+        langOrder = p.lang_order as string[];
+      if (Array.isArray(p.default_audio_langs) && (p.default_audio_langs as string[]).length > 0)
+        defaultAudioLangs = p.default_audio_langs as string[];
+      if (Array.isArray(p.default_sub_langs))
+        defaultSubLangs = p.default_sub_langs as string[];
     } catch { /* JSON invalide */ }
   }
 
@@ -208,6 +286,9 @@ function createPrefsStore() {
         tag_separator?: string;
         provider_case?: string;
         keep_japanese_ver?: boolean;
+        lang_order?: string[];
+        default_audio_langs?: string[];
+        default_sub_langs?: string[];
       }>("load_encoding_prefs");
 
       if (typeof prefs.crf === "number") crf = prefs.crf;
@@ -250,6 +331,14 @@ function createPrefsStore() {
       if (typeof prefs.team === "string") team = prefs.team;
       if (typeof prefs.keep_japanese_ver === "boolean")
         keepJapaneseVer = prefs.keep_japanese_ver;
+      if (
+        Array.isArray(prefs.lang_order) &&
+        (prefs.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0)
+      ) langOrder = prefs.lang_order as string[];
+      if (Array.isArray(prefs.default_audio_langs) && (prefs.default_audio_langs as string[]).length > 0)
+        defaultAudioLangs = prefs.default_audio_langs as string[];
+      if (Array.isArray(prefs.default_sub_langs))
+        defaultSubLangs = prefs.default_sub_langs as string[];
       if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
         audioMode = prefs.audio_mode;
       if (typeof prefs.audio_bitrate === "number") audioBitrate = prefs.audio_bitrate;
@@ -281,41 +370,77 @@ function createPrefsStore() {
     }
   }
 
+  // ─── Préréglages d'encodage ───────────────────────────────────────────────
+
+  function _markCustom() {
+    activePresetId = null;
+    try { localStorage.removeItem(ACTIVE_PRESET_KEY); } catch { /* */ }
+  }
+
+  function applyPreset(id: string) {
+    const p = BUILTIN_PRESETS.find((p) => p.id === id);
+    if (!p) return;
+
+    // Appliquer tous les paramètres sans passer par _markCustom
+    crf          = p.crf;
+    preset       = p.preset;
+    audioMode    = p.audioMode;
+    audioBitrate = p.audioBitrate;
+    spatialAq    = p.spatialAq;
+    temporalAq   = p.temporalAq;
+    aqStrength   = p.aqStrength;
+    multipass    = p.multipass;
+
+    activePresetId = id;
+    try { localStorage.setItem(ACTIVE_PRESET_KEY, id); } catch { /* */ }
+    schedule();
+  }
+
   // ─── Setters ──────────────────────────────────────────────────────────────
 
-  function setCrf(value: number)         { crf = value; schedule(); }
-  function setPreset(value: string)      { preset = value; schedule(); }
-  function setAudioMode(v: AudioMode)    { audioMode = v; schedule(); }
-  function setAudioBitrate(v: number)    { audioBitrate = v; schedule(); }
-  function setSpatialAq(v: boolean)      { spatialAq = v; schedule(); }
-  function setTemporalAq(v: boolean)     { temporalAq = v; schedule(); }
-  function setAqStrength(v: number)      { aqStrength = v; schedule(); }
-  function setMultipass(v: MultipassMode){ multipass = v; schedule(); }
-  function setContainer(v: ContainerFormat) { container = v; schedule(); }
+  function setCrf(value: number)            { crf = value;          _markCustom(); schedule(); }
+  function setPreset(value: string)         { preset = value;       _markCustom(); schedule(); }
+  function setAudioMode(v: AudioMode)       { audioMode = v;        _markCustom(); schedule(); }
+  function setAudioBitrate(v: number)       { audioBitrate = v;     _markCustom(); schedule(); }
+  function setSpatialAq(v: boolean)         { spatialAq = v;        _markCustom(); schedule(); }
+  function setTemporalAq(v: boolean)        { temporalAq = v;       _markCustom(); schedule(); }
+  function setAqStrength(v: number)         { aqStrength = v;       _markCustom(); schedule(); }
+  function setMultipass(v: MultipassMode)   { multipass = v;        _markCustom(); schedule(); }
+  function setContainer(v: ContainerFormat) { container = v;        schedule(); }
 
-  function setSubExtractFormat(v: SubExtractFormat)   { subExtractFormat = v; schedule(); }
-  function setSubExtractNaming(v: SubExtractNaming)   { subExtractNaming = v; schedule(); }
-  function setSubExtractPathMode(v: SubExtractPathMode){ subExtractPathMode = v; schedule(); }
-  function setSubExtractCustomPath(v: string)         { subExtractCustomPath = v; schedule(); }
-  function setShowExtractButton(v: boolean)           { showExtractButton = v; schedule(); }
+  function setSubExtractFormat(v: SubExtractFormat)    { subExtractFormat = v;     schedule(); }
+  function setSubExtractNaming(v: SubExtractNaming)    { subExtractNaming = v;     schedule(); }
+  function setSubExtractPathMode(v: SubExtractPathMode){ subExtractPathMode = v;   schedule(); }
+  function setSubExtractCustomPath(v: string)          { subExtractCustomPath = v; schedule(); }
+  function setShowExtractButton(v: boolean)            { showExtractButton = v;    schedule(); }
 
   function _namingChanged() { saveRenamingPrefs(); schedule(); }
 
   function setSeasonEpisodeFormat(v: SeasonEpisodeFormat) {
     seasonEpisodeFormat = v; _namingChanged();
   }
-  function setTagOrder(v: TagId[])           { tagOrder = v; _namingChanged(); }
-  function setDisabledTags(v: Set<TagId>)    { disabledTags = v; _namingChanged(); }
-  function setResolutionCase(v: ResolutionCase) { resolutionCase = v; _namingChanged(); }
-  function setTitleCase(v: TitleCaseMode)    { titleCase = v; _namingChanged(); }
-  function setCodecFormat(v: CodecFormat)    { codecFormat = v; _namingChanged(); }
-  function setSourceCase(v: SourceCase)      { sourceCase = v; _namingChanged(); }
-  function setYearParentheses(v: boolean)    { yearParentheses = v; _namingChanged(); }
-  function setWebSourceFormat(v: WebSourceFormat) { webSourceFormat = v; _namingChanged(); }
-  function setTagSeparator(v: TagSeparator)  { tagSeparator = v; _namingChanged(); }
-  function setProviderCase(v: ProviderCase)  { providerCase = v; _namingChanged(); }
-  function setTeam(v: string)                { team = v; _namingChanged(); }
-  function setKeepJapaneseVer(v: boolean)    { keepJapaneseVer = v; _namingChanged(); }
+  function setTagOrder(v: TagId[])              { tagOrder = v;         _namingChanged(); }
+  function setDisabledTags(v: Set<TagId>)       { disabledTags = v;     _namingChanged(); }
+  function setResolutionCase(v: ResolutionCase) { resolutionCase = v;   _namingChanged(); }
+  function setTitleCase(v: TitleCaseMode)       { titleCase = v;        _namingChanged(); }
+  function setCodecFormat(v: CodecFormat)       { codecFormat = v;      _namingChanged(); }
+  function setSourceCase(v: SourceCase)         { sourceCase = v;       _namingChanged(); }
+  function setYearParentheses(v: boolean)       { yearParentheses = v;  _namingChanged(); }
+  function setWebSourceFormat(v: WebSourceFormat){ webSourceFormat = v; _namingChanged(); }
+  function setTagSeparator(v: TagSeparator)     { tagSeparator = v;     _namingChanged(); }
+  function setProviderCase(v: ProviderCase)     { providerCase = v;     _namingChanged(); }
+  function setTeam(v: string)                   { team = v;             _namingChanged(); }
+  function setKeepJapaneseVer(v: boolean)       { keepJapaneseVer = v;  _namingChanged(); }
+  function setDefaultAudioLangs(v: string[]) { defaultAudioLangs = v; _namingChanged(); }
+  function setDefaultSubLangs(v: string[])   { defaultSubLangs   = v; _namingChanged(); }
+
+  function setLangOrder(v: string[]) {
+    // Validation : codes non vides et uniques
+    const seen = new Set<string>();
+    const cleaned = v.filter((c) => c && !seen.has(c) && seen.add(c));
+    langOrder = cleaned.length > 0 ? cleaned : [...LANG_ORDER];
+    _namingChanged();
+  }
 
   function resetFormatOptions() {
     resolutionCase      = "upper";
@@ -331,33 +456,38 @@ function createPrefsStore() {
   }
 
   function resetToDefault() {
-    crf                 = 28;
-    preset              = "p5";
-    seasonEpisodeFormat = "S01E01";
-    tagOrder            = [...DEFAULT_TAG_ORDER];
-    disabledTags        = new Set<TagId>(["japver"]);
-    team                = "";
-    keepJapaneseVer     = false;
-    audioMode           = "reencode";
-    audioBitrate        = 192;
-    spatialAq           = false;
-    temporalAq          = false;
-    aqStrength          = 8;
-    multipass           = "disabled";
-    container           = "mkv";
-    subExtractFormat    = "srt";
-    subExtractNaming    = "source";
-    subExtractPathMode  = "source";
+    crf                  = 28;
+    preset               = "p5";
+    seasonEpisodeFormat  = "S01E01";
+    tagOrder             = [...DEFAULT_TAG_ORDER];
+    disabledTags         = new Set<TagId>(["japver"]);
+    team                 = "";
+    keepJapaneseVer      = false;
+    audioMode            = "reencode";
+    audioBitrate         = 192;
+    spatialAq            = false;
+    temporalAq           = false;
+    aqStrength           = 8;
+    multipass            = "disabled";
+    container            = "mkv";
+    subExtractFormat     = "srt";
+    subExtractNaming     = "source";
+    subExtractPathMode   = "source";
     subExtractCustomPath = "";
-    showExtractButton   = true;
-    resolutionCase      = "upper";
-    titleCase           = "original";
-    codecFormat         = "H265";
-    sourceCase          = "original";
-    yearParentheses     = true;
-    webSourceFormat     = "WEB-DL";
-    tagSeparator        = " ";
-    providerCase        = "upper";
+    showExtractButton    = true;
+    resolutionCase       = "upper";
+    titleCase            = "original";
+    codecFormat          = "H265";
+    sourceCase           = "original";
+    yearParentheses      = true;
+    webSourceFormat      = "WEB-DL";
+    tagSeparator         = " ";
+    providerCase         = "upper";
+    activePresetId       = "balanced"; // reset → préréglage Équilibré
+    langOrder            = [...LANG_ORDER];
+    defaultAudioLangs    = ["fre", "eng", "jpn"];
+    defaultSubLangs      = ["fre"];
+    try { localStorage.setItem(ACTIVE_PRESET_KEY, "balanced"); } catch { /* */ }
     flush();
   }
 
@@ -366,6 +496,7 @@ function createPrefsStore() {
   return {
     get crf()                  { return crf; },
     get preset()               { return preset; },
+    get activePresetId()       { return activePresetId; },
     get seasonEpisodeFormat()  { return seasonEpisodeFormat; },
     get tagOrder()             { return tagOrder; },
     get disabledTags()         { return disabledTags; },
@@ -379,6 +510,9 @@ function createPrefsStore() {
     get providerCase()         { return providerCase; },
     get team()                 { return team; },
     get keepJapaneseVer()      { return keepJapaneseVer; },
+    get langOrder()            { return langOrder; },
+    get defaultAudioLangs()    { return defaultAudioLangs; },
+    get defaultSubLangs()      { return defaultSubLangs; },
     get audioMode()            { return audioMode; },
     get audioBitrate()         { return audioBitrate; },
     get spatialAq()            { return spatialAq; },
@@ -396,6 +530,7 @@ function createPrefsStore() {
     loadRenamingPrefs,
     flush,
     saveRenamingPrefs,
+    applyPreset,
 
     setCrf,
     setPreset,
@@ -412,6 +547,9 @@ function createPrefsStore() {
     setProviderCase,
     setTeam,
     setKeepJapaneseVer,
+    setLangOrder,
+    setDefaultAudioLangs,
+    setDefaultSubLangs,
     setAudioMode,
     setAudioBitrate,
     setSpatialAq,

@@ -7,6 +7,7 @@ import {
   formatDuration,
   formatMb,
   langName,
+  sortedLangs,
 } from "./naming";
 import { prefs } from "./prefs.store.svelte";
 
@@ -16,8 +17,14 @@ function createFilesStore() {
   let files      = $state<AppFile[]>([]);
   let audioLangs = $state<Set<string>>(new Set());
   let subLangs   = $state<Set<string>>(new Set());
-  let selAudio   = $state<Set<string>>(new Set(["fre", "eng", "jpn"]));
-  let selSubs    = $state<Set<string>>(new Set(["fre"]));
+
+  // null = suivre les prefs, Set = override manuel de la session
+  let selAudioOverride = $state<Set<string> | null>(null);
+  let selSubsOverride  = $state<Set<string> | null>(null);
+
+  // Getters calculés — pas de rune $derived pour rester compatible hors composant
+  function getSelAudio() { return selAudioOverride ?? new Set(prefs.defaultAudioLangs); }
+  function getSelSubs()  { return selSubsOverride  ?? new Set(prefs.defaultSubLangs);  }
 
   // Surcharges par fichier (chemin → Set de langues sélectionnées)
   let fileSelAudio = $state<Map<string, Set<string>>>(new Map());
@@ -68,8 +75,9 @@ function createFilesStore() {
       f.audio_langs.forEach((l) => a.add(l));
       f.sub_langs.forEach((l)   => s.add(l));
     });
-    audioLangs = a;
-    subLangs   = s;
+    // Trier selon l'ordre configurable (prefs.langOrder) plutôt que l'ordre d'insertion
+    audioLangs = new Set(sortedLangs([...a], prefs.langOrder));
+    subLangs   = new Set(sortedLangs([...s], prefs.langOrder));
   }
 
   // ─── Rafraîchissement des noms ────────────────────────────────────────────
@@ -87,8 +95,8 @@ function createFilesStore() {
     const _provCase     = prefs.providerCase;
     const _seFormat     = prefs.seasonEpisodeFormat;
     const _team         = prefs.team;
-    const _selAudio     = selAudio;
-    const _selSubs      = selSubs;
+    const _selAudio     = getSelAudio();
+    const _selSubs      = getSelSubs();
     const _fileSelAudio = fileSelAudio;
     const _fileSelSubs  = fileSelSubs;
     const _keepJapVer   = prefs.keepJapaneseVer;
@@ -175,8 +183,8 @@ function createFilesStore() {
             subLangs: analysis.sub_langs,
           });
 
-          const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, selAudio, selSubs);
-          const audioTag = computeAudioTag(analysis.streams, selAudio, prefs.audioMode);
+          const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, getSelAudio(), getSelSubs());
+          const audioTag = computeAudioTag(analysis.streams, getSelAudio(), prefs.audioMode);
           const outName  = buildOutputName(
             cleaned,
             tag,
@@ -198,8 +206,10 @@ function createFilesStore() {
           };
           files = files.map((f, i) => (i === idx ? updated : f));
 
-          analysis.audio_langs.forEach((l) => (audioLangs = new Set([...audioLangs, l])));
-          analysis.sub_langs.forEach((l)   => (subLangs   = new Set([...subLangs, l])));
+          const mergedAudio = sortedLangs([...new Set([...audioLangs, ...analysis.audio_langs])], prefs.langOrder);
+          const mergedSubs  = sortedLangs([...new Set([...subLangs,   ...analysis.sub_langs])],   prefs.langOrder);
+          audioLangs = new Set(mergedAudio);
+          subLangs   = new Set(mergedSubs);
 
           const dur   = formatDuration(analysis.duration_secs);
           const size  = formatMb(analysis.size_mb);
@@ -209,7 +219,7 @@ function createFilesStore() {
             `Analysé : ${analysis.filename} — ${size}${dur ? `, ${dur}` : ""}, audio [${audio}], sous-titres [${subs}]`,
             "info",
           );
-          const audioMatch = analysis.audio_langs.some((l) => selAudio.has(l));
+          const audioMatch = analysis.audio_langs.some((l) => getSelAudio().has(l));
           if (!audioMatch)
             _log(
               `  ⚠ Aucune piste audio sélectionnée présente dans ${name} — toutes les pistes seront conservées`,
@@ -242,17 +252,17 @@ function createFilesStore() {
   // ─── Sélection de langues globales ───────────────────────────────────────
 
   function toggleAudioLang(lang: string) {
-    const s = new Set(selAudio);
+    const s = new Set(getSelAudio());
     s.has(lang) ? s.delete(lang) : s.add(lang);
-    selAudio = s;
+    selAudioOverride = s;
     refreshOutputNames();
     _log(`Piste audio : ${langName(lang)} ${s.has(lang) ? "activée" : "désactivée"}`, "info");
   }
 
   function toggleSubLang(lang: string) {
-    const s = new Set(selSubs);
+    const s = new Set(getSelSubs());
     s.has(lang) ? s.delete(lang) : s.add(lang);
-    selSubs = s;
+    selSubsOverride = s;
     refreshOutputNames();
     _log(`Sous-titres : ${langName(lang)} ${s.has(lang) ? "activés" : "désactivés"}`, "info");
   }
@@ -348,8 +358,8 @@ function createFilesStore() {
     files                 = [];
     audioLangs            = new Set();
     subLangs              = new Set();
-    selAudio              = new Set(["fre", "eng", "jpn"]);
-    selSubs               = new Set(["fre"]);
+    selAudioOverride      = null;
+    selSubsOverride       = null;
     audioOverrides        = {};
     subOverrides          = {};
     globalCodecOverride   = {};
@@ -361,6 +371,8 @@ function createFilesStore() {
     files                 = [];
     audioLangs            = new Set();
     subLangs              = new Set();
+    selAudioOverride      = null;
+    selSubsOverride       = null;
     audioOverrides        = {};
     subOverrides          = {};
     globalCodecOverride   = {};
@@ -377,8 +389,8 @@ function createFilesStore() {
     set files(v)     { files = v; },  // accès écriture pour encoding.store
     get audioLangs() { return audioLangs; },
     get subLangs()   { return subLangs; },
-    get selAudio()   { return selAudio; },
-    get selSubs()    { return selSubs; },
+    get selAudio()   { return getSelAudio(); },
+    get selSubs()    { return getSelSubs(); },
     get fileSelAudio()   { return fileSelAudio; },
     get fileSelSubs()    { return fileSelSubs; },
     get audioOverrides() { return audioOverrides; },

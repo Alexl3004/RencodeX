@@ -160,3 +160,16 @@ export interface NamingOptions {
   providerCase?:    ProviderCase;
   keepJapaneseVer?: boolean;
 }
+
+export interface EncodePreset {
+  id:           string;
+  label:        string;
+  crf:          number;
+  preset:       string;
+  audioMode:    AudioMode;
+  audioBitrate: number;
+  spatialAq:    boolean;
+  temporalAq:   boolean;
+  aqStrength:   number;
+  multipass:    MultipassMode;
+}

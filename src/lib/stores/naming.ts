@@ -63,9 +63,25 @@ export const LANG_NAMES: Record<string, string> = {
   und: "Indéfini",
 };
 
+/** Ordre par défaut — peut être remplacé par `prefs.langOrder`. */
 export const LANG_ORDER = [
   "fre", "eng", "jpn", "kor", "ger", "spa", "ita", "por", "rus", "chi", "und",
 ];
+
+/**
+ * Trie un tableau de codes de langue selon un ordre de priorité configurable.
+ * Les langues absentes de `order` sont placées à la fin, triées alphabétiquement.
+ */
+export function sortedLangs(langs: string[], order: string[] = LANG_ORDER): string[] {
+  return [...langs].sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
 
 const COPY_BY_DEFAULT = ["aac", "opus", "ac3", "eac3", "mp3", "flac"];
 
