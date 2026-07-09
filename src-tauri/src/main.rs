@@ -9,12 +9,17 @@ mod media;
 mod notify;
 mod commands;
 mod discord_fields;
+mod db;
 mod tests_extended;
+mod entities;
 
 use crate::utils::resolve_config;
 use crate::commands::load_config;
 
 fn main() {
+    // Initialise la base SQLite (migration JSON→DB incluse) avant tout le reste.
+    tauri::async_runtime::block_on(db::init());
+
     let cfg = resolve_config(load_config());
 
     if cfg.discord_enabled
