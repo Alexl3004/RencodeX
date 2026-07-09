@@ -340,7 +340,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px 14px 8px;
+    padding: 8px;
     overflow: hidden;
   }
   .dropzone-slot  { flex: 0 0 auto; }

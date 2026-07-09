@@ -2,8 +2,6 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import LangSelector from "$components/LangSelector.svelte";
   import { X, Captions, Headphones, MessageSquare, Users } from '@lucide/svelte';
-  import { fade, scale } from "svelte/transition";
-  import { cubicOut } from "svelte/easing";
 
   let open = $state(false);
 
@@ -31,11 +29,39 @@
       encoder.clearFileLangSel(f.path);
     }
   }
+
+  // ── Positionnement automatique ──
+  let triggerEl = $state<HTMLButtonElement | null>(null);
+  let popoverEl = $state<HTMLDivElement | null>(null);
+
+  let popoverStyle = $derived.by(() => {
+    if (!triggerEl || !popoverEl) return { left: 0, top: 0 };
+    const rect = triggerEl.getBoundingClientRect();
+    const popoverRect = popoverEl.getBoundingClientRect();
+    const viewWidth = window.innerWidth;
+    const viewHeight = window.innerHeight;
+
+    let left = rect.left;
+    let top = rect.bottom + 6;
+
+    if (left + popoverRect.width > viewWidth - 12) {
+      left = viewWidth - popoverRect.width - 12;
+    }
+    if (left < 12) left = 12;
+
+    if (top + popoverRect.height > viewHeight - 12) {
+      top = rect.top - popoverRect.height - 6;
+      if (top < 12) top = 12;
+    }
+
+    return { left, top };
+  });
 </script>
 
 <div class="relative inline-flex">
   <!-- Bouton déclencheur -->
   <button
+    bind:this={triggerEl}
     type="button"
     onclick={() => (open = !open)}
     class="trigger"
@@ -51,26 +77,25 @@
   </button>
 
   {#if open}
-    <!-- Backdrop -->
+    <!-- Overlay transparent pour fermer au clic en dehors -->
     <div
       class="fixed inset-0 z-[9970]"
-      style="background: rgba(0,0,0,0.35); backdrop-filter: blur(1px);"
       role="presentation"
-      transition:fade={{ duration: 150 }}
       onclick={() => (open = false)}
+      oncontextmenu={(e) => { e.preventDefault(); open = false; }}
     ></div>
 
-    <!-- Modal centrée -->
+    <!-- Popover -->
     <div
-      class="modal"
+      bind:this={popoverEl}
+      class="popover"
+      style="left:{popoverStyle.left}px; top:{popoverStyle.top}px;"
       role="dialog"
       aria-modal="true"
       aria-label="Pistes &amp; sous-titres globaux"
-      tabindex="-1"
-      transition:scale={{ duration: 180, easing: cubicOut, start: 0.95, opacity: 0 }}
     >
       <!-- Header -->
-      <header class="modal-header">
+      <header class="popover-header">
         <div class="flex items-center gap-2.5">
           <div class="header-accent"></div>
           <div class="flex flex-col gap-0.5">
@@ -89,7 +114,7 @@
       </header>
 
       <!-- Corps -->
-      <div class="modal-body">
+      <div class="popover-body">
 
         <!-- Section Audio -->
         <section class="lang-section">
@@ -121,7 +146,7 @@
 
       <!-- Footer -->
       {#if encoder.files.length > 0}
-        <footer class="modal-footer">
+        <footer class="popover-footer">
           <div class="footer-info">
             <Users class="w-3.5 h-3.5 shrink-0 opacity-60" />
             <span>{encoder.files.length} fichier{encoder.files.length > 1 ? 's' : ''}</span>
@@ -196,42 +221,41 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
   }
 
-  /* ── Modal ─────────────────────────────────────────────────────────────── */
-  .modal {
+  /* ── Popover ───────────────────────────────────────────────────────────── */
+  .popover {
     position: fixed;
-    left: 50%; top: 50%;
-    transform: translate(-50%, -50%);
     z-index: 9971;
-    width: 440px;
-    max-width: calc(100vw - 32px);
+    width: 420px;
+    max-width: calc(100vw - 24px);
     background: var(--color-panel);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+    border-radius: var(--radius-md);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    max-height: 80vh;
   }
 
   /* ── Header ────────────────────────────────────────────────────────────── */
-  .modal-header {
+  .popover-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px 12px;
+    padding: 10px 14px 10px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-panel) 70%, var(--color-surface));
+    background: var(--color-surface);
   }
   .header-accent {
-    width: 3px; height: 20px;
+    width: 3px; height: 18px;
     border-radius: 2px;
     background: var(--color-accent);
     flex-shrink: 0;
   }
   .header-title {
     font-family: "Geist Mono", monospace;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -240,7 +264,7 @@
   }
   .header-sub {
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
+    font-size: 8px;
     color: var(--color-subtext);
     opacity: 0.7;
   }
@@ -248,7 +272,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px; height: 28px;
+    width: 26px; height: 26px;
     border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
@@ -258,17 +282,17 @@
     flex-shrink: 0;
   }
   .close-btn:hover {
-    background: var(--color-surface);
+    background: var(--color-panel2);
     border-color: var(--color-border);
     color: var(--color-text);
   }
 
   /* ── Corps ─────────────────────────────────────────────────────────────── */
-  .modal-body {
-    padding: 16px;
+  .popover-body {
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
     max-height: 55vh;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -279,7 +303,7 @@
   .lang-section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .section-header {
     display: flex;
@@ -291,7 +315,7 @@
     align-items: center;
     gap: 6px;
     font-family: "Geist Mono", monospace;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -299,9 +323,9 @@
   }
   .section-count {
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 700;
-    padding: 2px 8px;
+    padding: 1px 7px;
     border-radius: 999px;
   }
   .section-count--audio {
@@ -317,19 +341,20 @@
   .divider {
     height: 1px;
     background: var(--color-border);
-    opacity: 0.5;
+    opacity: 0.4;
+    margin: 2px 0;
   }
 
   /* ── Footer ────────────────────────────────────────────────────────────── */
-  .modal-footer {
+  .popover-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 10px 16px;
+    padding: 8px 14px;
     border-top: 1px solid var(--color-border);
     flex-shrink: 0;
-    background: color-mix(in srgb, var(--color-surface) 50%, var(--color-panel));
+    background: var(--color-surface);
   }
   .footer-info {
     display: flex;
@@ -353,7 +378,7 @@
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.04em;
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: transparent;

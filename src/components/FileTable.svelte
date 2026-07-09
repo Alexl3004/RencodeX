@@ -86,6 +86,7 @@
   // Sélection modale renommage — dérivée de encoder.files pour rester à jour
   // Modal info
   let infoPath = $state<string | null>(null);
+  let infoPosition = $state<{ x: number; y: number } | null>(null);
   let infoFile = $derived(
     infoPath ? (encoder.files.find((f) => f.path === infoPath) ?? null) : null,
   );
@@ -95,6 +96,7 @@
   let renameFile = $derived(
     renamePath ? (encoder.files.find((f) => f.path === renamePath) ?? null) : null,
   );
+  let renamePosition = $state<{ x: number; y: number } | null>(null);
 
   // Modal pistes par fichier
   let langModalFile = $state<AppFile | null>(null);
@@ -160,7 +162,10 @@
     encoding: 0, analysing: 1, queued: 2, ready: 3, done: 4, error: 5,
   };
 
-  function openInfoModal(f: AppFile) { infoPath = f.path; }
+  function openInfoModal(f: AppFile) { 
+    // On utilise désormais la position du menu contextuel, donc on ne l'appelle plus directement.
+    // Cette fonction est conservée pour compatibilité mais on utilisera l'ouverture depuis le menu.
+  }
   function openRenameModal(f: AppFile) { renamePath = f.path; }
   function handleRename(n: string) {
     if (renamePath) encoder.renameFile(renamePath, n);
@@ -301,14 +306,19 @@
   }
 </script>
 
-{#if infoFile}
-  <FileModal file={infoFile} onclose={() => (infoPath = null)} />
+{#if infoFile && infoPosition}
+  <FileModal
+    file={infoFile}
+    position={infoPosition}
+    onclose={() => { infoPath = null; infoPosition = null; }}
+  />
 {/if}
 
-{#if renameFile}
+{#if renameFile && renamePosition}
   <FileRenameModal
     file={renameFile}
-    onclose={() => (renamePath = null)}
+    position={renamePosition}
+    onclose={() => { renamePath = null; renamePosition = null; }}
     onrename={handleRename}
   />
 {/if}
@@ -347,7 +357,11 @@
       type="button"
       class="ctx-item"
       role="menuitem"
-      onclick={() => { openInfoModal(ctxMenu!.file); closeCtx(); }}
+      onclick={() => {
+        infoPath = ctxMenu!.file.path;
+        infoPosition = { x: ctxMenu!.x, y: ctxMenu!.y + 8 };
+        closeCtx();
+      }}
     >
       <Tag class="w-3.5 h-3.5 shrink-0" />
       Infos
@@ -355,15 +369,19 @@
 
     <!-- Renommer -->
     {#if !encoder.encoding && ctxMenu.file.status !== "analysing"}
-      <button
-        type="button"
-        class="ctx-item"
-        role="menuitem"
-        onclick={() => { openRenameModal(ctxMenu!.file); closeCtx(); }}
-      >
-        <Pencil class="w-3.5 h-3.5 shrink-0" />
-        Renommer
-      </button>
+    <button
+      type="button"
+      class="ctx-item"
+      role="menuitem"
+      onclick={() => {
+        renamePath = ctxMenu!.file.path;
+        renamePosition = { x: ctxMenu!.x, y: ctxMenu!.y + 8 };
+        closeCtx();
+      }}
+    >
+      <Pencil class="w-3.5 h-3.5 shrink-0" />
+      Renommer
+    </button>
     {/if}
 
     <div class="ctx-sep"></div>
@@ -699,12 +717,12 @@
   <div class="flex-1 overflow-auto">
     <table class="w-full text-[11px] file-table">
       <colgroup>
-        <col class="col-name" />
-        <col style="width: 76px;" />
-        <col style="width: 90px;" />
-        <col style="width: 90px;" />
-        <col style="width: 72px;" />
-        <col style="width: 90px;" />
+        <col style="width: 42%;" />   <!-- Fichier de sortie -->
+        <col style="width: 10%;" />   <!-- Taille -->
+        <col style="width: 12%;" />   <!-- Audio -->
+        <col style="width: 12%;" />   <!-- Sous-titres -->
+        <col style="width: 12%;" />   <!-- Temps -->
+        <col style="width: 12%;" />   <!-- Statut -->
       </colgroup>
       <thead
         class="sticky top-0 z-10"
@@ -807,8 +825,6 @@
                   if (inExtractMode && isExtractEligible) {
                     encoder.toggleExtractSelection(file.path);
                   }
-                } else if (!inSelMode) {
-                  openInfoModal(file);
                 }
               }}
               title={inSelMode
@@ -817,7 +833,7 @@
                     ? "Désélectionner"
                     : "Sélectionner"
                   : "Fichier non prêt"
-                : "Cliquer pour voir les infos / renommer"}
+                : ""}
             >
               <!-- Indicateur de sélection et couleur de fond selon le mode -->
               <td class="td-name">
@@ -1515,4 +1531,4 @@
     opacity: 0.7;
     letter-spacing: 0.06em;
   }
-</style>110px
+</style>

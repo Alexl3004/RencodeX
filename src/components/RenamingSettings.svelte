@@ -972,7 +972,7 @@
     background: var(--color-panel);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    padding: 14px 16px 16px;
+    padding: 14px;
     transition: border-color 0.15s, box-shadow 0.15s;
   }
 
@@ -996,7 +996,7 @@
   .format-card-options {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 4px;
   }
 
   .opt-pill {
