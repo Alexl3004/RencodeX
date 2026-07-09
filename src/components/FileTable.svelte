@@ -177,13 +177,15 @@
     );
   }
 
-  function isPending(file: AppFile): boolean {
-    if (!encoder.encoding || file.status !== "ready") return false;
-    const currentIndex = encoder.progress?.file_index;
-    if (currentIndex === undefined) return false;
-    const fileIndex = encoder.files.findIndex((f) => f.path === file.path);
-    return fileIndex > currentIndex;
-  }
+  let pendingPaths = $derived.by(() => {
+    if (!encoder.encoding) return new Set<string>();
+    const currentIdx = encoder.progress?.file_index ?? -1;
+    return new Set(
+      encoder.files
+        .filter((f, i) => f.status === "ready" && i > currentIdx)
+        .map((f) => f.path)
+    );
+  });
 
   let statusCounts = $derived.by(() => {
     const counts = {
@@ -195,9 +197,9 @@
       error: 0,
     };
     for (const f of encoder.files) {
-      if (f.status === "queued" || (f.status === "ready" && isPending(f)))
+      if (f.status === "queued" || (f.status === "ready" && pendingPaths.has(f.path)))
         counts.queued++;
-      else if (f.status === "encoding" && !isPending(f)) counts.encoding++;
+      else if (f.status === "encoding" && !pendingPaths.has(f.path)) counts.encoding++;
       else if (f.status === "ready") counts.ready++;
       else if (f.status === "done") counts.done++;
       else if (f.status === "error") counts.error++;
@@ -210,9 +212,9 @@
     if (filterStatus !== "all") {
       result = result.filter((f) => {
         if (filterStatus === "queued")
-          return f.status === "queued" || isPending(f);
+          return f.status === "queued" || pendingPaths.has(f.path);
         if (filterStatus === "encoding")
-          return f.status === "encoding" && !isPending(f);
+          return f.status === "encoding" && !pendingPaths.has(f.path);
         return f.status === filterStatus;
       });
     }
@@ -239,8 +241,8 @@
           return dir * (da - db);
         }
         if (sortKey === "status") {
-          const sa = STATUS_ORDER[isPending(a) ? "queued" : a.status] ?? 99;
-          const sb = STATUS_ORDER[isPending(b) ? "queued" : b.status] ?? 99;
+          const sa = STATUS_ORDER[pendingPaths.has(a.path) ? "queued" : a.status] ?? 99;
+          const sb = STATUS_ORDER[pendingPaths.has(b.path) ? "queued" : b.status] ?? 99;
           return dir * (sa - sb);
         }
         return 0;
@@ -253,7 +255,7 @@
     if (file.status === "analysing") return "Analyse";
     if (file.status === "encoding") return "En cours";
     if (file.status === "queued") return "En file";
-    if (file.status === "ready") return isPending(file) ? "En file" : "Prêt";
+    if (file.status === "ready") return pendingPaths.has(file.path) ? "En file" : "Prêt";
     if (file.status === "done") return "Terminé";
     if (file.status === "error") return "Erreur";
     return "—";
@@ -271,7 +273,7 @@
 
   function getStatusColor(file: AppFile): string {
     if (file.status === "queued") return STATUS_COLOR.queued;
-    if (file.status === "ready" && isPending(file)) return STATUS_COLOR.pending;
+    if (file.status === "ready" && pendingPaths.has(file.path)) return STATUS_COLOR.pending;
     return STATUS_COLOR[file.status] ?? "";
   }
 
