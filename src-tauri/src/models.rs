@@ -187,6 +187,8 @@ pub struct EncodingPrefs {
     pub year_parentheses: bool,
     #[serde(default = "default_web_source_format")]
     pub web_source_format: String,
+    #[serde(default)]
+    pub keep_japanese_ver: bool,
 }
 
 fn default_nav_layout() -> String { "vertical".to_string() }
@@ -247,6 +249,7 @@ impl Default for EncodingPrefs {
             provider_case: default_provider_case(),
             year_parentheses: default_year_parentheses(),
             web_source_format: default_web_source_format(),
+            keep_japanese_ver: false,
         }
     }
 }

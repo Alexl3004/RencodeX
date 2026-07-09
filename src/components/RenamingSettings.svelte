@@ -13,7 +13,8 @@
     type TagSeparator,
     type ProviderCase,
   } from "$lib/stores/encoder.svelte";
-  import { ArrowUp, ArrowDown, GripVertical, RotateCcw, Tag, AlignLeft, Users, Eye } from "@lucide/svelte";
+  import { ArrowUp, ArrowDown, GripVertical, RotateCcw, Tag, AlignLeft, Users, Eye,   Monitor, Type, Calendar, Film, Disc, Globe, Minus, Building, Languages, CalendarDays, } from "@lucide/svelte";
+
 
   let { onClose }: { onClose?: () => void } = $props();
 
@@ -29,6 +30,7 @@
   let provCase        = $derived(encoder.providerCase);
   let seFormat        = $derived(encoder.seasonEpisodeFormat);
   let team            = $derived(encoder.team);
+  let japVer          = $derived(encoder.keepJapaneseVer);
 
   // ── Navigation sections ──────────────────────────────────────────────────
   type SectionId = "tags" | "format" | "team" | "preview";
@@ -282,202 +284,210 @@
         </div>
       </section>
 
-    <!-- ═══════════════ FORMAT ═══════════════ -->
-    {:else if activeSection === "format"}
-      <section class="content-section">
-        <header class="section-header">
-          <div>
-            <h2 class="section-title">Format</h2>
-            <p class="section-desc">
-              Personnalisez la casse et le format de chaque composant du nom de fichier.
-            </p>
-          </div>
-          <button
-            type="button"
-            class="reset-btn"
-            onclick={() => encoder.resetFormatOptions()}
-            title="Remettre les options par défaut"
-          >
-            <RotateCcw class="w-3 h-3" />
-            Réinitialiser
-          </button>
-        </header>
-
+  <!-- ═══════════════ FORMAT (version améliorée avec aperçu) ═══════════════ -->
+  {:else if activeSection === "format"}
+    <section class="content-section">
+      <header class="section-header">
+        <div>
+          <h2 class="section-title">Format</h2>
+          <p class="section-desc">
+            Personnalisez la casse et le format de chaque composant du nom de fichier.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="reset-btn"
+          onclick={() => encoder.resetFormatOptions()}
+          title="Remettre les options par défaut"
+        >
+          <RotateCcw class="w-3 h-3" />
+          Réinitialiser
+        </button>
+      </header>
+            <!-- Aperçu compact -->
+      <div class="format-preview-box">
+        <div class="fp-row">
+          <span class="fp-label">Série</span>
+          <span class="fp-name">{previewName("series")}</span>
+        </div>
+        <div class="fp-row">
+          <span class="fp-label">Film</span>
+          <span class="fp-name">{previewName("movie")}</span>
+        </div>
+      </div>
+      <!-- Grille des paramètres -->
+      <div class="format-grid">
         <!-- Résolution -->
-        <div class="format-block">
-          <div class="format-block-label">Résolution</div>
-          <div class="format-block-desc">Casse du tag de résolution dans le nom de fichier.</div>
-          <div class="option-pair">
-            {#each [["upper", "1080P", "Majuscules"], ["lower", "1080p", "Minuscules"]] as [val, preview, lbl]}
+        <div class="format-card">
+          <div class="format-card-header">
+            <Monitor class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Résolution</span>
+          </div>
+          <div class="format-card-options">
+            {#each [["upper", "1080P"], ["lower", "1080p"]] as [val, preview]}
               <button
                 type="button"
-                class="option-card {resCase === val ? 'option-card--active' : ''}"
+                class="opt-pill {resCase === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setResolutionCase(val as ResolutionCase)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
         <!-- Titre -->
-        <div class="format-block">
-          <div class="format-block-label">Titre</div>
-          <div class="format-block-desc">Transformation appliquée au titre de l'œuvre.</div>
-          <div class="option-col">
+        <div class="format-card">
+          <div class="format-card-header">
+            <Type class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Titre</span>
+          </div>
+          <div class="format-card-options">
             {#each TITLE_CASE_OPTIONS as opt}
               <button
                 type="button"
-                class="option-row {titleCase === opt.value ? 'option-row--active' : ''}"
+                class="opt-pill {titleCase === opt.value ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setTitleCase(opt.value)}
-              >
-                <div class="or-left">
-                  <span class="or-label">{opt.label}</span>
-                  <span class="or-desc">{opt.desc}</span>
-                </div>
-                <span class="or-preview">{opt.preview}</span>
-              </button>
+              >{opt.label}</button>
             {/each}
           </div>
         </div>
 
         <!-- Saison / Épisode -->
-        <div class="format-block">
-          <div class="format-block-label">Saison / Épisode</div>
-          <div class="format-block-desc">Format du tag de numérotation des épisodes.</div>
-          <div class="option-col">
+        <div class="format-card">
+          <div class="format-card-header">
+            <Calendar class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">S/E format</span>
+          </div>
+          <div class="format-card-options">
             {#each SEASON_EPISODE_FORMATS as f}
               <button
                 type="button"
-                class="option-row {seFormat === f.value ? 'option-row--active' : ''}"
+                class="opt-pill {seFormat === f.value ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setSeasonEpisodeFormat(f.value)}
-              >
-                <div class="or-left">
-                  <span class="or-label">{f.label}</span>
-                </div>
-                <span class="or-preview">{formatSeasonEpisode("S03E01", f.value)}</span>
-              </button>
+              >{f.label}</button>
             {/each}
           </div>
         </div>
 
-        <!-- Codec -->
-        <div class="format-block">
-          <div class="format-block-label">Codec vidéo</div>
-          <div class="format-block-desc">Libellé du codec H.265 dans le nom de fichier.</div>
-          <div class="option-pair option-pair--3">
+        <!-- Codec vidéo -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <Film class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Codec vidéo</span>
+          </div>
+          <div class="format-card-options">
             {#each (["H265", "H.265", "HEVC"] as const) as val}
               <button
                 type="button"
-                class="option-card {codecFmt === val ? 'option-card--active' : ''}"
+                class="opt-pill {codecFmt === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setCodecFormat(val as CodecFormat)}
-              >
-                <span class="oc-preview">{val}</span>
-              </button>
+              >{val}</button>
             {/each}
           </div>
         </div>
 
-        <!-- Source (BluRay) -->
-        <div class="format-block">
-          <div class="format-block-label">Source — BluRay</div>
-          <div class="format-block-desc">Casse du tag BluRay dans le nom de fichier.</div>
-          <div class="option-pair option-pair--3">
-            {#each [["original","BluRay","Original"],["upper","BLURAY","Majuscules"],["lower","bluray","Minuscules"]] as [val, preview, lbl]}
+        <!-- Source BluRay -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <Disc class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Source BluRay</span>
+          </div>
+          <div class="format-card-options">
+            {#each [["original","BluRay"],["upper","BLURAY"],["lower","bluray"]] as [val, preview]}
               <button
                 type="button"
-                class="option-card {sourceCase === val ? 'option-card--active' : ''}"
+                class="opt-pill {sourceCase === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setSourceCase(val as SourceCase)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
-        <!-- Source (WEB) -->
-        <div class="format-block">
-          <div class="format-block-label">Source — WEB</div>
-          <div class="format-block-desc">Format du tag WEB (WEB-DL, WEBRip…) indépendant de la casse BluRay.</div>
-          <div class="option-pair option-pair--3">
-            {#each ([["WEB-DL","WEB-DL","Avec tiret"],["WEBDL","WEBDL","Sans tiret"],["Web-DL","Web-DL","Title case"]] as const) as [val, preview, lbl]}
+        <!-- Source WEB -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <Globe class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Source WEB</span>
+          </div>
+          <div class="format-card-options">
+            {#each ([["WEB-DL","WEB-DL"],["WEBDL","WEBDL"],["Web-DL","Web-DL"]] as const) as [val, preview]}
               <button
                 type="button"
-                class="option-card {webSourceFmt === val ? 'option-card--active' : ''}"
+                class="opt-pill {webSourceFmt === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setWebSourceFormat(val as WebSourceFormat)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
-        <!-- Séparateur de tags -->
-        <div class="format-block">
-          <div class="format-block-label">Séparateur de tags</div>
-          <div class="format-block-desc">Caractère utilisé pour séparer les tags dans le nom de fichier.</div>
-          <div class="option-pair option-pair--3">
-            {#each ([
-              [" ",  "Titre S01E01 BluRay", "Espace"],
-              [".", "Titre.S01E01.BluRay",  "Point"],
-              ["_", "Titre_S01E01_BluRay",  "Underscore"],
-            ] as const) as [val, preview, lbl]}
+        <!-- Séparateur -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <Minus class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Séparateur</span>
+          </div>
+          <div class="format-card-options">
+            {#each ([[" ", "Espace"], [".", "Point"], ["_", "Underscore"]] as const) as [val, preview]}
               <button
                 type="button"
-                class="option-card {tagSep === val ? 'option-card--active' : ''}"
+                class="opt-pill {tagSep === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setTagSeparator(val as TagSeparator)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
         <!-- Provider -->
-        <div class="format-block">
-          <div class="format-block-label">Provider (AMZN, NF…)</div>
-          <div class="format-block-desc">Casse ou masquage du tag provider dans le nom de fichier.</div>
-          <div class="option-pair option-pair--3">
-            {#each ([
-              ["upper",  "AMZN",  "Majuscules"],
-              ["lower",  "amzn",  "Minuscules"],
-              ["hidden", "—",     "Masquer"],
-            ] as const) as [val, preview, lbl]}
+        <div class="format-card">
+          <div class="format-card-header">
+            <Building class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Provider</span>
+          </div>
+          <div class="format-card-options">
+            {#each ([["upper","AMZN"],["lower","amzn"],["hidden","Masqué"]] as const) as [val, preview]}
               <button
                 type="button"
-                class="option-card {provCase === val ? 'option-card--active' : ''}"
+                class="opt-pill {provCase === val ? 'opt-pill--active' : ''}"
                 onclick={() => encoder.setProviderCase(val as ProviderCase)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
-        <!-- Année -->
-        <div class="format-block format-block--last">
-          <div class="format-block-label">Année (films)</div>
-          <div class="format-block-desc">Affichage de l'année détectée pour les films.</div>
-          <div class="option-pair option-pair--2">
-            {#each ([[true,"(2024)","Entre parenthèses"],[false,"2024","Sans parenthèses"]] as const) as [val, preview, lbl]}
+        <!-- (Japanese ver.) -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <Languages class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">(Japanese ver.)</span>
+          </div>
+          <div class="format-card-options">
+            {#each ([[true, "Inclure"], [false, "Exclu"]] as const) as [val, preview]}
               <button
                 type="button"
-                class="option-card {yearParentheses === val ? 'option-card--active' : ''}"
-                onclick={() => encoder.setYearParentheses(val)}
-              >
-                <span class="oc-preview">{preview}</span>
-                <span class="oc-label">{lbl}</span>
-              </button>
+                class="opt-pill {japVer === val ? 'opt-pill--active' : ''}"
+                onclick={() => encoder.setKeepJapaneseVer(val)}
+              >{preview}</button>
             {/each}
           </div>
         </div>
 
-      </section>
+        <!-- Année (films) -->
+        <div class="format-card">
+          <div class="format-card-header">
+            <CalendarDays class="format-card-icon w-[14px] h-[14px]" aria-hidden="true" />
+            <span class="format-card-label">Année (films)</span>
+          </div>
+          <div class="format-card-options">
+            {#each ([[true, "(2024)"], [false, "2024"]] as const) as [val, preview]}
+              <button
+                type="button"
+                class="opt-pill {yearParentheses === val ? 'opt-pill--active' : ''}"
+                onclick={() => encoder.setYearParentheses(val)}
+              >{preview}</button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    </section>
 
     <!-- ═══════════════ TEAM ═══════════════ -->
     {:else if activeSection === "team"}
@@ -487,7 +497,7 @@
             <h2 class="section-title">Team</h2>
             <p class="section-desc">
               Le nom de la team est inséré dans le nom de fichier à la position définie
-              dans l'onglet « Ordre des tags ». Laissez vide pour l'omettre.
+              dans l'onglet « Ordre des tags ». Laissez vide pour l'exclure.
             </p>
           </div>
         </header>
@@ -563,6 +573,10 @@
           <div class="pp-row">
             <span class="pp-key">S/E format</span>
             <span class="pp-val">{formatSeasonEpisode("S03E01", seFormat)}</span>
+          </div>
+          <div class="pp-row">
+            <span class="pp-key">(Japanese ver.)</span>
+            <span class="pp-val">{japVer ? "Inclus" : "Exclus"}</span>
           </div>
           <div class="pp-row">
             <span class="pp-key">Codec</span>
@@ -763,7 +777,7 @@
   }
 
   .content-section {
-    padding: 28px 32px;
+    padding: 18px 12px;
     max-width: 640px;
   }
 
@@ -772,8 +786,8 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 20px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--color-border);
   }
   .section-title {
@@ -947,117 +961,108 @@
     color: var(--color-danger);
   }
 
-  /* ── Format blocks ──────────────────────────────────────────────────────── */
-  .format-block {
-    margin-bottom: 28px;
-    padding-bottom: 28px;
-    border-bottom: 1px solid var(--color-border);
+  /* ── Format grid ───────────────────────────────────────────────────────── */
+  .format-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
   }
-  .format-block--last {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
+
+  .format-card {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px 16px;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
-  .format-block-label {
+
+  .format-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+
+  .format-card-label {
     font-family: "Geist Mono", monospace;
     font-size: 10px;
-    letter-spacing: 0.06em;
+    font-weight: 500;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-subtext);
-    margin-bottom: 4px;
   }
-  .format-block-desc {
+
+  .format-card-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .opt-pill {
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
     font-size: 11px;
-    color: var(--color-subtext2);
-    margin-bottom: 12px;
-    line-height: 1.5;
-  }
-
-  /* Option pair (2 colonnes) */
-  .option-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .option-pair--3 {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .option-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    padding: 12px 8px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background: var(--color-panel);
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .option-card:hover { border-color: var(--color-subtext2); }
-  .option-card--active {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel));
-  }
-  .oc-preview {
-    font-family: "Geist Mono", monospace;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--color-subtext);
-    transition: color 0.15s;
-  }
-  .option-card--active .oc-preview { color: var(--color-accent); }
-  .oc-label {
-    font-size: 9px;
-    color: var(--color-subtext2);
-  }
-
-  /* Option col (liste de rows) */
-  .option-col {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-  }
-  .option-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 11px 14px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border);
-    background: var(--color-panel);
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s, background 0.15s;
-    gap: 12px;
-  }
-  .option-row:hover { border-color: var(--color-subtext2); }
-  .option-row--active {
-    border-color: var(--color-accent);
-    background: color-mix(in srgb, var(--color-accent) 7%, var(--color-panel));
-  }
-  .or-left { display: flex; flex-direction: column; gap: 2px; }
-  .or-label {
-    font-size: 12px;
     font-weight: 500;
     color: var(--color-subtext);
-    transition: color 0.15s;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    white-space: nowrap;
   }
-  .option-row--active .or-label { color: var(--color-accent); }
-  .or-desc {
+  .opt-pill:hover {
+    border-color: var(--color-subtext2);
+    background: var(--color-panel);
+  }
+  .opt-pill--active {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  }
+  .opt-pill--active:hover {
+    background: color-mix(in srgb, var(--color-accent) 85%, #000);
+  }
+  /* ── Aperçu compact dans Format ─────────────────────────────────────────── */
+  .format-preview-box {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+  }
+
+  .fp-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 3px 0;
+  }
+  .fp-row:first-child {
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+  }
+
+  .fp-label {
     font-family: "Geist Mono", monospace;
     font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     color: var(--color-subtext2);
-  }
-  .or-preview {
-    font-family: "Geist Mono", monospace;
-    font-size: 11px;
-    color: var(--color-subtext2);
-    white-space: nowrap;
+    width: 40px;
     flex-shrink: 0;
   }
-  .option-row--active .or-preview { color: var(--color-accent); opacity: 0.85; }
+
+  .fp-name {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--color-text);
+    word-break: break-all;
+  }
 
   /* ── Team ───────────────────────────────────────────────────────────────── */
   .field-block { margin-bottom: 20px; }

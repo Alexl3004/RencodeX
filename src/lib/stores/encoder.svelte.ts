@@ -256,7 +256,8 @@ export type TagId =
   | "codec"
   | "bitdepth"
   | "audioCodec"
-  | "team";
+  | "team"
+  | "japver";
 
 export const DEFAULT_TAG_ORDER: TagId[] = [
   "title",
@@ -269,6 +270,7 @@ export const DEFAULT_TAG_ORDER: TagId[] = [
   "bitdepth",
   "audioCodec",
   "team",
+  "japver"
 ];
 
 export type ResolutionCase  = "upper" | "lower";
@@ -289,6 +291,7 @@ export interface NamingOptions {
   webSourceFormat?: WebSourceFormat;
   tagSeparator?:    TagSeparator;
   providerCase?:    ProviderCase;
+  keepJapaneseVer?: boolean;
 }
 
 export const TAG_LABELS: Record<TagId, string> = {
@@ -302,6 +305,7 @@ export const TAG_LABELS: Record<TagId, string> = {
   bitdepth: "Profondeur (10bit)",
   audioCodec: "Codec audio (AAC…)",
   team: "Team",
+  japver: "(Japanese ver.)",
 };
 
 export function buildOutputName(
@@ -323,6 +327,7 @@ export function buildOutputName(
     webSourceFormat = "WEB-DL",
     tagSeparator    = " ",
     providerCase    = "upper",
+    keepJapaneseVer = false,
   } = options;
 
   const applyTitleCase = (t: string): string => {
@@ -396,6 +401,7 @@ export function buildOutputName(
     bitdepth:   "10bit",
     audioCodec: audioTag,
     team:       team.trim(),
+    japver:     keepJapaneseVer ? "(Japanese ver.)" : "",
   };
 
   const sep = tagSeparator;
@@ -533,6 +539,7 @@ function createEncoder() {
   let tagSeparator     = $state<TagSeparator>(" ");
   let providerCase     = $state<ProviderCase>("upper");
   let team = $state("");
+  let keepJapaneseVer = $state<boolean>(false);
 
   let audioMode = $state<AudioMode>("reencode");
   let audioBitrate = $state(192);
@@ -629,6 +636,12 @@ function createEncoder() {
   }
   function setTeam(value: string) {
     team = value;
+    saveRenamingPrefs();
+    persistPrefs();
+    refreshOutputNames();
+  }
+  function setKeepJapaneseVer(value: boolean) {
+    keepJapaneseVer = value;
     saveRenamingPrefs();
     persistPrefs();
     refreshOutputNames();
@@ -751,6 +764,7 @@ function createEncoder() {
       tag_separator:     tagSeparator,
       provider_case:     providerCase,
       team,
+      keep_japanese_ver: keepJapaneseVer,
       audio_mode: audioMode,
       audio_bitrate: audioBitrate,
       spatial_aq: spatialAq,
@@ -814,6 +828,7 @@ function createEncoder() {
         web_source_format?: string;
         tag_separator?: string;
         provider_case?: string;
+        keep_japanese_ver?: boolean;
       }>("load_encoding_prefs");
 
       if (typeof prefs.crf === "number") crf = prefs.crf;
@@ -853,6 +868,8 @@ function createEncoder() {
       if (["upper","lower","hidden"].includes(prefs.provider_case ?? ""))
         providerCase = prefs.provider_case as ProviderCase;
       if (typeof prefs.team === "string") team = prefs.team;
+      if (typeof prefs.keep_japanese_ver === "boolean")
+        keepJapaneseVer = prefs.keep_japanese_ver;
       if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
         audioMode = prefs.audio_mode;
       if (typeof prefs.audio_bitrate === "number")
@@ -933,6 +950,7 @@ function createEncoder() {
         tag_separator:     tagSeparator,
         provider_case:     providerCase,
         team,
+        keepJapaneseVer,
       }));
     } catch { /* storage indisponible */ }
   }
@@ -972,6 +990,8 @@ function createEncoder() {
       if (["upper","lower","hidden"].includes(p.provider_case as string))
         providerCase = p.provider_case as ProviderCase;
       if (typeof p.team === "string") team = p.team;
+      if (typeof p.keepJapaneseVer === "boolean")
+        keepJapaneseVer = p.keepJapaneseVer;
     } catch { /* JSON invalide */ }
   }
 
@@ -1112,6 +1132,7 @@ function createEncoder() {
             webSourceFormat: webSourceFormat,
             tagSeparator:    tagSeparator,
             providerCase:    providerCase,
+            keepJapaneseVer,
           },
         );
         const updated: AppFile = {
@@ -1507,6 +1528,7 @@ function createEncoder() {
     const _selSubs        = selSubs;
     const _fileSelAudio   = fileSelAudio;
     const _fileSelSubs    = fileSelSubs;
+    const _keepJapVer     = keepJapaneseVer;
 
     files = files.map((f) => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done")
@@ -1533,6 +1555,7 @@ function createEncoder() {
           webSourceFormat: _webFmt,
           tagSeparator:    _tagSep,
           providerCase:    _provCase,
+          keepJapaneseVer: _keepJapVer,
         },
       );
       return { ...f, output_name: name };
@@ -1665,7 +1688,9 @@ function createEncoder() {
     preset = "p5";
     seasonEpisodeFormat = "S01E01";
     tagOrder = [...DEFAULT_TAG_ORDER];
+    disabledTags = new Set<TagId>(["japver"]);
     team = "";
+    keepJapaneseVer = false;
     audioOverrides = {};
     subOverrides = {};
     globalCodecOverride = {};
@@ -1797,6 +1822,7 @@ function createEncoder() {
     get team() {
       return team;
     },
+    get keepJapaneseVer() { return keepJapaneseVer; },
     get audioMode() {
       return audioMode;
     },
@@ -1861,7 +1887,12 @@ function createEncoder() {
     },
 
     getDisplayName(file: AppFile): string {
-      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, { disabledTags, resolutionCase, titleCase, codecFormat, sourceCase, yearParentheses, webSourceFormat, tagSeparator, providerCase });
+      return applySeFormat(file, seasonEpisodeFormat, tagOrder, team, {
+        disabledTags, resolutionCase, titleCase, codecFormat,
+        sourceCase, yearParentheses, webSourceFormat, tagSeparator,
+        providerCase,
+        keepJapaneseVer,
+      });
     },
     setCrf,
     setPreset,
@@ -1884,6 +1915,7 @@ function createEncoder() {
       refreshOutputNames();
     },
     setTeam,
+    setKeepJapaneseVer,
     setAudioMode,
     setAudioBitrate,
     setSpatialAq,
