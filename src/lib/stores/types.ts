@@ -29,6 +29,7 @@ export type SubExtractNaming = "source" | "cleaned";
 export type SubExtractPathMode = "source" | "downloads" | "custom";
 
 export interface EncodeJob {
+  job_id: string;
   input_path: string;
   output_path: string;
   audio_langs: string[];
@@ -62,6 +63,7 @@ export interface ProgressEvent {
 }
 
 export interface FileResult {
+  job_id: string;
   path: string;
   name: string;
   status: "ok" | "error" | "cancelled";

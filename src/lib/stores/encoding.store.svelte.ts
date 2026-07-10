@@ -13,6 +13,15 @@ import { formatDuration, formatMb, codecDefault } from "./naming";
 import { prefs } from "./prefs.store.svelte";
 import { filesStore } from "./files.store.svelte";
 
+// ─── Génère un UUID v4 simple sans dépendance externe ────────────────────────
+
+function uuid(): string {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 // ─── Store encodage ───────────────────────────────────────────────────────────
 
 function createEncodingStore() {
@@ -29,6 +38,9 @@ function createEncodingStore() {
 
   // Ordre des chemins du batch en cours (pour résoudre file_index → path)
   let encodingFilePaths = $state<string[]>([]);
+
+  // Map job_id → path — source de vérité pour la corrélation des events
+  let jobIdToPath = new Map<string, string>();
 
   let _unlisten: UnlistenFn[] = [];
 
@@ -61,13 +73,23 @@ function createEncodingStore() {
 
     const u2 = await listen<any>("encode-file-done", (e) => {
       const p = e.payload;
-      const f = filesStore.files.find(
-        (f) => f.path === p.path || f.filename === p.name,
-      );
-      if (f) {
-        f.status = p.status === "ok" ? "done" : "error";
-        if (p.status === "ok") f.result = p;
+
+      // ── Corrélation exclusivement par job_id ─────────────────────────────
+      // On retrouve le chemin exact depuis la map construite au moment du lancement.
+      // Aucun risque de mismatch même si deux fichiers ont le même nom.
+      const targetPath = jobIdToPath.get(p.job_id);
+      if (!targetPath) {
+        console.warn(`[encode-file-done] job_id inconnu : ${p.job_id}`);
+        return;
       }
+
+      filesStore.files = filesStore.files.map((f) => {
+        if (f.path !== targetPath) return f;
+        const updated = { ...f, status: p.status === "ok" ? "done" : "error" } as typeof f;
+        if (p.status === "ok") updated.result = p;
+        return updated;
+      });
+
       if (p.status === "ok") {
         const gain =
           p.original_mb > 0
@@ -112,7 +134,13 @@ function createEncodingStore() {
       return;
     }
 
+    // ── Construire les jobs avec un job_id unique par fichier ─────────────
+    jobIdToPath = new Map();
+
     const jobs: EncodeJob[] = targetFiles.map((f) => {
+      const id = uuid();
+      jobIdToPath.set(id, f.path);          // enregistrement dans la map
+
       const audioCodecOvr: Record<string, string> = {};
       f.streams
         .filter((s) => s.codec_type === "audio")
@@ -125,6 +153,7 @@ function createEncodingStore() {
       const outExt = prefs.container === "mp4" ? ".mp4" : ".mkv";
       const dir    = outputDir.replace(/[\\\/]+$/, "");
       return {
+        job_id:                  id,         // ← transmis au backend
         input_path:              f.path,
         output_path:             `${dir}\\${f.output_name}${outExt}`,
         audio_langs:             [...(filesStore.fileSelAudio.get(f.path) ?? filesStore.selAudio)],
@@ -220,13 +249,13 @@ function createEncodingStore() {
       paused                = false;
       progress              = null;
       encodingFilePaths     = [];
+      jobIdToPath           = new Map();   // nettoyage de la map
       filesStore.selectedForEncoding = new Set();
       filesStore.encodeSelectionMode = false;
     }
   }
 
   async function cancelEncoding() {
-    // Si en pause, reprendre d'abord pour que ffmpeg puisse recevoir le signal de kill
     if (paused) {
       await invoke("resume_encoding");
       paused = false;

@@ -25,6 +25,7 @@ pub struct FileAnalysis {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct EncodeJob {
+    pub job_id: String,
     pub input_path: String,
     pub output_path: String,
     pub audio_langs: Vec<String>,
@@ -58,6 +59,7 @@ pub struct ProgressEvent {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct FileResult {
+    pub job_id: String,
     pub path: String,
     pub name: String,
     pub status: String,

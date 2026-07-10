@@ -154,6 +154,7 @@ pub async fn start_encoding(
     for (idx, job) in jobs.iter().enumerate() {
         if lock_encoder().cancel {
             results.push(FileResult {
+                job_id: job.job_id.clone(),
                 path: job.input_path.clone(),
                 name: filename_of(&job.input_path),
                 status: "cancelled".to_string(),
@@ -297,6 +298,7 @@ pub async fn start_encoding(
             Ok(c) => c,
             Err(e) => {
                 results.push(FileResult {
+                    job_id: job.job_id.clone(),
                     path: job.input_path.clone(),
                     name: filename_of(&job.input_path),
                     status: "error".to_string(),
@@ -573,21 +575,28 @@ pub async fn start_encoding(
         }
 
         results.push(FileResult {
+            job_id: job.job_id.clone(), 
             path: job.input_path.clone(),
             name: file_name.clone(),
             status: if cancelled { "cancelled".to_string() }
                     else if ok { "ok".to_string() }
                     else { "error".to_string() },
             original_mb, encoded_mb, duration_secs: elapsed,
-            error_msg: if ok || cancelled { None } else { ffmpeg_stderr },
+            error_msg: if ok || cancelled { None } else { ffmpeg_stderr.clone() },
         });
 
         let _ = app.emit("encode-file-done", serde_json::json!({
-            "index": idx,
-            "name": filename_of(&job.input_path),
-            "status": if ok { "ok" } else { "error" },
+            "job_id":      job.job_id,                   
+            "index":       idx,
+            "path":        job.input_path,                
+            "name":        filename_of(&job.input_path),
+            "status":      if ok { "ok" } else { "error" },
             "original_mb": original_mb,
-            "encoded_mb": encoded_mb,
+            "encoded_mb":  encoded_mb,
+            "error_msg":   if ok || cancelled { serde_json::Value::Null }
+                           else { serde_json::Value::String(
+                               ffmpeg_stderr.clone().unwrap_or_default()
+                           )},
         }));
 
         { lock_encoder().current_out = None; }
