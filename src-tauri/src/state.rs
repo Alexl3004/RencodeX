@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use once_cell::sync::Lazy;
+use std::os::windows::process::CommandExt;
 
 pub struct EncoderState {
     pub cancel: bool,
@@ -46,4 +47,27 @@ pub static ENCODER: Lazy<Arc<Mutex<EncoderState>>> = Lazy::new(|| {
 
 pub fn lock_encoder() -> std::sync::MutexGuard<'static, EncoderState> {
     ENCODER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Tue proprement le process ffmpeg en cours (si existant) et marque l'encodeur
+/// comme annulé. Appelé depuis le handler on-close-requested ET depuis cancel_encoding.
+/// Retourne le chemin du fichier de sortie partiel à supprimer, si applicable.
+pub fn kill_ffmpeg_process() -> Option<String> {
+    let (pid_opt, out_opt) = {
+        let mut s = lock_encoder();
+        if !s.encoding {
+            return None;
+        }
+        s.cancel = true;
+        (s.child_pid.take(), s.current_out.clone())
+    };
+
+    if let Some(pid) = pid_opt {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F", "/T"])
+            .creation_flags(0x08000000)
+            .spawn();
+    }
+
+    out_opt
 }

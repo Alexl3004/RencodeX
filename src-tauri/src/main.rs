@@ -15,9 +15,9 @@ mod entities;
 
 use crate::utils::resolve_config;
 use crate::commands::load_config;
+use tauri::Manager;
 
 fn main() {
-    // Initialise la base SQLite (migration JSON→DB incluse) avant tout le reste.
     tauri::async_runtime::block_on(db::init());
 
     let cfg = resolve_config(load_config());
@@ -66,6 +66,52 @@ fn main() {
             commands::list_subtitle_tracks,
             commands::extract_subtitles,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let is_encoding = crate::state::lock_encoder().encoding;
+
+                if !is_encoding {
+                    return;
+                }
+
+                api.prevent_close();
+
+                let window = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+
+                    let (tx, rx) = tokio::sync::oneshot::channel::<bool>();
+
+                    window
+                        .app_handle()
+                        .dialog()
+                        .message("Un encodage est en cours.\n\nFermer l'application va arrêter FFmpeg et supprimer le fichier en cours de traitement.")
+                        .title("Fermeture — encodage actif")
+                        .buttons(MessageDialogButtons::OkCancelCustom(
+                            "Fermer quand même".to_string(),
+                            "Annuler".to_string(),
+                        ))
+                        .show(move |confirmed| {
+                            let _ = tx.send(confirmed);
+                        });
+
+                    let confirmed = rx.await.unwrap_or(false);
+
+                    if !confirmed {
+                        return;
+                    }
+
+                    let out_opt = crate::state::kill_ffmpeg_process();
+
+                    if let Some(out_path) = out_opt {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+                        let _ = crate::utils::delete_partial_output(&out_path);
+                    }
+
+                    window.destroy().ok();
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
