@@ -6,7 +6,7 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { theme, DARK_COMBOS, LIGHT_COMBOS } from "$lib/stores/theme.svelte";
   import { Sun, Moon } from "@lucide/svelte";
-  import { Eye, EyeOff, X, Check, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette } from '@lucide/svelte';
+  import { Eye, EyeOff, X, Check, RotateCcw, FolderInput, Monitor, Cpu, FolderOpen, MessageSquare, Terminal, Palette, AlertTriangle, CircleCheck } from '@lucide/svelte';
 
   type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
   let activeTab = $state<TabId>("interface");
@@ -344,6 +344,41 @@
       el.setSelectionRange(cursorPos, cursorPos);
     });
   }
+
+  // ── Vérification FFmpeg live ───────────────────────────────────────────────
+
+  type FfmpegCheckResult = {
+    path: string;
+    exists: boolean;
+    executable: boolean;
+    version: string | null;
+  };
+
+  let ffmpegCheck    = $state<FfmpegCheckResult | null>(null);
+  let ffmpegChecking = $state(false);
+  let ffmpegCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function runFfmpegCheck(path: string) {
+    ffmpegChecking = true;
+    try {
+      ffmpegCheck = await invoke<FfmpegCheckResult>("check_ffmpeg", { path });
+    } catch {
+      ffmpegCheck = null;
+    } finally {
+      ffmpegChecking = false;
+    }
+  }
+
+  /** Débounce de 500 ms — déclenché à chaque frappe dans l'input chemin ffmpeg. */
+  function scheduleFfmpegCheck(path: string) {
+    if (ffmpegCheckTimer) clearTimeout(ffmpegCheckTimer);
+    ffmpegCheckTimer = setTimeout(() => runFfmpegCheck(path), 500);
+  }
+
+  /** Lance un check immédiat dès qu'on bascule sur l'onglet FFmpeg. */
+  $effect(() => {
+    if (activeTab === "ffmpeg") runFfmpegCheck(form.ffmpeg_path);
+  });
 
   // ── Effets ─────────────────────────────────────────────────────────────────
 
@@ -685,15 +720,69 @@
           <p class="section-desc">Chemin vers le binaire ffmpeg utilisé pour l'encodage.</p>
         </div>
       </header>
+
       <div>
         <label for="ffmpeg-path" class="field-label">Chemin vers ffmpeg.exe</label>
-        <input
-          id="ffmpeg-path"
-          type="text"
-          bind:value={form.ffmpeg_path}
-          placeholder="C:\Outil\ffmpeg\bin\ffmpeg.exe"
-          class="field-input w-full px-3 py-2"
-        />
+
+        <!-- Input + bouton parcourir -->
+        <div class="flex gap-2 mb-2">
+          <input
+            id="ffmpeg-path"
+            type="text"
+            bind:value={form.ffmpeg_path}
+            oninput={() => scheduleFfmpegCheck(form.ffmpeg_path)}
+            placeholder="C:\Outil\ffmpeg\bin\ffmpeg.exe"
+            class="field-input flex-1 px-3 py-2"
+            class:field-input--error={ffmpegCheck && (!ffmpegCheck.exists || !ffmpegCheck.executable)}
+            class:field-input--ok={ffmpegCheck?.exists && ffmpegCheck?.executable}
+            aria-describedby="ffmpeg-status"
+          />
+          <button
+            type="button"
+            onclick={async () => {
+              const selected = await openDialog({
+                multiple: false,
+                filters: [{ name: "Exécutable", extensions: ["exe", "*"] }],
+              });
+              if (typeof selected === "string" && selected) {
+                form.ffmpeg_path = selected;
+                runFfmpegCheck(selected);
+              }
+            }}
+            class="btn btn-secondary font-mono text-[11px] px-3"
+            title="Parcourir"
+            aria-label="Choisir le binaire ffmpeg"
+          >
+            <FolderInput class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <!-- Badge de statut -->
+        <div id="ffmpeg-status" class="ffmpeg-status" aria-live="polite">
+          {#if ffmpegChecking}
+            <span class="ffmpeg-status--checking">
+              <span class="spinner spinner--xs" aria-hidden="true"></span>
+              Vérification…
+            </span>
+          {:else if ffmpegCheck === null}
+            <!-- pas encore vérifié -->
+          {:else if !ffmpegCheck.exists}
+            <span class="ffmpeg-status--error">
+              <AlertTriangle class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              Binaire introuvable — l'encodage échouera
+            </span>
+          {:else if !ffmpegCheck.executable}
+            <span class="ffmpeg-status--error">
+              <AlertTriangle class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              Fichier présent mais non exécutable
+            </span>
+          {:else}
+            <span class="ffmpeg-status--ok">
+              <CircleCheck class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              ffmpeg {ffmpegCheck.version ?? ""}  —  OK
+            </span>
+          {/if}
+        </div>
       </div>
     </section>
 
@@ -1875,4 +1964,36 @@
     white-space: nowrap;
   }
   .combo-btn--active .combo-label { color: var(--color-accent); }
+
+  /* ── FFmpeg status badge ────────────────────────────────────────────────── */
+  .ffmpeg-status {
+    min-height: 20px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+  }
+  .ffmpeg-status--checking,
+  .ffmpeg-status--ok,
+  .ffmpeg-status--error {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .ffmpeg-status--checking { color: var(--color-subtext); }
+  .ffmpeg-status--ok       { color: #4ade80; }
+  .ffmpeg-status--error    { color: #f87171; }
+
+  .field-input--error { border-color: #f87171 !important; }
+  .field-input--ok    { border-color: #4ade80 !important; }
+
+  /* Variante xs du spinner existant */
+  .spinner--xs {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid color-mix(in srgb, currentColor 30%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>

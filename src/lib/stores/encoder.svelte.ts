@@ -10,6 +10,13 @@ import { stats } from "./stats.svelte";
 // Colle les trois stores ensemble et expose l'API publique utilisée par les
 // composants Svelte. Gère aussi init, outputDir, navLayout, reset, clearSession.
 
+type FfmpegCheckResult = {
+  path: string;
+  exists: boolean;
+  executable: boolean;
+  version: string | null;
+};
+
 function createEncoder() {
   let outputDir      = $state("");
   let navLayout      = $state<"vertical" | "horizontal">("vertical");
@@ -30,6 +37,34 @@ function createEncoder() {
     encodingStore.log(`Dossier de sortie : ${outputDir}`, "info");
     await encodingStore.listenEvents();
     stats.init();
+
+    // ── Vérification FFmpeg au démarrage ──────────────────────────────────
+    // On passe path="" pour que le backend utilise le chemin résolu depuis
+    // la config + les variables d'environnement (resolve_config).
+    try {
+      const ffCheck = await invoke<FfmpegCheckResult>("check_ffmpeg", { path: "" });
+
+      if (!ffCheck.exists) {
+        encodingStore.log(
+          `⚠️ FFmpeg introuvable : « ${ffCheck.path} » — configurez le chemin dans Paramètres › FFmpeg`,
+          "warn"
+        );
+      } else if (!ffCheck.executable) {
+        encodingStore.log(
+          `⚠️ FFmpeg présent mais non exécutable : « ${ffCheck.path} » — vérifiez les permissions`,
+          "warn"
+        );
+      } else {
+        encodingStore.log(
+          `FFmpeg ${ffCheck.version ? ffCheck.version + "  " : ""}${ffCheck.path}`,
+          "info"
+        );
+      }
+    } catch (e) {
+      encodingStore.log(`Impossible de vérifier FFmpeg : ${e}`, "warn");
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     window.addEventListener("beforeunload", () => {
       prefs.flush();
       prefs.saveRenamingPrefs();

@@ -109,6 +109,84 @@ pub fn get_discord_field_catalog() -> serde_json::Value {
     serde_json::to_value(crate::discord_fields::full_catalog()).unwrap_or_default()
 }
 
+// ── Vérification FFmpeg ────────────────────────────────────────────────────────
+
+#[derive(serde::Serialize, Debug)]
+pub struct FfmpegCheckResult {
+    pub path: String,
+    pub exists: bool,
+    pub executable: bool,
+    pub version: Option<String>,
+}
+
+/// Vérifie qu'un binaire ffmpeg est présent et exécutable.
+///
+/// Si `path` est vide, utilise le chemin résolu depuis la config + les variables
+/// d'environnement (même logique que `resolve_config`), ce qui permet à l'UI
+/// d'appeler cette commande sans dupliquer la résolution.
+#[tauri::command]
+pub async fn check_ffmpeg(path: String) -> FfmpegCheckResult {
+    use std::path::Path;
+
+    let resolved_path = if path.is_empty() {
+        resolve_config(load_config()).ffmpeg_path
+    } else {
+        path
+    };
+
+    let p = Path::new(&resolved_path);
+
+    // Étape 1 : le fichier existe-t-il ?
+    if !p.exists() || !p.is_file() {
+        return FfmpegCheckResult {
+            path: resolved_path,
+            exists: false,
+            executable: false,
+            version: None,
+        };
+    }
+
+    // Étape 2 : est-il exécutable (lance `ffmpeg -version`) ?
+    let result = tokio::process::Command::new(&resolved_path)
+        .arg("-version")
+        // Évite l'ouverture d'une console CMD sur Windows
+        .creation_flags(0x08000000)
+        .output()
+        .await;
+
+    match result {
+        Err(_) => FfmpegCheckResult {
+            path: resolved_path,
+            exists: true,
+            executable: false,
+            version: None,
+        },
+        Ok(out) => {
+            // Première ligne stdout : "ffmpeg version 7.1 Copyright ..."
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let version = stdout
+                .lines()
+                .next()
+                .and_then(|l| l.split("version").nth(1))
+                .map(|v| v.split_whitespace().next().unwrap_or("").to_string())
+                .filter(|v| !v.is_empty());
+
+            // ffmpeg retourne 1 sur `-version` en cas de build particulier ;
+            // on considère qu'avoir du contenu stdout suffit à valider.
+            let executable = out.status.success() || !out.stdout.is_empty();
+
+            FfmpegCheckResult {
+                path: resolved_path,
+                exists: true,
+                executable,
+                version,
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub async fn analyze_file(path: String) -> Result<FileAnalysis, String> {
     analyze_file_impl(path).await

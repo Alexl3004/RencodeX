@@ -22,6 +22,19 @@ fn main() {
 
     let cfg = resolve_config(load_config());
 
+    // ── Vérification FFmpeg au démarrage ──────────────────────────────────────
+    // On vérifie avant tout que le binaire configuré est accessible.
+    // L'erreur apparaîtra dans les logs console et, côté Svelte, dans le panneau
+    // de logs via la commande `check_ffmpeg` appelée dans `encoder.init()`.
+    if !std::path::Path::new(&cfg.ffmpeg_path).exists() {
+        eprintln!(
+            "[startup] AVERTISSEMENT : ffmpeg introuvable à « {} ».\n\
+             Configurez le chemin dans Paramètres › FFmpeg avant d'encoder.",
+            cfg.ffmpeg_path
+        );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if cfg.discord_enabled
         && !cfg.discord_bot_token.is_empty()
         && !cfg.discord_cmd_channel_id.is_empty()
@@ -56,6 +69,7 @@ fn main() {
             commands::save_encoding_prefs,
             commands::get_effective_config,
             commands::get_discord_field_catalog,
+            commands::check_ffmpeg,
             commands::send_discord_notification,
             commands::send_discord_start_notification,
             commands::send_discord_file_done_notification,
