@@ -315,8 +315,19 @@ pub async fn start_encoding(
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
 
-        // Drainer stderr en arriere-plan pour capturer les erreurs ffmpeg.
-        let stderr_buf = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        // Drainer stderr en arrière-plan dans un buffer circulaire borné.
+        //
+        // Stratégie : on ne garde que les STDERR_MAX_LINES dernières lignes de ffmpeg,
+        // tronquées à STDERR_MAX_LINE_BYTES chacune. Cela borne la mémoire à ~1 MB
+        // dans le pire cas (500 lignes × 2 048 octets) quelle que soit la durée de
+        // l'encodage, tout en conservant les lignes les plus récentes — les seules
+        // utiles pour diagnostiquer une erreur ffmpeg.
+        const STDERR_MAX_LINES: usize = 500;
+        const STDERR_MAX_LINE_BYTES: usize = 2048;
+
+        let stderr_buf = std::sync::Arc::new(
+            std::sync::Mutex::new(std::collections::VecDeque::<String>::with_capacity(STDERR_MAX_LINES + 1))
+        );
         let stderr_buf_clone = stderr_buf.clone();
         let stderr_task = {
             let stderr = child.stderr.take().unwrap();
@@ -325,8 +336,17 @@ pub async fn start_encoding(
                 let mut err_line = String::new();
                 while let Ok(n) = stderr_reader.read_line(&mut err_line).await {
                     if n == 0 { break; }
-                    if let Ok(mut buf) = stderr_buf_clone.lock() {
-                        buf.push_str(&err_line);
+                    // Tronquer les lignes anormalement longues (bannières, dumps hex…)
+                    let stored = if err_line.len() > STDERR_MAX_LINE_BYTES {
+                        format!("{}…[tronqué]\n", &err_line[..STDERR_MAX_LINE_BYTES])
+                    } else {
+                        err_line.clone()
+                    };
+                    if let Ok(mut ring) = stderr_buf_clone.lock() {
+                        if ring.len() >= STDERR_MAX_LINES {
+                            ring.pop_front(); // éjecte la plus ancienne
+                        }
+                        ring.push_back(stored);
                     }
                     err_line.clear();
                 }
@@ -484,8 +504,12 @@ pub async fn start_encoding(
         let status = child.wait().await;
         // Attendre que la tâche stderr ait fini de lire avant d'utiliser le buffer.
         let _ = stderr_task.await;
-        let ffmpeg_stderr: Option<String> = stderr_buf.lock().ok().and_then(|buf| {
-            if buf.trim().is_empty() { None } else { Some(buf.clone()) }
+        // Matérialise le buffer circulaire en une seule String pour les rapports d'erreur.
+        // On ne joint que les dernières lignes (déjà bornées par STDERR_MAX_LINES).
+        let ffmpeg_stderr: Option<String> = stderr_buf.lock().ok().and_then(|ring| {
+            if ring.is_empty() { return None; }
+            let joined: String = ring.iter().map(|s| s.as_str()).collect::<Vec<_>>().join("");
+            if joined.trim().is_empty() { None } else { Some(joined) }
         });
         let elapsed = file_start.elapsed().as_secs_f64();
         let cancelled = lock_encoder().cancel;
