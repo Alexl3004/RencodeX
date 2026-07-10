@@ -576,8 +576,11 @@ pub async fn send_email_report(
 }
 
 pub mod discord_bot {
-    use std::os::windows::process::CommandExt;
-    use crate::state::lock_encoder;
+    use std::sync::atomic::Ordering;
+    use crate::state::{
+        ENCODING, snapshot,
+        pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process,
+    };
     use serenity::async_trait;
     use serenity::model::channel::Message;
     use serenity::model::gateway::Ready;
@@ -603,55 +606,34 @@ pub mod discord_bot {
                 "!status" => format_status(),
                 "!queue"  => format_queue(),
                 "!skip" => {
-                    let (encoding, pid_opt) = {
-                        let s = lock_encoder();
-                        (s.encoding, s.child_pid)
-                    };
-                    if encoding {
-                        if let Some(pid) = pid_opt {
-                            lock_encoder().cancel = true;
-                            let _ = std::process::Command::new("taskkill")
-                                .args(["/PID", &pid.to_string(), "/F", "/T"])
-                                .creation_flags(0x08000000)
-                                .spawn();
-                            "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
-                        } else {
-                            "ℹ️ Aucun processus en cours à interrompre.".to_string()
-                        }
+                    if ENCODING.load(Ordering::Acquire) {
+                        kill_ffmpeg_process();
+                        "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
                     } else {
                         "ℹ️ Aucun encodage en cours.".to_string()
                     }
                 }
                 "!cancel" => {
-                    let (encoding, pid_opt) = {
-                        let s = lock_encoder();
-                        (s.encoding, s.child_pid)
-                    };
-                    if encoding {
-                        lock_encoder().cancel = true;
-                        if let Some(pid) = pid_opt {
-                            let _ = std::process::Command::new("taskkill")
-                                .args(["/PID", &pid.to_string(), "/F", "/T"])
-                                .creation_flags(0x08000000)
-                                .spawn();
-                        }
+                    if ENCODING.load(Ordering::Acquire) {
+                        kill_ffmpeg_process();
                         "⏹ Encodage annulé depuis Discord.".to_string()
                     } else {
                         "ℹ️ Aucun encodage en cours.".to_string()
                     }
                 }
                 "!pause" => {
-                    let encoding = lock_encoder().encoding;
-                    if encoding {
-                        lock_encoder().pause = true;
-                        "⏸ Pause demandée (prendra effet au prochain fichier).".to_string()
+                    if pause_ffmpeg_process() {
+                        "⏸ Encodage mis en pause.".to_string()
                     } else {
-                        "ℹ️ Aucun encodage en cours.".to_string()
+                        "ℹ️ Impossible de mettre en pause (aucun encodage actif ou déjà en pause).".to_string()
                     }
                 }
                 "!resume" => {
-                    lock_encoder().pause = false;
-                    "▶️ Reprise demandée.".to_string()
+                    if resume_ffmpeg_process() {
+                        "▶️ Encodage repris.".to_string()
+                    } else {
+                        "ℹ️ Impossible de reprendre (aucune pause active).".to_string()
+                    }
                 }
                 _ => return,
             };
@@ -679,13 +661,13 @@ pub mod discord_bot {
     }
 
     fn format_status() -> String {
-        let s = lock_encoder();
+        let s = snapshot();
         if !s.encoding {
             return "💤 Aucun encodage en cours.".to_string();
         }
         let filled = (s.percent / 100.0 * 20.0) as usize;
         let bar = format!("[{}{}]", "█".repeat(filled), "░".repeat(20 - filled));
-        let elapsed = s.start_time.map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        let elapsed = s.elapsed_secs;
         let rem_m = s.remaining as u64 / 60;
         let rem_s = s.remaining as u64 % 60;
         format!(
@@ -701,7 +683,7 @@ pub mod discord_bot {
     }
 
     fn format_queue() -> String {
-        let s = lock_encoder();
+        let s = snapshot();
         if s.queue_names.is_empty() {
             return "📭 File vide.".to_string();
         }

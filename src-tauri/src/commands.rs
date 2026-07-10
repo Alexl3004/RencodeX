@@ -8,7 +8,8 @@ use std::time::Duration;
 use crate::models::{
     AppConfig, CleanedName, EncodeJob, EncodeSummary, EncodingPrefs, EmailConfig, FileAnalysis, Stats,
 };
-use crate::state::lock_encoder;
+use crate::state::PAUSE;
+use std::sync::atomic::Ordering;
 use crate::utils::{
     config_path, delete_partial_output, filename_of, resolve_config,
 };
@@ -216,7 +217,8 @@ pub async fn cancel_encoding(app: AppHandle) {
     if let Some(out_path) = out_opt {
         let app2 = app.clone();
         tokio::spawn(async move {
-            { lock_encoder().current_out = None; }
+            // current_out est déjà retourné et sera supprimé ci-dessous.
+            // kill_ffmpeg_process() l'a extrait ; pas besoin de le vider ici.
             tokio::time::sleep(Duration::from_millis(500)).await;
             let deleted = delete_partial_output(&out_path);
             let out_name = filename_of(&out_path);
@@ -248,7 +250,7 @@ pub fn resume_encoding() -> bool {
 
 #[tauri::command]
 pub fn get_paused() -> bool {
-    crate::state::lock_encoder().pause
+    PAUSE.load(Ordering::Relaxed)
 }
 
 #[tauri::command]

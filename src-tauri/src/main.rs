@@ -85,7 +85,7 @@ fn main() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let is_encoding = crate::state::lock_encoder().encoding;
+                let is_encoding = crate::state::ENCODING.load(std::sync::atomic::Ordering::Acquire);
 
                 if !is_encoding {
                     return;

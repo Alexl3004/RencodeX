@@ -10,7 +10,12 @@ use tauri_plugin_notification::NotificationExt;
 use crate::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME};
 
 use crate::models::{StreamInfo, EncodeJob, ProgressEvent, FileResult, EncodeSummary};
-use crate::state::lock_encoder;
+use std::sync::atomic::Ordering;
+use crate::state::{
+    CANCEL, PAUSE, ENCODING, CHILD_PID,
+    PERCENT, SPEED, REMAINING, FILE_INDEX, FILE_TOTAL,
+    store_f64, lock_meta,
+};
 use crate::utils::{filename_of, delete_partial_output, ffmpeg_path, ffprobe_path, normalize_lang, resolve_config};
 use crate::notify::{
     discord_notify,
@@ -96,23 +101,28 @@ pub async fn start_encoding(
     app: AppHandle,
     jobs: Vec<EncodeJob>,
 ) -> Result<EncodeSummary, String> {
+    // Initialisation de la session — ordre délibéré : ENCODING=true en dernier
+    // pour qu'un snapshot concurrent voie un état déjà cohérent.
     {
-        let mut s = lock_encoder();
-        s.cancel = false;
-        s.pause = false;
-        s.child_pid = None;
-        s.current_out = None;
-        s.encoding = true;
-        s.file_total = jobs.len();
-        s.file_index = 0;
-        s.percent = 0.0;
-        s.speed = 0.0;
-        s.remaining = 0.0;
-        s.current_file = String::new();
-        s.start_time = Some(Instant::now());
-        s.queue_names = jobs.iter()
-            .map(|j| filename_of(&j.input_path))
-            .collect();
+        CANCEL.store(false, Ordering::Relaxed);
+        // PAUSE n'a pas besoin d'être réinitialisé ici : kill_ffmpeg_process
+        // et resume_ffmpeg_process le gèrent, mais on le remet par sécurité.
+        PAUSE.store(false, Ordering::Relaxed);
+        CHILD_PID.store(u32::MAX, Ordering::Relaxed);
+        FILE_TOTAL.store(jobs.len(), Ordering::Relaxed);
+        FILE_INDEX.store(0, Ordering::Relaxed);
+        store_f64(&PERCENT, 0.0);
+        store_f64(&SPEED, 0.0);
+        store_f64(&REMAINING, 0.0);
+        {
+            let mut meta = lock_meta();
+            meta.current_file = String::new();
+            meta.current_out = None;
+            meta.start_time = Some(Instant::now());
+            meta.queue_names = jobs.iter().map(|j| filename_of(&j.input_path)).collect();
+        }
+        // Release en dernier : garantit la visibilité des stores précédents.
+        ENCODING.store(true, Ordering::Release);
     }
 
     let ffmpeg = ffmpeg_path();
@@ -152,7 +162,7 @@ pub async fn start_encoding(
     }
 
     for (idx, job) in jobs.iter().enumerate() {
-        if lock_encoder().cancel {
+        if CANCEL.load(Ordering::Relaxed) {
             results.push(FileResult {
                 job_id: job.job_id.clone(),
                 path: job.input_path.clone(),
@@ -167,7 +177,7 @@ pub async fn start_encoding(
         let original_mb = std::fs::metadata(&job.input_path)
             .map(|m| m.len() as f64 / 1_048_576.0).unwrap_or(0.0);
 
-        { lock_encoder().current_out = Some(job.output_path.clone()); }
+        { lock_meta().current_out = Some(job.output_path.clone()); }
 
         // Build FFmpeg args
         let mut cmd_args: Vec<String> = vec![
@@ -370,10 +380,13 @@ pub async fn start_encoding(
         let file_name = filename_of(&job.input_path);
 
         {
-            let mut s = lock_encoder();
-            s.child_pid = child.id();
-            s.current_file = file_name.clone();
-            s.file_index = idx;
+            // PID : Release pour que pause/kill voient le handle après le spawn.
+            if let Some(pid) = child.id() {
+                CHILD_PID.store(pid, Ordering::Release);
+            }
+            FILE_INDEX.store(idx, Ordering::Relaxed);
+            // Métadonnées stables — lock bref, jamais depuis la boucle chaude.
+            lock_meta().current_file = file_name.clone();
         }
 
         loop {
@@ -383,7 +396,8 @@ pub async fn start_encoding(
                 Ok(_) => {}
             }
 
-            if lock_encoder().cancel { break; }
+            // Chemin chaud : lecture atomique, aucun lock, aucune contention.
+            if CANCEL.load(Ordering::Relaxed) { break; }
 
             let l = line.trim();
 
@@ -456,12 +470,12 @@ pub async fn start_encoding(
 
                 let avg_speed = speed_val.unwrap_or(0.0);
 
-                {
-                    let mut s = lock_encoder();
-                    s.percent = percent;
-                    s.speed = avg_speed;
-                    s.remaining = remaining_total;
-                }
+                // Métriques de progression : stores atomiques indépendants,
+                // pas de lock. La boucle chaude ci-dessus reste libre de lire
+                // CANCEL sans contention même pendant ces écritures.
+                store_f64(&PERCENT, percent);
+                store_f64(&SPEED, avg_speed);
+                store_f64(&REMAINING, remaining_total);
 
                 let _ = app.emit("encode-progress", ProgressEvent {
                     file_index: idx,
@@ -512,7 +526,7 @@ pub async fn start_encoding(
             if joined.trim().is_empty() { None } else { Some(joined) }
         });
         let elapsed = file_start.elapsed().as_secs_f64();
-        let cancelled = lock_encoder().cancel;
+        let cancelled = CANCEL.load(Ordering::Relaxed);
         let ok = status.map(|s| s.success()).unwrap_or(false) && !cancelled;
 
         if !ok && !cancelled {
@@ -623,7 +637,7 @@ pub async fn start_encoding(
                            )},
         }));
 
-        { lock_encoder().current_out = None; }
+        { lock_meta().current_out = None; }
     }
 
     // Résumé global
@@ -652,15 +666,18 @@ pub async fn start_encoding(
         total_secs: start_all.elapsed().as_secs_f64(),
     };
 
+    // Teardown de session — même ordre que l'init : ENCODING=false en dernier.
     {
-        let mut s = lock_encoder();
-        s.encoding = false;
-        s.percent = 0.0;
-        s.speed = 0.0;
-        s.remaining = 0.0;
-        s.current_file = String::new();
-        s.queue_names = Vec::new();
-        s.start_time = None;
+        store_f64(&PERCENT, 0.0);
+        store_f64(&SPEED, 0.0);
+        store_f64(&REMAINING, 0.0);
+        {
+            let mut meta = lock_meta();
+            meta.current_file = String::new();
+            meta.queue_names = Vec::new();
+            meta.start_time = None;
+        }
+        ENCODING.store(false, Ordering::Release);
     }
 
     if cfg.discord_enabled
