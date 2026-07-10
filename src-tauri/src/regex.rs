@@ -199,6 +199,21 @@ pub static INVALID_CHARS: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r#"[<>:"/\\|?*\x00-\x1F]"#).unwrap()
 );
 
+// ── Progression ffmpeg (progress pipe) ───────────────────────────────────
+
+/// Numéro de frame courant dans la sortie progress de ffmpeg (`frame=<n>`)
+pub static FFMPEG_FRAME: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"^frame=(\d+)$").unwrap()
+);
+/// Vitesse d'encodage (`speed=1.23x`)
+pub static FFMPEG_SPEED: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"speed=\s*([\d.]+)x").unwrap()
+);
+/// Temps de sortie en microsecondes (`out_time_us=<n>`)
+pub static FFMPEG_OUT_TIME: Lazy<InnerRegex> = Lazy::new(||
+    InnerRegex::new(r"^out_time_us=(\d+)$").unwrap()
+);
+
 // ── Tags techniques à supprimer ───────────────────────────────────────────
 // FIX : les doublons (sources, providers) ont été retirés — ils sont déjà
 // gérés par leurs propres regex. Cela évite des suppressions prématurées.

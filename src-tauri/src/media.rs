@@ -7,7 +7,7 @@ use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use regex::Regex;
+use crate::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME};
 
 use crate::models::{StreamInfo, EncodeJob, ProgressEvent, FileResult, EncodeSummary};
 use crate::state::lock_encoder;
@@ -353,9 +353,9 @@ pub async fn start_encoding(
             })
         };
 
-        let re_frame = Regex::new(r"^frame=(\d+)$").unwrap();
-        let re_speed = Regex::new(r"speed=\s*([\d.]+)x").unwrap();
-        let re_out_time = Regex::new(r"^out_time_us=(\d+)$").unwrap();
+        let re_frame = &*FFMPEG_FRAME;
+        let re_speed = &*FFMPEG_SPEED;
+        let re_out_time = &*FFMPEG_OUT_TIME;
 
         let mut current_frame: Option<f64> = None;
         let mut out_time_us: Option<f64> = None;
