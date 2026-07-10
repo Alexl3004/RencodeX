@@ -35,6 +35,11 @@ serenity                  = { version = "0.12", default-features = false, featur
 ] }
 sea-orm = { version = "1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 sea-orm-migration = "1"
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_LibraryLoader",
+] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -17,6 +17,7 @@ import { filesStore } from "./files.store.svelte";
 
 function createEncodingStore() {
   let encoding           = $state(false);
+  let paused             = $state(false);
   let progress           = $state<ProgressEvent | null>(null);
   let summary            = $state<EncodeSummary | null>(null);
   let logs               = $state<{ msg: string; level: "info" | "warn" | "error" | "success" }[]>([]);
@@ -216,6 +217,7 @@ function createEncodingStore() {
       toasts.error(`Erreur fatale : ${e}`);
     } finally {
       encoding              = false;
+      paused                = false;
       progress              = null;
       encodingFilePaths     = [];
       filesStore.selectedForEncoding = new Set();
@@ -224,10 +226,39 @@ function createEncodingStore() {
   }
 
   async function cancelEncoding() {
+    // Si en pause, reprendre d'abord pour que ffmpeg puisse recevoir le signal de kill
+    if (paused) {
+      await invoke("resume_encoding");
+      paused = false;
+    }
     invoke("cancel_encoding");
     encoding = false;
     log("Encodage annulé par l'utilisateur", "warn");
     toasts.warn("Encodage annulé");
+  }
+
+  async function pauseEncoding() {
+    if (!encoding || paused) return;
+    const ok = await invoke<boolean>("pause_encoding");
+    if (ok) {
+      paused = true;
+      log("Encodage mis en pause", "info");
+      toasts.warn("Encodage en pause");
+    } else {
+      log("Impossible de mettre en pause (process introuvable ?)", "warn");
+    }
+  }
+
+  async function resumeEncoding() {
+    if (!encoding || !paused) return;
+    const ok = await invoke<boolean>("resume_encoding");
+    if (ok) {
+      paused = false;
+      log("Encodage repris", "info");
+      toasts.success("Encodage repris");
+    } else {
+      log("Impossible de reprendre l'encodage", "warn");
+    }
   }
 
   // ─── Extraction sous-titres ───────────────────────────────────────────────
@@ -375,6 +406,7 @@ function createEncodingStore() {
 
   return {
     get encoding()           { return encoding; },
+    get paused()             { return paused; },
     get progress()           { return progress; },
     get summary()            { return summary; },
     get logs()               { return logs; },
@@ -384,6 +416,8 @@ function createEncodingStore() {
     listenEvents,
     startEncoding,
     cancelEncoding,
+    pauseEncoding,
+    resumeEncoding,
     startSubtitleExtraction,
     cancelSubtitleExtraction,
     clearSummary,

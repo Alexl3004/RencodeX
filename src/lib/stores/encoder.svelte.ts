@@ -225,6 +225,7 @@ function createEncoder() {
 
     // Délégation encodage
     get encoding()           { return encodingStore.encoding; },
+    get paused()             { return encodingStore.paused; },
     get progress()           { return encodingStore.progress; },
     get summary()            { return encodingStore.summary; },
     get logs()               { return encodingStore.logs; },
@@ -232,6 +233,8 @@ function createEncoder() {
     get subExtractProgress() { return encodingStore.subExtractProgress; },
     startEncoding:            () => encodingStore.startEncoding(outputDir),
     cancelEncoding:           () => encodingStore.cancelEncoding(),
+    pauseEncoding:            () => encodingStore.pauseEncoding(),
+    resumeEncoding:           () => encodingStore.resumeEncoding(),
     startSubtitleExtraction:  () => encodingStore.startSubtitleExtraction(outputDir),
     cancelSubtitleExtraction: () => encodingStore.cancelSubtitleExtraction(),
     clearLogs:                () => encodingStore.clearLogs(),

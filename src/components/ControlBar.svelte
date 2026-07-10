@@ -1,6 +1,6 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { X, Play, FileDown, Loader2 } from "@lucide/svelte";
+  import { X, Play, Pause, PlayCircle, FileDown, Loader2 } from "@lucide/svelte";
 
   let readyCount = $derived(encoder.files.filter((f) => f.status === "ready").length);
 
@@ -39,9 +39,29 @@
   <!-- Encode -->
   <div class="btn-group">
     {#if encoder.encoding}
+      <!-- Indicateur d'état (non cliquable) -->
       <button class="cb-btn cb-btn--primary cb-btn--active" disabled>
-        <Loader2 class="cb-icon animate-spin" />
-        <span>Encodage…</span>
+        {#if encoder.paused}
+          <Pause class="cb-icon" />
+          <span>En pause…</span>
+        {:else}
+          <Loader2 class="cb-icon animate-spin" />
+          <span>Encodage…</span>
+        {/if}
+      </button>
+      <!-- Bouton pause / reprise -->
+      <button
+        onclick={() => encoder.paused ? encoder.resumeEncoding() : encoder.pauseEncoding()}
+        class="cb-btn cb-btn--ghost"
+        title={encoder.paused ? "Reprendre l'encodage" : "Mettre en pause"}
+      >
+        {#if encoder.paused}
+          <PlayCircle class="cb-icon" />
+          <span>Reprendre</span>
+        {:else}
+          <Pause class="cb-icon" />
+          <span>Pause</span>
+        {/if}
       </button>
     {:else}
       <button

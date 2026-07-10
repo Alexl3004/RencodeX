@@ -3,7 +3,6 @@
 use tauri::AppHandle;
 use tauri::Emitter;
 use tauri_plugin_notification::NotificationExt;
-use std::os::windows::process::CommandExt;
 use std::time::Duration;
 
 use crate::models::{
@@ -157,6 +156,21 @@ pub async fn cancel_encoding(app: AppHandle) {
         .title("⏹ Encodage annulé")
         .body("La file d'attente a été interrompue · fichiers partiels supprimés")
         .show();
+}
+
+#[tauri::command]
+pub fn pause_encoding() -> bool {
+    crate::state::pause_ffmpeg_process()
+}
+
+#[tauri::command]
+pub fn resume_encoding() -> bool {
+    crate::state::resume_ffmpeg_process()
+}
+
+#[tauri::command]
+pub fn get_paused() -> bool {
+    crate::state::lock_encoder().pause
 }
 
 #[tauri::command]
