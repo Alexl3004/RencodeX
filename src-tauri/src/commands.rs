@@ -233,16 +233,14 @@ fn resolve_discord_creds(bot_token: String, log_channel_id: String) -> Result<(S
     Ok((token, chan))
 }
 
-fn fields_for(notif_type: &str) -> Vec<String> {
-    let cfg = load_config();
+fn fields_for(cfg: &AppConfig, notif_type: &str) -> Vec<String> {
     cfg.discord_fields
         .get(notif_type)
         .cloned()
         .unwrap_or_else(|| crate::discord_fields::default_fields(notif_type))
 }
 
-fn note_for(notif_type: &str) -> String {
-    let cfg = load_config();
+fn note_for(cfg: &AppConfig, notif_type: &str) -> String {
     cfg.discord_custom_notes
         .get(notif_type)
         .cloned()
@@ -256,8 +254,9 @@ pub async fn send_discord_notification(
     summary: EncodeSummary,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
-    let fields = fields_for("summary");
-    let note   = note_for("summary");
+    let cfg = load_config();
+    let fields = fields_for(&cfg, "summary");
+    let note   = note_for(&cfg, "summary");
     discord_notify(&token, &chan, &summary, &fields, &note).await;
     Ok(())
 }
@@ -272,8 +271,9 @@ pub async fn send_discord_start_notification(
     preset: String,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
-    let fields = fields_for("start");
-    let note   = note_for("start");
+    let cfg = load_config();
+    let fields = fields_for(&cfg, "start");
+    let note   = note_for(&cfg, "start");
     discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &fields, &note).await;
     Ok(())
 }
@@ -290,8 +290,9 @@ pub async fn send_discord_file_done_notification(
     preset: String,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
-    let fields = fields_for("file_done");
-    let note   = note_for("file_done");
+    let cfg = load_config();
+    let fields = fields_for(&cfg, "file_done");
+    let note   = note_for(&cfg, "file_done");
     discord_notify_file_done(
         &token, &chan, &file_name,
         original_mb, encoded_mb, duration_secs,
@@ -308,8 +309,9 @@ pub async fn send_discord_error_notification(
     error_msg: String,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
-    let fields = fields_for("error");
-    let note   = note_for("error");
+    let cfg = load_config();
+    let fields = fields_for(&cfg, "error");
+    let note   = note_for(&cfg, "error");
     discord_notify_error(&token, &chan, &file_name, &error_msg, &fields, &note).await;
     Ok(())
 }
@@ -327,8 +329,9 @@ pub async fn send_discord_progress_notification(
     elapsed_secs: f64,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
-    let fields = fields_for("progress");
-    let note   = note_for("progress");
+    let cfg = load_config();
+    let fields = fields_for(&cfg, "progress");
+    let note   = note_for(&cfg, "progress");
     discord_notify_progress(
         &token, &chan,
         &file_name, file_index, file_total,

@@ -1,26 +1,27 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { EncodeSummary } from "./types";
+
 // ── Record d'un fichier ────────────────────────────────────────────────────
 interface FileRecord {
   name:        string;
   original_mb: number;
   encoded_mb:  number;
-  ratio_pct:   number; // % de compression (ex: 42.3)
+  ratio_pct:   number;
 }
 
 // ── Session d'encodage ─────────────────────────────────────────────────────
 interface EncodeSession {
-  date:      string; // ISO
-  files:     number; // fichiers réussis
-  ratio_pct: number; // compression moyenne de la session
-  saved_mb:  number; // espace économisé dans la session
+  date:      string;
+  files:     number;
+  ratio_pct: number;
+  saved_mb:  number;
 }
 
 // ── Session d'extraction ───────────────────────────────────────────────────
 interface ExtractSession {
   date:   string;
-  files:  number; // fichiers extraits avec succès
-  tracks: number; // pistes extraites
+  files:  number;
+  tracks: number;
 }
 
 interface RawStats {
@@ -34,11 +35,10 @@ interface RawStats {
   total_extracted_files:   number;
   total_extract_launched:  number;
   total_tracks_extracted:  number;
-  // Nouveaux champs
-  record_heaviest:         FileRecord | null; // fichier avec la plus grande taille d'entrée
-  record_best_ratio:       FileRecord | null; // fichier avec le meilleur ratio de compression
-  encode_sessions:         EncodeSession[];   // dernières N sessions d'encodage
-  extract_sessions:        ExtractSession[];  // dernières N sessions d'extraction
+  record_heaviest:         FileRecord | null;
+  record_best_ratio:       FileRecord | null;
+  encode_sessions:         EncodeSession[];
+  extract_sessions:        ExtractSession[];
 }
 
 const MAX_SESSIONS = 10;
@@ -63,6 +63,7 @@ function emptyStats(): RawStats {
 }
 
 function createStats() {
+  let loaded               = $state(false);
   let totalFiles           = $state(0);
   let totalLaunched        = $state(0);
   let totalOriginalMb      = $state(0);
@@ -73,30 +74,31 @@ function createStats() {
   let totalExtractedFiles  = $state(0);
   let totalExtractLaunched = $state(0);
   let totalTracksExtracted = $state(0);
-  // Records
   let recordHeaviest       = $state<FileRecord | null>(null);
   let recordBestRatio      = $state<FileRecord | null>(null);
-  // Historiques
   let encodeSessions       = $state<EncodeSession[]>([]);
   let extractSessions      = $state<ExtractSession[]>([]);
 
+  // ── Persistance ─────────────────────────────────────────────────────────
+
   async function persist() {
     const raw: RawStats = {
-      total_files: totalFiles,
-      total_launched: totalLaunched,
-      total_original_mb: totalOriginalMb,
-      total_encoded_mb: totalEncodedMb,
-      sum_ratio_pct: sumRatioPct,
-      total_secs: totalSecs,
-      last_updated: lastUpdated,
-      total_extracted_files: totalExtractedFiles,
-      total_extract_launched: totalExtractLaunched,
-      total_tracks_extracted: totalTracksExtracted,
-      record_heaviest: recordHeaviest,
-      record_best_ratio: recordBestRatio,
-      encode_sessions: encodeSessions,
-      extract_sessions: extractSessions,
+      total_files:             totalFiles,
+      total_launched:          totalLaunched,
+      total_original_mb:       totalOriginalMb,
+      total_encoded_mb:        totalEncodedMb,
+      sum_ratio_pct:           sumRatioPct,
+      total_secs:              totalSecs,
+      last_updated:            lastUpdated,
+      total_extracted_files:   totalExtractedFiles,
+      total_extract_launched:  totalExtractLaunched,
+      total_tracks_extracted:  totalTracksExtracted,
+      record_heaviest:         recordHeaviest,
+      record_best_ratio:       recordBestRatio,
+      encode_sessions:         encodeSessions,
+      extract_sessions:        extractSessions,
     };
+
     try {
       await invoke("save_stats", { stats: raw });
     } catch (e) {
@@ -104,9 +106,16 @@ function createStats() {
     }
   }
 
+  // ── Init ─────────────────────────────────────────────────────────────────
+
   async function init() {
+    if (loaded) {
+      return;
+    }
+
     try {
       const raw = await invoke<RawStats>("load_stats");
+
       totalFiles           = raw.total_files            ?? 0;
       totalLaunched        = raw.total_launched         ?? 0;
       totalOriginalMb      = raw.total_original_mb      ?? 0;
@@ -121,12 +130,16 @@ function createStats() {
       recordBestRatio      = raw.record_best_ratio      ?? null;
       encodeSessions       = raw.encode_sessions        ?? [];
       extractSessions      = raw.extract_sessions       ?? [];
+
     } catch (e) {
       console.error("Impossible de charger les statistiques :", e);
+    } finally {
+      loaded = true;
     }
   }
 
-  // Enregistre les résultats d'une session d'encodage terminée.
+  // ── Encodage ─────────────────────────────────────────────────────────────
+
   async function recordSummary(summary: EncodeSummary) {
     const okFiles = summary.files.filter(f => f.status === "ok" && f.original_mb > 0);
 
@@ -142,32 +155,17 @@ function createStats() {
         totalEncodedMb  += f.encoded_mb;
         const ratio      = ((f.original_mb - f.encoded_mb) / f.original_mb) * 100;
         sumRatioPct     += ratio;
-
         sessionOriginalMb += f.original_mb;
         sessionEncodedMb  += f.encoded_mb;
 
-        // Record : fichier le plus lourd en entrée
         if (!recordHeaviest || f.original_mb > recordHeaviest.original_mb) {
-          recordHeaviest = {
-            name:        f.name ?? "—",
-            original_mb: f.original_mb,
-            encoded_mb:  f.encoded_mb,
-            ratio_pct:   ratio,
-          };
+          recordHeaviest = { name: f.name ?? "—", original_mb: f.original_mb, encoded_mb: f.encoded_mb, ratio_pct: ratio };
         }
-
-        // Record : meilleur ratio de compression (plus grand %)
         if (!recordBestRatio || ratio > recordBestRatio.ratio_pct) {
-          recordBestRatio = {
-            name:        f.name ?? "—",
-            original_mb: f.original_mb,
-            encoded_mb:  f.encoded_mb,
-            ratio_pct:   ratio,
-          };
+          recordBestRatio = { name: f.name ?? "—", original_mb: f.original_mb, encoded_mb: f.encoded_mb, ratio_pct: ratio };
         }
       }
 
-      // Historique sessions — on garde les MAX_SESSIONS dernières (les plus récentes en tête)
       const sessionRatio = sessionOriginalMb > 0
         ? ((sessionOriginalMb - sessionEncodedMb) / sessionOriginalMb) * 100
         : 0;
@@ -185,15 +183,17 @@ function createStats() {
     }
 
     lastUpdated = new Date().toISOString();
+
     await persist();
   }
 
-    // Enregistre les résultats d'une session d'extraction terminée.
+  // ── Extraction ───────────────────────────────────────────────────────────
+
   type ExtractFile = { sub_extract_status: string; streams: Array<{ codec_type: string; language: string }> };
 
   async function recordExtraction(files: ExtractFile[], selSubs: Set<string>) {
-      const launched = files.filter((f: ExtractFile) => f.sub_extract_status !== "none");
-      const ok = launched.filter((f: ExtractFile) => f.sub_extract_status === "done");
+    const launched = files.filter((f: ExtractFile) => f.sub_extract_status !== "none");
+    const ok       = launched.filter((f: ExtractFile) => f.sub_extract_status === "done");
 
     totalExtractLaunched += launched.length;
     totalExtractedFiles  += ok.length;
@@ -221,6 +221,8 @@ function createStats() {
     await persist();
   }
 
+  // ── Reset ────────────────────────────────────────────────────────────────
+
   async function reset() {
     const e = emptyStats();
     totalFiles           = e.total_files;
@@ -240,25 +242,25 @@ function createStats() {
     await persist();
   }
 
+  // ── API publique ─────────────────────────────────────────────────────────
+
   return {
-    get totalFiles()           { return totalFiles; },
-    get totalLaunched()        { return totalLaunched; },
-    get totalOriginalMb()      { return totalOriginalMb; },
-    get totalEncodedMb()       { return totalEncodedMb; },
-    get totalSecs()            { return totalSecs; },
-    get totalSavedMb()         { return Math.max(0, totalOriginalMb - totalEncodedMb); },
-    get avgInputMb()           { return totalFiles > 0 ? totalOriginalMb / totalFiles : 0; },
-    get avgOutputMb()          { return totalFiles > 0 ? totalEncodedMb  / totalFiles : 0; },
-    get avgRatioPct()          { return totalFiles > 0 ? sumRatioPct / totalFiles : 0; },
-    get avgSecs()              { return totalFiles > 0 ? totalSecs / totalFiles : 0; },
-    get lastUpdated()          { return lastUpdated; },
-    // Records
-    get recordHeaviest()       { return recordHeaviest; },
-    get recordBestRatio()      { return recordBestRatio; },
-    // Historiques
-    get encodeSessions()       { return encodeSessions; },
-    get extractSessions()      { return extractSessions; },
-    // Extraction
+    get loaded()             { return loaded; },
+    get totalFiles()         { return totalFiles; },
+    get totalLaunched()      { return totalLaunched; },
+    get totalOriginalMb()    { return totalOriginalMb; },
+    get totalEncodedMb()     { return totalEncodedMb; },
+    get totalSecs()          { return totalSecs; },
+    get totalSavedMb()       { return Math.max(0, totalOriginalMb - totalEncodedMb); },
+    get avgInputMb()         { return totalFiles > 0 ? totalOriginalMb / totalFiles : 0; },
+    get avgOutputMb()        { return totalFiles > 0 ? totalEncodedMb  / totalFiles : 0; },
+    get avgRatioPct()        { return totalFiles > 0 ? sumRatioPct / totalFiles : 0; },
+    get avgSecs()            { return totalFiles > 0 ? totalSecs / totalFiles : 0; },
+    get lastUpdated()        { return lastUpdated; },
+    get recordHeaviest()     { return recordHeaviest; },
+    get recordBestRatio()    { return recordBestRatio; },
+    get encodeSessions()     { return encodeSessions; },
+    get extractSessions()    { return extractSessions; },
     get totalExtractedFiles()  { return totalExtractedFiles; },
     get totalExtractLaunched() { return totalExtractLaunched; },
     get totalTracksExtracted() { return totalTracksExtracted; },

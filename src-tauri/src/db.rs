@@ -5,9 +5,10 @@
 //! Toutes les commandes accèdent ensuite à la base via `crate::db::DB`.
 
 use std::path::PathBuf;
+use std::time::Duration;
 use once_cell::sync::OnceCell;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Database, DatabaseConnection,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectOptions, Database, DatabaseConnection,
     EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
@@ -52,7 +53,17 @@ pub async fn init() {
 
     let url = format!("sqlite://{}?mode=rwc", path.display());
 
-    let db = Database::connect(&url)
+    // Pool minimal : SQLite supporte le WAL donc plusieurs lecteurs simultanés
+    // sont possibles, mais les écritures restent sérialisées par le moteur.
+    // 1 writer + quelques readers suffisent pour une app desktop Tauri.
+    let mut opt = ConnectOptions::new(url);
+    opt.max_connections(4)          // ≤ 4 connexions simultanées
+       .min_connections(1)          // garde 1 connexion chaude au repos
+       .acquire_timeout(Duration::from_secs(5))   // erreur si aucune dispo en 5 s
+       .idle_timeout(Duration::from_secs(60))      // ferme les connexions inactives
+       .sqlx_logging(false);        // silence les logs sqlx en release
+
+    let db = Database::connect(opt)
         .await
         .expect("Impossible d'ouvrir la base de données SQLite");
 
@@ -73,20 +84,15 @@ pub async fn init() {
 
 async fn migrate_from_json() {
     let json_path = stats_json_path();
-    if !json_path.exists() {
+
+    // Si le .bak existe, la migration a déjà été tentée (même si total_files = 0).
+    let bak = json_path.with_extension("json.bak");
+    if bak.exists() {
         return;
     }
 
-    // Ne migre que si la base est vierge.
-    let current: Option<stats::Model> = stats::Entity::find_by_id(1)
-        .one(conn())
-        .await
-        .unwrap_or(None);
-
-    if let Some(s) = &current {
-        if s.total_files > 0 {
-            return;
-        }
+    if !json_path.exists() {
+        return;
     }
 
     let data = match std::fs::read_to_string(&json_path) {
@@ -105,7 +111,15 @@ async fn migrate_from_json() {
         }
     };
 
-    // Mise à jour des compteurs globaux.
+    // Insertion ou mise à jour des compteurs globaux.
+    // On vérifie d'abord si la ligne id=1 existe déjà, car .update() échoue
+    // silencieusement sur une table vide (aucune ligne à mettre à jour).
+    let row_exists = stats::Entity::find_by_id(1)
+        .one(conn())
+        .await
+        .unwrap_or(None)
+        .is_some();
+
     let active = stats::ActiveModel {
         id: Set(1_i32),
         total_files: Set(s.total_files as i32),
@@ -119,7 +133,14 @@ async fn migrate_from_json() {
         total_tracks_extracted: Set(s.total_tracks_extracted as i32),
         last_updated: Set(s.last_updated.clone()),
     };
-    if let Err(e) = active.update(conn()).await {
+
+    let result = if row_exists {
+        active.update(conn()).await.map(|_| ())
+    } else {
+        active.insert(conn()).await.map(|_| ())
+    };
+
+    if let Err(e) = result {
         eprintln!("[db] Erreur migration compteurs : {}", e);
         return;
     }
@@ -157,8 +178,7 @@ async fn migrate_from_json() {
         let _ = upsert_record("best_ratio", r).await;
     }
 
-    // Renommer stats.json en .bak.
-    let bak = json_path.with_extension("json.bak");
+    // Renommer stats.json en .bak pour marquer la migration comme effectuée.
     match std::fs::rename(&json_path, &bak) {
         Ok(_) => eprintln!("[db] Migration stats.json → SQLite réussie. Sauvegarde : {:?}", bak),
         Err(e) => eprintln!("[db] Impossible de renommer stats.json : {}", e),
@@ -170,10 +190,26 @@ async fn migrate_from_json() {
 /// Charge les statistiques globales depuis SQLite.
 pub async fn load_stats_from_db() -> Result<Stats, sea_orm::DbErr> {
     // Compteurs globaux.
-    let row: stats::Model = stats::Entity::find_by_id(1)
-        .one(conn())
-        .await?
-        .expect("Ligne stats manquante (id=1)");
+   let row: stats::Model = match stats::Entity::find_by_id(1).one(conn()).await? {
+        Some(r) => r,
+        None => {
+            stats::ActiveModel {
+                id: Set(1_i32),
+                total_files: Set(0),
+                total_launched: Set(0),
+                total_original_mb: Set(0.0),
+                total_encoded_mb: Set(0.0),
+                sum_ratio_pct: Set(0.0),
+                total_secs: Set(0.0),
+                total_extracted_files: Set(0),
+                total_extract_launched: Set(0),
+                total_tracks_extracted: Set(0),
+                last_updated: Set(None),
+            }
+            .insert(conn())
+            .await?
+        }
+    };
 
     // 10 dernières sessions d'encodage.
     let encode_rows: Vec<encode_sessions::Model> = encode_sessions::Entity::find()
@@ -228,8 +264,9 @@ pub async fn load_stats_from_db() -> Result<Stats, sea_orm::DbErr> {
 
 /// Persiste les statistiques globales dans SQLite.
 pub async fn save_stats_to_db(s: &Stats) -> Result<(), sea_orm::DbErr> {
-    // Mise à jour des compteurs globaux.
-    stats::ActiveModel {
+    let exists = stats::Entity::find_by_id(1).one(conn()).await?.is_some();
+
+    let active = stats::ActiveModel {
         id: Set(1_i32),
         total_files: Set(s.total_files as i32),
         total_launched: Set(s.total_launched as i32),
@@ -241,9 +278,13 @@ pub async fn save_stats_to_db(s: &Stats) -> Result<(), sea_orm::DbErr> {
         total_extract_launched: Set(s.total_extract_launched as i32),
         total_tracks_extracted: Set(s.total_tracks_extracted as i32),
         last_updated: Set(s.last_updated.clone()),
+    };
+
+    if exists {
+        active.update(conn()).await?;
+    } else {
+        active.insert(conn()).await?;
     }
-    .update(conn())
-    .await?;
 
     // Insérer la session d'encodage la plus récente si nouvelle.
     if let Some(session) = s.encode_sessions.first() {

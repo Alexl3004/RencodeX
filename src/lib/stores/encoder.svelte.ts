@@ -4,6 +4,7 @@ import { filesStore } from "./files.store.svelte";
 import { encodingStore } from "./encoding.store.svelte";
 import { applySeFormat, DEFAULT_TAG_ORDER } from "./naming";
 import type { AppFile, NamingOptions } from "./types";
+import { stats } from "./stats.svelte";
 
 // ─── Façade encoder ───────────────────────────────────────────────────────────
 // Colle les trois stores ensemble et expose l'API publique utilisée par les
@@ -28,6 +29,7 @@ function createEncoder() {
     prefs.loadRenamingPrefs(); // override Tauri avec localStorage si plus récent
     encodingStore.log(`Dossier de sortie : ${outputDir}`, "info");
     await encodingStore.listenEvents();
+    stats.init();
     window.addEventListener("beforeunload", () => {
       prefs.flush();
       prefs.saveRenamingPrefs();

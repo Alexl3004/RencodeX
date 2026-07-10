@@ -17,7 +17,13 @@
   } from "@lucide/svelte";
   import { Popover, Portal } from "@skeletonlabs/skeleton-svelte";
   import { Chart, Svg, Spline } from "layerchart";
+  import { onMount } from "svelte";
 
+
+  onMount(() => {
+    stats.init(); 
+  });
+  
   let { onClose }: { onClose?: () => void } = $props();
 
   // ── Stats dérivées ─────────────────────────────────────────────────────
@@ -155,8 +161,11 @@
             </p>
           </div>
         </header>
-
-        {#if !hasData}
+        {#if !stats.loaded}
+          <div class="empty-state">
+            <span class="empty-sub">Chargement…</span>
+          </div>
+        {:else if !hasData}
           <div class="empty-state">
             <HardDrive class="w-8 h-8" style="color:var(--color-subtext2);" />
             <span class="empty-label">Aucun encodage enregistré</span>

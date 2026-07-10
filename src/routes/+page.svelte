@@ -15,6 +15,7 @@
   import Dashboard from "$components/Dashboard.svelte";
   import LogConsole from "$components/LogConsole.svelte";
   import Settings from "$components/Settings.svelte";
+  import { stats } from "$lib/stores/stats.svelte";
 
   let topbar = $state<{ activeTab: string; TABS: any[] } | null>(null);
   let activeTab = $derived(topbar?.activeTab ?? "home");
@@ -23,6 +24,7 @@
   onMount(async () => { await encoder.init(); });
 
   onMount(() => {
+    stats.init();
     let unlisten: UnlistenFn | undefined;
     listen<string[]>("tauri://file-drop", async (e) => {
       await encoder.addFiles(e.payload);
