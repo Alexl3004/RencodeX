@@ -151,7 +151,7 @@ pub fn resolve_config(mut cfg: crate::models::AppConfig) -> crate::models::AppCo
 #[allow(dead_code)]
 pub fn format_title_case(base: &str) -> String {
     // Normaliser les apostrophes avant de traiter
-    let normalized = crate::regex::APOSTROPHE.replace_all(base, "'");
+    let normalized = crate::naming::regex::APOSTROPHE.replace_all(base, "'");
 
     normalized
         .split_whitespace()
@@ -220,7 +220,7 @@ pub fn is_windows_reserved(name: &str) -> bool {
 #[allow(dead_code)]
 pub fn sanitize_filename(name: &str) -> String {
     // Supprimer les caractères interdits
-    let clean = crate::regex::INVALID_CHARS.replace_all(name, "").to_string();
+    let clean = crate::naming::regex::INVALID_CHARS.replace_all(name, "").to_string();
     // Supprimer les points et espaces en fin de nom (interdit sous Windows)
     let clean = clean.trim_end_matches(['.', ' ']).to_string();
     // Tronquer à 200 caractères (garde de la marge pour extension + suffixe)

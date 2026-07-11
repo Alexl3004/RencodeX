@@ -1,20 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod tests;
 mod models;
 mod state;
-mod regex;
 mod utils;
-mod filename;
-mod media;
-mod notify;
+mod naming;
+mod services;
 mod commands;
-mod discord_fields;
 mod db;
-mod tests_extended;
 mod entities;
 
 use crate::utils::resolve_config;
-use crate::commands::load_config;
+use crate::commands::settings::load_config;
 use tauri::Manager;
 
 fn main() {
@@ -43,7 +38,7 @@ fn main() {
             let token = cfg.discord_bot_token.clone();
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(notify::discord_bot::start(token, cmd_channel_id));
+                rt.block_on(services::discord_bot::start(token, cmd_channel_id));
             });
         }
     }
@@ -55,33 +50,38 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            commands::analyze_file,
-            commands::clean_filename,
-            commands::start_encoding,
-            commands::cancel_encoding,
-            commands::pause_encoding,
-            commands::resume_encoding,
-            commands::get_paused,
-            commands::get_default_output_dir,
-            commands::load_config,
-            commands::save_config,
-            commands::load_encoding_prefs,
-            commands::save_encoding_prefs,
-            commands::get_effective_config,
-            commands::get_discord_field_catalog,
-            commands::check_ffmpeg,
-            commands::send_discord_notification,
-            commands::send_discord_start_notification,
-            commands::send_discord_file_done_notification,
-            commands::send_discord_error_notification,
-            commands::send_discord_stats_notification,
-            commands::send_discord_progress_notification,
-            commands::scan_folder,
-            commands::send_email_report,
-            commands::load_stats,
-            commands::save_stats,
-            commands::list_subtitle_tracks,
-            commands::extract_subtitles,
+            // setting
+            commands::settings::load_config,
+            commands::settings::save_config,
+            commands::settings::load_encoding_prefs,
+            commands::settings::save_encoding_prefs,
+            commands::settings::get_effective_config,
+            commands::settings::get_discord_field_catalog,
+            commands::settings::load_stats,
+            commands::settings::save_stats,
+            // encoding
+            commands::encoding::check_ffmpeg,
+            commands::encoding::analyze_file,
+            commands::encoding::clean_filename,
+            commands::encoding::start_encoding,
+            commands::encoding::cancel_encoding,
+            commands::encoding::pause_encoding,
+            commands::encoding::resume_encoding,
+            commands::encoding::get_paused,
+            // files
+            commands::files::get_default_output_dir,
+            commands::files::list_subtitle_tracks,
+            commands::files::extract_subtitles,
+            commands::files::scan_folder,
+            // discord
+            commands::discord::send_discord_notification,
+            commands::discord::send_discord_start_notification,
+            commands::discord::send_discord_file_done_notification,
+            commands::discord::send_discord_error_notification,
+            commands::discord::send_discord_stats_notification,
+            commands::discord::send_discord_progress_notification,
+            commands::discord::send_email_report,
+
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

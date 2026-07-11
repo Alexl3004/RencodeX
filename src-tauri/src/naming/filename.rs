@@ -9,7 +9,7 @@
 //!   4. Construction du nom suggéré.
 
 use crate::models::CleanedName;
-use crate::regex;
+use crate::naming::regex;
 use crate::utils::{normalize_lang, normalize_resolution, format_title_case, sanitize_filename};
 
 // ── Détection de source ───────────────────────────────────────────────────

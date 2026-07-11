@@ -7,7 +7,7 @@ use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use crate::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME};
+use crate::naming::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME};
 
 use crate::models::{StreamInfo, EncodeJob, ProgressEvent, FileResult, EncodeSummary};
 use std::sync::atomic::Ordering;
@@ -17,14 +17,14 @@ use crate::state::{
     store_f64, lock_meta,
 };
 use crate::utils::{filename_of, delete_partial_output, ffmpeg_path, ffprobe_path, normalize_lang, resolve_config};
-use crate::notify::{
+use crate::services::notify::{
     discord_notify,
     discord_notify_start,
     discord_notify_file_done,
     discord_notify_error,
     discord_notify_progress,
 };
-use crate::commands::load_config;
+use crate::commands::settings::load_config;
 
 pub async fn analyze_file(path: String) -> Result<crate::models::FileAnalysis, String> {
     let ffprobe = ffprobe_path();
@@ -145,7 +145,7 @@ pub async fn start_encoding(
         let token = cfg.discord_bot_token.clone();
         let channel = cfg.discord_log_channel_id.clone();
         
-        let fields_start = crate::discord_fields::default_fields("start");
+        let fields_start = crate::services::discord_fields::default_fields("start");
         let note_start = cfg.discord_custom_notes.get("start").cloned().unwrap_or_default();
         tokio::spawn(async move {
             discord_notify_start(
@@ -501,7 +501,7 @@ pub async fn start_encoding(
                     let pct = percent;
                     let spd = avg_speed;
                     let rem = remaining_total;
-                    let fields_progress = crate::discord_fields::default_fields("progress");
+                    let fields_progress = crate::services::discord_fields::default_fields("progress");
                     let note_progress = cfg.discord_custom_notes.get("progress").cloned().unwrap_or_default();
                     tokio::spawn(async move {
                         discord_notify_progress(
@@ -554,7 +554,7 @@ pub async fn start_encoding(
             if ok && cfg.discord_notify_file_done {
                 let crf_val = job.crf;
                 let preset_val = job.preset.clone();
-                let fields_file_done = crate::discord_fields::default_fields("file_done");
+                let fields_file_done = crate::services::discord_fields::default_fields("file_done");
                 let note_file_done = cfg.discord_custom_notes.get("file_done").cloned().unwrap_or_default();
                 tokio::spawn(async move {
                     discord_notify_file_done(
@@ -571,7 +571,7 @@ pub async fn start_encoding(
                     ).await;
                 });
             } else if !ok && !cancelled && cfg.discord_notify_error {
-                let fields_error = crate::discord_fields::default_fields("error");
+                let fields_error = crate::services::discord_fields::default_fields("error");
                 let note_error = cfg.discord_custom_notes.get("error").cloned().unwrap_or_default();
                 tokio::spawn(async move {
                     discord_notify_error(
@@ -685,7 +685,7 @@ pub async fn start_encoding(
         && !cfg.discord_bot_token.is_empty()
         && !cfg.discord_log_channel_id.is_empty()
     {
-        let fields_summary = crate::discord_fields::default_fields("summary");
+        let fields_summary = crate::services::discord_fields::default_fields("summary");
         let note_summary = cfg.discord_custom_notes.get("summary").map(|s| s.as_str()).unwrap_or("");
         discord_notify(&cfg.discord_bot_token, &cfg.discord_log_channel_id, &summary, &fields_summary, note_summary).await;
     }
