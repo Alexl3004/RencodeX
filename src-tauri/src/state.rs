@@ -27,8 +27,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering}
 use std::time::Instant;
 use once_cell::sync::Lazy;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 // ─── Helpers Windows/Unix – inchangés ────────────────────────────────────────
 
@@ -324,21 +322,24 @@ pub fn kill_ffmpeg_process() -> Option<String> {
         return None;
     }
 
-    // Marquer l'annulation AVANT de lire le PID : la boucle stdout verra
-    // CANCEL=true et sortira, ce qui évite qu'elle traite des lignes
-    // supplémentaires pendant qu'on tue le process.
     CANCEL.store(true, Ordering::Release);
 
-    // swap atomique : on récupère l'ancien PID et on remet NO_PID pour
-    // qu'un éventuel double appel ne tente pas de tuer à nouveau.
     let pid = CHILD_PID.swap(NO_PID, Ordering::AcqRel);
 
     if pid != NO_PID {
         #[cfg(target_os = "windows")]
-        let _ = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/F", "/T"])
-            .creation_flags(0x08000000)
-            .spawn();
+        {
+            use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+            use windows::Win32::Foundation::CloseHandle;
+            unsafe {
+                if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+                    let _ = TerminateProcess(handle, 1);
+                    let _ = CloseHandle(handle);
+                } else {
+                    eprintln!("[kill] OpenProcess({pid}) échoué — process déjà terminé ?");
+                }
+            }
+        }
 
         #[cfg(not(target_os = "windows"))]
         unsafe {
@@ -346,6 +347,5 @@ pub fn kill_ffmpeg_process() -> Option<String> {
         }
     }
 
-    // Lire current_out sous lock (accès rare, pas de contention).
     lock_meta().current_out.clone()
 }
