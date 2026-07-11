@@ -5,6 +5,9 @@ use crate::state::{
     pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process,
 };
 use serenity::async_trait;
+use serenity::builder::{CreateActionRow, CreateButton, CreateEmbed, CreateEmbedFooter, CreateMessage, CreateInteractionResponse, CreateInteractionResponseMessage};
+use serenity::model::application::ButtonStyle;
+use serenity::model::application::Interaction;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
@@ -28,6 +31,13 @@ impl EventHandler for Handler {
         if !content.starts_with('!') {
             return;
         }
+
+        // Commande !panel — envoi d'un embed avec boutons interactifs
+        if content.as_str() == "!panel" {
+            send_panel(&ctx, &msg).await;
+            return;
+        }
+
         let reply = match content.as_str() {
             "!help"   => format_help(),
             "!status" => format_status(),
@@ -74,8 +84,81 @@ impl EventHandler for Handler {
         }
     }
 
+    // Gestion des clics sur les boutons du panneau
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        let Interaction::Component(component) = interaction else { return };
+
+        let response_text = match component.data.custom_id.as_str() {
+            "status" => format_status(),
+            "queue"  => format_queue(),
+            "pause" => {
+                if pause_ffmpeg_process() {
+                    let _ = self.app.emit("encode-paused", true);
+                    "⏸ Encodage mis en pause.".to_string()
+                } else {
+                    "ℹ️ Impossible de mettre en pause (aucun encodage actif ou déjà en pause).".to_string()
+                }
+            }
+            "resume" => {
+                if resume_ffmpeg_process() {
+                    let _ = self.app.emit("encode-paused", false);
+                    "▶️ Encodage repris.".to_string()
+                } else {
+                    "ℹ️ Impossible de reprendre (aucune pause active).".to_string()
+                }
+            }
+            "cancel" => {
+                if ENCODING.load(Ordering::Acquire) {
+                    kill_ffmpeg_process();
+                    let _ = self.app.emit("encode-cancelled", ());
+                    "⏹ Encodage annulé depuis Discord.".to_string()
+                } else {
+                    "ℹ️ Aucun encodage en cours.".to_string()
+                }
+            }
+            _ => return,
+        };
+
+        // Réponse éphémère : visible uniquement par l'auteur du clic
+        let resp = CreateInteractionResponse::Message(
+            CreateInteractionResponseMessage::new()
+                .content(response_text)
+                .ephemeral(true),
+        );
+        if let Err(e) = component.create_response(&ctx.http, resp).await {
+            eprintln!("[Discord bot] Erreur réponse interaction : {e}");
+        }
+    }
+
     async fn ready(&self, _: Context, ready: Ready) {
         println!("[Discord bot] Connecté en tant que {}", ready.user.name);
+    }
+}
+
+// Envoie le panneau de contrôle avec embed + boutons
+async fn send_panel(ctx: &Context, msg: &Message) {
+    let embed = CreateEmbed::new()
+        .title("🤖 RenCodeX — Panneau de Contrôle")
+        .description("Utilisez les boutons ci-dessous pour gérer vos encodages.")
+        .color(0x3498db)
+        .field("📊 Status", "Voir la progression en cours", true)
+        .field("📋 Queue", "Fichiers en attente", true)
+        .footer(CreateEmbedFooter::new("RenCodeX Bot • Rust Edition"));
+
+    let buttons = CreateActionRow::Buttons(vec![
+        CreateButton::new("status").style(ButtonStyle::Primary).label("📊 Status"),
+        CreateButton::new("queue").style(ButtonStyle::Secondary).label("📋 Queue"),
+        CreateButton::new("pause").style(ButtonStyle::Secondary).label("⏸️ Pause"),
+        CreateButton::new("resume").style(ButtonStyle::Success).label("▶️ Reprendre"),
+        CreateButton::new("cancel").style(ButtonStyle::Danger).label("🛑 Annuler"),
+    ]);
+
+    let message = CreateMessage::new()
+        .embed(embed)
+        .components(vec![buttons]);
+
+    if let Err(e) = msg.channel_id.send_message(&ctx.http, message).await {
+        eprintln!("[Discord bot] Erreur envoi panneau : {e}");
     }
 }
 
@@ -87,6 +170,7 @@ fn format_help() -> String {
      `!pause`   — Mettre en pause\n\
      `!resume`  — Reprendre\n\
      `!cancel`  — Annuler l'encodage\n\
+     `!panel`   — Ouvrir le panneau de contrôle interactif\n\
      `!help`    — Afficher cette aide"
         .to_string()
 }
@@ -147,7 +231,7 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) {
         }
     };
 
-    if let Err(e) = client.start().await {
-        eprintln!("[Discord bot] Erreur de connexion : {e}");
+    if let Err(err) = client.start().await {
+        eprintln!("[Discord bot] Erreur de connexion : {err}");
     }
 }

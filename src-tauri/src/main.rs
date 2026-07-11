@@ -71,7 +71,8 @@ fn main() {
                 && !cfg.discord_cmd_channel_id.is_empty()
             {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
-                    let token = cfg.discord_bot_token.clone();
+                    let token = std::env::var("RENCODEX_DISCORD_TOKEN")
+                        .unwrap_or_else(|_| cfg.discord_bot_token.clone());
                     let app_handle = app.handle().clone();
                     std::thread::spawn(move || {
                         let rt = tokio::runtime::Runtime::new().unwrap();
