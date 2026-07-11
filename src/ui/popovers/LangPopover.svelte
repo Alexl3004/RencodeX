@@ -1,25 +1,38 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import LangSelector from "$components/LangSelector.svelte";
-  import { X, Captions, Headphones, MessageSquare, Users } from '@lucide/svelte';
+  import LangSelector from "$components/popovers/LangSelector.svelte";
+  import {
+    X,
+    Captions,
+    Headphones,
+    MessageSquare,
+    Users,
+  } from "@lucide/svelte";
 
   let open = $state(false);
 
-  let audioActive = $derived([...encoder.selAudio].filter(l => encoder.audioLangs.has(l)).length);
-  let subActive   = $derived([...encoder.selSubs].filter(l => encoder.subLangs.has(l)).length);
+  let audioActive = $derived(
+    [...encoder.selAudio].filter((l) => encoder.audioLangs.has(l)).length,
+  );
+  let subActive = $derived(
+    [...encoder.selSubs].filter((l) => encoder.subLangs.has(l)).length,
+  );
   let totalActive = $derived(audioActive + subActive);
-  let totalLangs  = $derived(encoder.audioLangs.size + encoder.subLangs.size);
+  let totalLangs = $derived(encoder.audioLangs.size + encoder.subLangs.size);
 
   let hasOverrides = $derived(
-    encoder.files.some(f => encoder.fileSelAudio.has(f.path) || encoder.fileSelSubs.has(f.path))
+    encoder.files.some(
+      (f) =>
+        encoder.fileSelAudio.has(f.path) || encoder.fileSelSubs.has(f.path),
+    ),
   );
 
   function applyToAll() {
     for (const f of encoder.files) {
       encoder.setFileLangSel(
         f.path,
-        new Set([...encoder.selAudio].filter(l => f.audio_langs.includes(l))),
-        new Set([...encoder.selSubs].filter(l => f.sub_langs.includes(l))),
+        new Set([...encoder.selAudio].filter((l) => f.audio_langs.includes(l))),
+        new Set([...encoder.selSubs].filter((l) => f.sub_langs.includes(l))),
       );
     }
   }
@@ -82,7 +95,10 @@
       class="fixed inset-0 z-[9970]"
       role="presentation"
       onclick={() => (open = false)}
-      oncontextmenu={(e) => { e.preventDefault(); open = false; }}
+      oncontextmenu={(e) => {
+        e.preventDefault();
+        open = false;
+      }}
     ></div>
 
     <!-- Popover -->
@@ -100,7 +116,8 @@
           <div class="header-accent"></div>
           <div class="flex flex-col gap-0.5">
             <span class="header-title">Pistes &amp; sous-titres</span>
-            <span class="header-sub">Sélection globale — tous les fichiers</span>
+            <span class="header-sub">Sélection globale — tous les fichiers</span
+            >
           </div>
         </div>
         <button
@@ -115,7 +132,6 @@
 
       <!-- Corps -->
       <div class="popover-body">
-
         <!-- Section Audio -->
         <section class="lang-section">
           <div class="section-header">
@@ -123,7 +139,9 @@
               <Headphones class="w-3.5 h-3.5 opacity-70" />
               Pistes audio
             </span>
-            <span class="section-count section-count--audio">{audioActive} actif{audioActive > 1 ? 's' : ''}</span>
+            <span class="section-count section-count--audio"
+              >{audioActive} actif{audioActive > 1 ? "s" : ""}</span
+            >
           </div>
           <LangSelector mode="audio" />
         </section>
@@ -137,11 +155,12 @@
               <MessageSquare class="w-3.5 h-3.5 opacity-70" />
               Sous-titres
             </span>
-            <span class="section-count section-count--sub">{subActive} actif{subActive > 1 ? 's' : ''}</span>
+            <span class="section-count section-count--sub"
+              >{subActive} actif{subActive > 1 ? "s" : ""}</span
+            >
           </div>
           <LangSelector mode="sub" />
         </section>
-
       </div>
 
       <!-- Footer -->
@@ -149,7 +168,11 @@
         <footer class="popover-footer">
           <div class="footer-info">
             <Users class="w-3.5 h-3.5 shrink-0 opacity-60" />
-            <span>{encoder.files.length} fichier{encoder.files.length > 1 ? 's' : ''}</span>
+            <span
+              >{encoder.files.length} fichier{encoder.files.length > 1
+                ? "s"
+                : ""}</span
+            >
           </div>
           <div class="footer-actions">
             {#if hasOverrides}
@@ -186,13 +209,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px; height: 28px;
+    width: 28px;
+    height: 28px;
     border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);
     cursor: pointer;
-    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      border-color 0.1s,
+      color 0.1s;
     flex-shrink: 0;
   }
   .trigger:hover {
@@ -202,13 +229,19 @@
   }
   .trigger--active {
     background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-    border-color: color-mix(in srgb, var(--color-accent) 25%, var(--color-border));
+    border-color: color-mix(
+      in srgb,
+      var(--color-accent) 25%,
+      var(--color-border)
+    );
     color: var(--color-accent);
   }
   .trigger-badge {
     position: absolute;
-    top: -4px; right: -4px;
-    min-width: 16px; height: 16px;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
     padding: 0 3px;
     border-radius: 999px;
     background: var(--color-accent);
@@ -218,7 +251,7 @@
     font-weight: 700;
     line-height: 16px;
     text-align: center;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   }
 
   /* ── Popover ───────────────────────────────────────────────────────────── */
@@ -230,7 +263,7 @@
     background: var(--color-panel);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
-    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -248,7 +281,8 @@
     background: var(--color-surface);
   }
   .header-accent {
-    width: 3px; height: 18px;
+    width: 3px;
+    height: 18px;
     border-radius: 2px;
     background: var(--color-accent);
     flex-shrink: 0;
@@ -272,13 +306,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px; height: 26px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-xs);
     border: 1px solid transparent;
     background: transparent;
     color: var(--color-subtext);
     cursor: pointer;
-    transition: background 0.1s, color 0.1s, border-color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s,
+      border-color 0.1s;
     flex-shrink: 0;
   }
   .close-btn:hover {
@@ -388,7 +426,11 @@
     white-space: nowrap;
   }
   .footer-btn--reset:hover {
-    border-color: color-mix(in srgb, var(--color-danger) 60%, var(--color-border));
+    border-color: color-mix(
+      in srgb,
+      var(--color-danger) 60%,
+      var(--color-border)
+    );
     color: var(--color-danger);
     background: color-mix(in srgb, var(--color-danger) 8%, transparent);
   }
@@ -397,6 +439,11 @@
     border-color: var(--color-accent);
     color: #fff;
   }
-  .footer-btn--apply:hover:not(:disabled) { opacity: 0.88; }
-  .footer-btn--apply:disabled { opacity: 0.4; cursor: not-allowed; }
+  .footer-btn--apply:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+  .footer-btn--apply:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 </style>

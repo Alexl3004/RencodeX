@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { encoder, type AppFile} from "$lib/stores/encoder.svelte";
+  import { encoder} from "$lib/stores/encoder.svelte";
+  import { type AppFile } from "$lib/stores/types";
   import { formatDuration } from "$lib/stores/naming";
   import { formatSize } from "$lib/utils";
-  import FileModal from "$components/FileModal.svelte";
-  import FileRenameModal from "$components/FileRenameModal.svelte";
-  import FileLangModal from "$components/FileLangModal.svelte";
-  import LangPopover from "$components/LangPopover.svelte";
+  import FileModal from "$components/modals/FileModal.svelte";
+  import FileRenameModal from "$components/modals/FileRenameModal.svelte";
+  import FileLangModal from "$components/modals/FileLangModal.svelte";
+  import LangPopover from "$components/popovers/LangPopover.svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import {
     X,

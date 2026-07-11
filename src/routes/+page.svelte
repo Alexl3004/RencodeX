@@ -3,18 +3,18 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { listen } from "@tauri-apps/api/event";
   import type { UnlistenFn } from "@tauri-apps/api/event";
-  import ToastNotif from "$components/ToastNotif.svelte";
 
+  import ToastNotif from "$components/ToastNotif.svelte";
   import TopBar from "$components/TopBar.svelte";
-  import DropZone from "$components/DropZone.svelte";
+  import FileToolbar from "$components/FileToolbar.svelte";
   import FileTable from "$components/FileTable.svelte";
   import ProgressPanel from "$components/ProgressPanel.svelte";
   import ControlBar from "$components/ControlBar.svelte";
-  import EncodingSettings from "$components/EncodingSettings.svelte";
-  import RenamingSettings from "$components/RenamingSettings.svelte";
-  import Dashboard from "$components/Dashboard.svelte";
-  import LogConsole from "$components/LogConsole.svelte";
-  import Settings from "$components/Settings.svelte";
+  import EncodingSettings from "$components/encoding/EncodingSettings.svelte"
+  import RenamingSettings from "$components/renaming/RenamingSettings.svelte";
+  import Dashboard from "$components/dashboard/Dashboard.svelte";
+  import LogConsole from "$components/Log/LogConsole.svelte";
+  import Settings from "$components/setting/Settings.svelte";
   import { stats } from "$lib/stores/stats.svelte";
 
   let topbar = $state<{ activeTab: string; TABS: any[] } | null>(null);
@@ -153,7 +153,7 @@
 
       {#if activeTab === "home"}
         <div class="main-content" role="tabpanel" aria-label="Accueil">
-          <div class="dropzone-slot"><DropZone /></div>
+          <div class="fileToolbar-slot"><FileToolbar /></div>
           <section class="filetable-slot">
             <div class="section-label mb-1">
               Fichiers
@@ -345,7 +345,7 @@
     padding: 8px;
     overflow: hidden;
   }
-  .dropzone-slot  { flex: 0 0 auto; }
+  .fileToolbar-slot  { flex: 0 0 auto; }
   .filetable-slot {
     flex: 3 1 0;
     min-height: 0;

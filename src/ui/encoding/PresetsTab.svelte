@@ -1,0 +1,775 @@
+<script lang="ts">
+  import { encoder } from "$lib/stores/encoder.svelte";
+  import { BUILTIN_PRESETS } from "$lib/stores/prefs.store.svelte";
+  import type { MultipassMode } from "$lib/stores/types";
+  import { SlidersHorizontal } from "@lucide/svelte";
+
+  // ── État de l'onglet Préréglages ───────────────────────────────────────────
+  type PresetPanelId = string | "custom";
+  let selectedPanel = $state<PresetPanelId>(encoder.activePresetId ?? "custom");
+
+  const PRESET_DESCS: Record<string, { desc: string; tags: string[] }> = {
+    fast: {
+      desc: "Encodage rapide, taille réduite. Idéal pour un visionnage immédiat.",
+      tags: ["CRF 30", "p3", "Audio copy"],
+    },
+    balanced: {
+      desc: "Bon équilibre entre vitesse et qualité pour un usage quotidien.",
+      tags: ["CRF 28", "p5", "AAC 192k"],
+    },
+    quality: {
+      desc: "Haute fidélité visuelle, temps d'encodage plus long.",
+      tags: ["CRF 24", "p7", "AQ spatial+temporel"],
+    },
+    archive: {
+      desc: "Compression maximale pour le stockage longue durée.",
+      tags: ["CRF 20", "p7", "Multipass fullres"],
+    },
+  };
+
+  const crfBands = [
+    {
+      range: [18, 20],
+      label: "Archivage",
+      quality: "Transparente",
+      color: "#6ee7b7",
+    },
+    {
+      range: [21, 23],
+      label: "Home cinéma",
+      quality: "Excellente",
+      color: "#86efac",
+    },
+    {
+      range: [24, 26],
+      label: "Usage général",
+      quality: "Très bonne",
+      color: "#fbbf24",
+    },
+    {
+      range: [27, 29],
+      label: "Web / Mobile",
+      quality: "Bonne",
+      color: "#fb923c",
+    },
+    {
+      range: [30, 35],
+      label: "Compact",
+      quality: "Correcte",
+      color: "#f87171",
+    },
+  ];
+  let currentBand = $derived(
+    crfBands.find(
+      (b) => encoder.crf >= b.range[0] && encoder.crf <= b.range[1],
+    ) ?? crfBands[2],
+  );
+
+  const speedMeta: Record<string, { label: string; speed: number }> = {
+    p1: { label: "Ultra rapide", speed: 7 },
+    p2: { label: "Très rapide", speed: 6 },
+    p3: { label: "Rapide", speed: 5 },
+    p4: { label: "Normal+", speed: 4 },
+    p5: { label: "Normal", speed: 3 },
+    p6: { label: "Lent", speed: 2 },
+    p7: { label: "Très lent", speed: 1 },
+  };
+
+  let spatialAq = $derived(encoder.spatialAq);
+  let temporalAq = $derived(encoder.temporalAq);
+  let aqStrength = $derived(encoder.aqStrength);
+  let multipass = $derived(encoder.multipass);
+
+  function applyBuiltinPreset(id: string) {
+    encoder.applyPreset(id);
+    selectedPanel = id;
+  }
+
+  function selectCustom() {
+    selectedPanel = "custom";
+  }
+</script>
+
+<section class="content-section">
+  <header class="section-header">
+    <div>
+      <h2 class="section-title">Préréglages d'encodage</h2>
+      <p class="section-desc">
+        Choisissez un profil prédéfini ou configurez chaque paramètre
+        manuellement.
+      </p>
+    </div>
+  </header>
+
+  <!-- Cartes de préréglages -->
+  <div class="bp-grid">
+    {#each BUILTIN_PRESETS as p}
+      {@const meta = PRESET_DESCS[p.id]}
+      {@const isActive = selectedPanel === p.id}
+      <button
+        type="button"
+        class="bp-card {isActive ? 'bp-card--active' : ''}"
+        onclick={() => applyBuiltinPreset(p.id)}
+      >
+        <div class="bp-card-top">
+          <span class="bp-label">{p.label}</span>
+          {#if p.id === "balanced"}
+            <span class="bp-rec">REC</span>
+          {/if}
+        </div>
+        <p class="bp-desc">{meta?.desc ?? ""}</p>
+        <div class="bp-tags">
+          {#each meta?.tags ?? [] as tag}
+            <span class="bp-tag">{tag}</span>
+          {/each}
+        </div>
+      </button>
+    {/each}
+
+    <!-- Carte Personnalisé -->
+    <button
+      type="button"
+      class="bp-card bp-card--custom {selectedPanel === 'custom'
+        ? 'bp-card--active'
+        : ''}"
+      onclick={selectCustom}
+    >
+      <div class="bp-card-top">
+        <span class="bp-label">Personnalisé</span>
+        <SlidersHorizontal
+          class="w-3 h-3"
+          style="color: var(--color-subtext2)"
+        />
+      </div>
+      <p class="bp-desc">Configurez CRF, preset encodeur et AQ manuellement.</p>
+      <div class="bp-tags">
+        <span class="bp-tag">CRF {encoder.crf}</span>
+        <span class="bp-tag">{encoder.preset.toUpperCase()}</span>
+      </div>
+    </button>
+  </div>
+
+  <!-- Panneau personnalisé -->
+  {#if selectedPanel === "custom"}
+    <div class="custom-panel">
+      <div class="cp-divider">
+        <span class="cp-divider-label">Paramètres personnalisés</span>
+      </div>
+
+      <!-- CRF -->
+      <div class="field-block">
+        <div class="field-label-row">
+          <span class="field-label">Qualité CRF</span>
+          <div class="section-badge" style="--badge-color: {currentBand.color}">
+            <span class="badge-value">{encoder.crf}</span>
+            <span class="badge-label">{currentBand.label}</span>
+          </div>
+        </div>
+        <div class="crf-track-wrap">
+          <input
+            type="range"
+            value={encoder.crf}
+            oninput={(e: Event) =>
+              encoder.setCrf(parseInt((e.target as HTMLInputElement).value))}
+            min="18"
+            max="35"
+            step="1"
+            class="crf-slider"
+            aria-label="Valeur CRF"
+          />
+          <div class="crf-scale">
+            <span>18</span>
+            <span class="crf-scale-label">← Qualité · Taille →</span>
+            <span>35</span>
+          </div>
+        </div>
+        <div class="band-grid band-grid--compact">
+          {#each crfBands as band}
+            {@const active =
+              encoder.crf >= band.range[0] && encoder.crf <= band.range[1]}
+            <div
+              class="band-card {active ? 'band-card--active' : ''}"
+              style="--c: {band.color}"
+            >
+              <div class="band-range">{band.range[0]}–{band.range[1]}</div>
+              <div class="band-name">{band.label}</div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Preset encodeur (vitesse) -->
+      <div class="field-block">
+        <div class="field-label">Vitesse d'encodage</div>
+        <div class="speed-grid">
+          {#each ["p1", "p2", "p3", "p4", "p5", "p6", "p7"] as p}
+            {@const meta = speedMeta[p]}
+            {@const isActive = encoder.preset === p}
+            <button
+              type="button"
+              class="speed-btn {isActive ? 'speed-btn--active' : ''}"
+              onclick={() => encoder.setPreset(p)}
+            >
+              <span class="speed-id">{p.toUpperCase()}</span>
+              <span class="speed-name">{meta.label}</span>
+              <div class="speed-dots">
+                {#each Array(7) as _, i}
+                  <div
+                    class="speed-dot {i < meta.speed ? 'speed-dot--on' : ''}"
+                  ></div>
+                {/each}
+              </div>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- AQ -->
+      <div class="field-block">
+        <div class="field-label">Adaptive Quantization</div>
+        <div class="toggle-row">
+          <button
+            type="button"
+            class="toggle-opt {spatialAq ? 'toggle-opt--active' : ''}"
+            onclick={() => encoder.setSpatialAq(!spatialAq)}
+          >
+            <span class="toggle-opt-title">AQ spatiale</span>
+            <span class="toggle-opt-sub">zones complexes dans l'image</span>
+          </button>
+          <button
+            type="button"
+            class="toggle-opt {temporalAq ? 'toggle-opt--active' : ''}"
+            onclick={() => encoder.setTemporalAq(!temporalAq)}
+          >
+            <span class="toggle-opt-title">AQ temporelle</span>
+            <span class="toggle-opt-sub">cohérence entre les frames</span>
+          </button>
+        </div>
+        {#if spatialAq || temporalAq}
+          <div class="field-label-row" style="margin-top:10px">
+            <span class="field-label">Force AQ</span>
+            <span class="field-value-badge">{aqStrength}</span>
+          </div>
+          <input
+            type="range"
+            value={aqStrength}
+            oninput={(e: Event) =>
+              encoder.setAqStrength(
+                parseInt((e.target as HTMLInputElement).value),
+              )}
+            min="1"
+            max="15"
+            step="1"
+            class="crf-slider"
+            aria-label="Force AQ"
+          />
+          <div class="slider-hints">
+            <span>Doux</span>
+            <span>Agressif</span>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Multipass -->
+      <div class="field-block">
+        <div class="field-label">Multipass</div>
+        <div class="multipass-row">
+          {#each [{ val: "disabled", label: "Aucun", sub: "passe unique" }, { val: "qres", label: "¼ résolution", sub: "analyse rapide" }, { val: "fullres", label: "Pleine rés.", sub: "qualité max" }] as opt}
+            <button
+              type="button"
+              class="multipass-btn {multipass === opt.val
+                ? 'multipass-btn--active'
+                : ''}"
+              onclick={() => encoder.setMultipass(opt.val as MultipassMode)}
+            >
+              <span class="mp-label">{opt.label}</span>
+              <span class="mp-sub">{opt.sub}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
+</section>
+
+<style>
+  .content-section {
+    padding: 28px 32px;
+    max-width: 680px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+  }
+  .section-desc {
+    font-size: 12px;
+    color: var(--color-subtext);
+    line-height: 1.6;
+    max-width: 420px;
+    margin: 0;
+  }
+
+  .section-badge {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--badge-color) 8%, var(--color-surface));
+    border: 1px solid
+      color-mix(in srgb, var(--badge-color) 25%, var(--color-border));
+    transition:
+      background 0.3s,
+      border-color 0.3s;
+  }
+  .badge-value {
+    font-family: "Geist Mono", monospace;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--badge-color, var(--color-text));
+    line-height: 1;
+    transition: color 0.3s;
+  }
+  .badge-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    color: var(--badge-color, var(--color-subtext));
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 3px;
+    opacity: 0.8;
+    text-align: center;
+    transition: color 0.3s;
+  }
+
+  .field-block {
+    margin-bottom: 24px;
+  }
+  .field-block:last-child {
+    margin-bottom: 0;
+  }
+
+  .field-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-subtext);
+    margin-bottom: 10px;
+  }
+  .field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .field-value-badge {
+    font-family: "Geist Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-accent);
+  }
+
+  .crf-track-wrap {
+    margin-bottom: 12px;
+  }
+  .crf-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border2, var(--color-border));
+    outline: none;
+    cursor: pointer;
+    display: block;
+  }
+  .crf-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    border: 2px solid var(--color-panel);
+    box-shadow: 0 0 0 1px var(--color-accent);
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .crf-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  .crf-scale {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+    margin-top: 5px;
+  }
+  .crf-scale-label {
+    color: var(--color-subtext2);
+  }
+
+  .slider-hints {
+    display: flex;
+    justify-content: space-between;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+    margin-top: 5px;
+  }
+
+  .band-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+  .band-grid--compact .band-card {
+    padding: 7px 6px;
+  }
+  .band-card {
+    padding: 10px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    text-align: center;
+    transition:
+      border-color 0.2s,
+      background 0.2s;
+  }
+  .band-card--active {
+    border-color: color-mix(in srgb, var(--c) 50%, var(--color-border));
+    background: color-mix(in srgb, var(--c) 8%, var(--color-surface));
+  }
+  .band-range {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-subtext);
+    margin-bottom: 4px;
+  }
+  .band-card--active .band-range {
+    color: var(--c);
+  }
+  .band-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-subtext);
+    margin-bottom: 2px;
+  }
+  .band-card--active .band-name {
+    color: var(--color-text);
+  }
+
+  .bp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .bp-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .bp-card:hover {
+    border-color: var(--color-subtext2);
+  }
+  .bp-card--active {
+    border-color: var(--color-accent);
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 7%,
+      var(--color-surface)
+    );
+  }
+  .bp-card--custom {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .bp-card--custom .bp-desc {
+    flex: 1;
+  }
+
+  .bp-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .bp-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+  }
+  .bp-card--active .bp-label {
+    color: var(--color-accent);
+  }
+  .bp-rec {
+    font-family: "Geist Mono", monospace;
+    font-size: 7px;
+    letter-spacing: 0.05em;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: color-mix(
+      in srgb,
+      var(--color-success, #4dbb6a) 15%,
+      transparent
+    );
+    border: 1px solid
+      color-mix(in srgb, var(--color-success, #4dbb6a) 30%, transparent);
+    color: var(--color-success, #4dbb6a);
+    line-height: 1.4;
+  }
+  .bp-desc {
+    font-size: 11px;
+    color: var(--color-subtext);
+    line-height: 1.5;
+    margin: 0;
+  }
+  .bp-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .bp-tag {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    color: var(--color-subtext2);
+  }
+  .bp-card--active .bp-tag {
+    border-color: color-mix(
+      in srgb,
+      var(--color-accent) 20%,
+      var(--color-border)
+    );
+    color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel));
+  }
+
+  .custom-panel {
+    animation: fade-in 0.15s ease;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .cp-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cp-divider::before,
+  .cp-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--color-border);
+  }
+  .cp-divider-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-subtext2);
+    white-space: nowrap;
+  }
+
+  .speed-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+  }
+  .speed-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 9px 3px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .speed-btn:hover {
+    border-color: var(--color-subtext2);
+  }
+  .speed-btn--active {
+    border-color: var(--color-accent);
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 10%,
+      var(--color-surface)
+    );
+  }
+  .speed-id {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--color-subtext);
+    transition: color 0.15s;
+  }
+  .speed-btn--active .speed-id {
+    color: var(--color-accent);
+  }
+  .speed-name {
+    font-size: 8px;
+    color: var(--color-subtext2);
+    text-align: center;
+    line-height: 1.2;
+  }
+  .speed-dots {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  .speed-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--color-border);
+    transition: background 0.15s;
+  }
+  .speed-dot--on {
+    background: var(--color-accent);
+    opacity: 0.7;
+  }
+  .speed-btn--active .speed-dot--on {
+    opacity: 1;
+  }
+
+  .toggle-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .toggle-opt {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .toggle-opt:hover {
+    border-color: var(--color-subtext2);
+  }
+  .toggle-opt--active {
+    border-color: var(--color-accent);
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 8%,
+      var(--color-surface)
+    );
+  }
+  .toggle-opt-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-subtext);
+    transition: color 0.15s;
+  }
+  .toggle-opt--active .toggle-opt-title {
+    color: var(--color-accent);
+  }
+  .toggle-opt-sub {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+  }
+
+  .multipass-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .multipass-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 12px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition:
+      border-color 0.15s,
+      background 0.15s;
+  }
+  .multipass-btn:hover {
+    border-color: var(--color-subtext2);
+  }
+  .multipass-btn--active {
+    border-color: var(--color-accent);
+    background: color-mix(
+      in srgb,
+      var(--color-accent) 8%,
+      var(--color-surface)
+    );
+  }
+  .mp-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-subtext);
+    transition: color 0.15s;
+  }
+  .multipass-btn--active .mp-label {
+    color: var(--color-accent);
+  }
+  .mp-sub {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+  }
+</style>

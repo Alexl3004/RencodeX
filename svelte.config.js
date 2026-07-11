@@ -5,12 +5,12 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 const config = {
   preprocess: vitePreprocess(),
   compilerOptions: {
-    runes: true  // 🔥 Active les runes Svelte 5
+    runes: true
   },
   kit: {
     adapter: adapter(),
     alias: {
-      $components: 'src/components',
+      $components: 'src/ui',
       $lib: 'src/lib'
     }
   }

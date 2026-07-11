@@ -2,7 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
   import { buildOutputName, computeTag } from "$lib/stores/naming";
-  import type { AppFile, CleanedName } from "$lib/stores/encoder.svelte";
+  import type { AppFile, CleanedName } from "$lib/stores/types";
   import { Loader2, RefreshCw, CircleCheck, X, Pencil } from "@lucide/svelte";
 
   type Props = {
