@@ -13,7 +13,6 @@
     Search,
     CircleCheck,
     AlertTriangle,
-    LoaderCircle,
     Trash2,
     Captions,
     Tag,
@@ -25,6 +24,10 @@
     FileDown,
     Upload,
   } from "@lucide/svelte";
+  import { ring2, dotPulse, lineSpinner } from "ldrs";
+  ring2.register();
+  dotPulse.register();
+  lineSpinner.register();
 
   let filterText = $state("");
   let filterStatus = $state<
@@ -263,7 +266,7 @@
   }
 
   const STATUS_COLOR: Record<string, string> = {
-    analysing: "text-[var(--color-accent)] animate-pulse",
+    analysing: "text-[var(--color-accent)]",
     encoding: "text-[var(--color-accent)]",
     queued: "text-[var(--color-subtext)]",
     ready: "text-[var(--color-success)]",
@@ -486,7 +489,7 @@
         onclick={() => ctxExtractSubs(ctxMenu!.file)}
       >
         {#if encoder.extractingSubs}
-          <LoaderCircle class="w-3.5 h-3.5 shrink-0 animate-spin" />
+          <l-ring-2 size="14" stroke="2" color="var(--color-accent)" speed="0.8"></l-ring-2>
         {:else}
           <FileDown class="w-3.5 h-3.5 shrink-0" />
         {/if}
@@ -860,9 +863,11 @@
               >
                 {file.size_mb > 0 ? formatSize(file.size_mb) : "—"}
               </td>
+
+              <!-- Audio -->
               <td class="text-center font-mono" style="color: var(--color-subtext);">
                 {#if file.status === "analysing"}
-                  <span class="animate-pulse" style="color: var(--color-accent);">…</span>
+                  <l-dot-pulse size="24" speed="1.2" color="var(--color-accent)"></l-dot-pulse>
                 {:else}
                   {@const fileAudioSel = encoder.fileSelAudio.get(file.path) ?? encoder.selAudio}
                   {@const hasAudioOverride = encoder.fileSelAudio.has(file.path)}
@@ -875,6 +880,8 @@
                   </span>
                 {/if}
               </td>
+
+              <!-- Sous-titres -->
               <td class="text-center font-mono" style="color: var(--color-subtext);">
                 {#if true}
                   {@const fileSubSel = encoder.fileSelSubs.get(file.path) ?? encoder.selSubs}
@@ -888,6 +895,7 @@
                   </span>
                 {/if}
               </td>
+
               <td
                 class="text-right font-mono"
                 style="color: var(--color-subtext);"
@@ -902,29 +910,35 @@
                   )}s
                 {:else}—{/if}
               </td>
+
+              <!-- Statut -->
               <td class="text-center">
                 {#if isCurrentEncoding && encoder.progress}
-                  <div class="flex flex-col items-center gap-0.5">
-                    <span
-                      class="font-mono text-[10px] font-bold animate-pulse"
-                      style="color: var(--color-accent);"
-                      >{getStatusLabel(file)}</span
-                    >
-                    <span
-                      class="font-mono text-[9px]"
-                      style="color: var(--color-subtext);"
-                      >{Math.round(encoder.progress.percent)}%</span
-                    >
+                  <!-- Encodage en cours : spinner + label + barre de progression -->
+                  <div class="flex flex-col items-center gap-1">
+                    <div class="flex items-center gap-1.5">
+                      <l-line-spinner size="12" stroke="2" speed="1.2" color="var(--color-accent)"></l-line-spinner>
+                      <span class="font-mono text-[10px] font-bold" style="color: var(--color-accent);">
+                        {getStatusLabel(file)}
+                      </span>
+                    </div>
+                    <div class="prog-bar-wrap">
+                      <div class="prog-bar-fill" style="width: {encoder.progress.percent}%"></div>
+                    </div>
+                  </div>
+                {:else if file.status === "analysing"}
+                  <!-- Analyse en cours -->
+                  <div class="flex items-center justify-center gap-1.5">
+                    <l-line-spinner size="12" stroke="2" speed="1.4" color="var(--color-accent)"></l-line-spinner>
+                    <span class="font-mono text-[10px]" style="color: var(--color-accent);">
+                      {getStatusLabel(file)}
+                    </span>
                   </div>
                 {:else if file.sub_extract_status === "extracting"}
-                  <div class="flex flex-col items-center gap-0.5">
-                    <span
-                      class="font-mono text-[10px] animate-pulse inline-flex items-center gap-0.5"
-                      style="color: var(--color-accent);"
-                    >
-                      <LoaderCircle class="w-2.5 h-2.5 animate-spin" />
-                      Extraction…
-                    </span>
+                  <!-- Extraction sous-titres -->
+                  <div class="flex items-center justify-center gap-1.5">
+                    <l-ring-2 size="12" stroke="2" speed="0.9" color="var(--color-accent)"></l-ring-2>
+                    <span class="font-mono text-[10px]" style="color: var(--color-accent);">Extraction…</span>
                   </div>
                 {:else if file.status === "done" && file.result}
                   <div class="flex flex-col items-center gap-0.5">
@@ -981,7 +995,15 @@
     min-width: 200px;
     max-width: 260px;
     overflow: hidden;
+    /* ── Animation d'apparition ── */
+    animation: ctx-in 0.12s cubic-bezier(0.2, 0, 0, 1.3) both;
+    transform-origin: top left;
   }
+  @keyframes ctx-in {
+    from { opacity: 0; transform: scale(0.93) translateY(-4px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
+  }
+
   .ctx-filename {
     display: flex;
     align-items: center;
@@ -1051,7 +1073,15 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    /* ── Slide-down ── */
+    animation: lang-panel-in 0.15s ease-out both;
+    overflow: hidden;
   }
+  @keyframes lang-panel-in {
+    from { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+    to   { opacity: 1; max-height: 300px; padding-top: 8px; padding-bottom: 8px; }
+  }
+
   .ctx-lang-group {
     display: flex;
     flex-direction: column;
@@ -1230,10 +1260,37 @@
     position: relative;
   }
 
-  /* Fond selon le mode sélection actif */
-  .row-encoding td {
-    background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+  /* ── Entrée des lignes ─────────────────────────────────────────────────── */
+  @keyframes row-in {
+    from { opacity: 0; transform: translateY(-3px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
+  tbody tr {
+    animation: row-in 0.16s ease-out both;
+    height: 44px;
+    max-height: 44px;
+  }
+  tbody td {
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* ── Shimmer sur la ligne en cours d'encodage ─────────────────────────── */
+  @keyframes row-shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position:  200% center; }
+  }
+  .row-encoding td {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-accent) 9%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: row-shimmer 2s linear infinite;
+  }
+
   /* Sélectionné encodage → teinte verte/primaire */
   .row-selected td {
     background: color-mix(in srgb, var(--color-accent) 7%, transparent);
@@ -1272,13 +1329,21 @@
   .extract-dot {
     background: var(--color-success);
   }
-  tbody tr {
-    height: 44px;
-    max-height: 44px;
-  }
-  tbody td {
+
+  /* ── Barre de progression encodage ───────────────────────────────────── */
+  .prog-bar-wrap {
+    width: 52px;
+    height: 3px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
     overflow: hidden;
-    white-space: nowrap;
+  }
+  .prog-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--color-accent);
+    transition: width 0.35s ease-out;
+    min-width: 4px;
   }
 
   /* Groupes de sélection dans la barre de filtres */
@@ -1467,8 +1532,12 @@
     width: 20px;
     height: 20px;
     color: var(--color-subtext);
-    opacity: 0.3;
     margin-bottom: 4px;
+    animation: empty-float 2.6s ease-in-out infinite alternate;
+  }
+  @keyframes empty-float {
+    from { transform: translateY(0px);  opacity: 0.25; }
+    to   { transform: translateY(-6px); opacity: 0.5; }
   }
   .empty-title {
     font-family: "Geist Mono", monospace;
