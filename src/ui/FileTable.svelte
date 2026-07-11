@@ -257,27 +257,35 @@
 
   function getStatusLabel(file: AppFile): string {
     if (file.status === "analysing") return "Analyse";
-    if (file.status === "encoding") return "En cours";
-    if (file.status === "queued") return "En file";
+    if (file.status === "encoding") return encoder.paused ? "En pause" : "En cours";
+    if (file.status === "queued") return encoder.paused ? "En pause" : "En file";
     if (file.status === "ready") return pendingPaths.has(file.path) ? "En file" : "Prêt";
     if (file.status === "done") return "Terminé";
-    if (file.status === "error") return "Erreur";
+    if (file.status === "error") {
+      // Distinguer annulé vs erreur réelle
+      if ((file.result as any)?.status === "cancelled") return "Annulé";
+      return "Erreur";
+    }
     return "—";
   }
 
   const STATUS_COLOR: Record<string, string> = {
     analysing: "text-[var(--color-accent)]",
     encoding: "text-[var(--color-accent)]",
+    paused: "text-[var(--color-warning)]",
     queued: "text-[var(--color-subtext)]",
     ready: "text-[var(--color-success)]",
     pending: "text-[var(--color-subtext)]",
     done: "text-[var(--color-success)]",
     error: "text-[var(--color-danger)]",
+    cancelled: "text-[var(--color-warning)]",
   };
 
   function getStatusColor(file: AppFile): string {
-    if (file.status === "queued") return STATUS_COLOR.queued;
+    if (file.status === "queued") return encoder.paused ? STATUS_COLOR.paused : STATUS_COLOR.queued;
+    if (file.status === "encoding") return encoder.paused ? STATUS_COLOR.paused : STATUS_COLOR.encoding;
     if (file.status === "ready" && pendingPaths.has(file.path)) return STATUS_COLOR.pending;
+    if (file.status === "error" && (file.result as any)?.status === "cancelled") return STATUS_COLOR.cancelled;
     return STATUS_COLOR[file.status] ?? "";
   }
 

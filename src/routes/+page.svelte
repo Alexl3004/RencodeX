@@ -57,6 +57,9 @@
       </button>
     {/each}
 
+    <!-- Séparateur vertical -->
+    <div class="top-sep" aria-hidden="true"></div>
+
     <!-- Onglets centraux -->
     <div class="topnav-middle">
       {#each TABS.filter(t => t.id !== "home" && t.id !== "settings") as tab}
@@ -74,6 +77,9 @@
         </button>
       {/each}
     </div>
+
+    <!-- Séparateur vertical -->
+    <div class="top-sep" aria-hidden="true"></div>
 
     <!-- Settings — épinglé à droite -->
     {#each TABS.filter(t => t.id === "settings") as tab}
@@ -358,7 +364,7 @@
     overflow: hidden;
   }
   .progress-slot {
-    flex: 2 1 0;
+    flex: 0.5 1 0;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -385,17 +391,34 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 2px 8px;
+    padding: 4px 8px;
     background: var(--color-panel);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
-  }
-  .topnav .side-tab {
-    min-height: 32px;
-    padding: 4px 8px;
+    height: 44px;
   }
 
-  /* Zone centrale qui pousse settings à droite */
+  /* side-tab en horizontal : icone + label en dessous (comme sidebar) */
+  .topnav .side-tab {
+    flex-direction: column;
+    gap: 3px;
+    min-height: 36px;
+    width: auto;
+    min-width: 44px;
+    padding: 4px 10px;
+  }
+
+  /* Separateur vertical — miroir du side-sep */
+  .top-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--color-border);
+    margin: 0 4px;
+    flex-shrink: 0;
+    opacity: 0.5;
+  }
+
+  /* Zone centrale qui pousse settings a droite */
   .topnav-middle {
     flex: 1;
     display: flex;
@@ -404,13 +427,12 @@
     gap: 2px;
   }
 
-  /* Label visible uniquement sur l'onglet actif, avec la même animation que la sidebar */
+  /* Label visible uniquement sur l'onglet actif, animé comme side-label */
   .top-label {
     font-family: "DM Sans", sans-serif;
     font-size: 9px;
     font-weight: 500;
     line-height: 1;
-    text-align: center;
     white-space: nowrap;
     opacity: 0;
     animation: label-in 0.18s ease forwards;

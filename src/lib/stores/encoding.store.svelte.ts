@@ -38,6 +38,7 @@ function createEncodingStore() {
 
   // Ordre des chemins du batch en cours (pour résoudre file_index → path)
   let encodingFilePaths = $state<string[]>([]);
+  let manuallyCancelled = false;
 
   // Map job_id → path — source de vérité pour la corrélation des events
   let jobIdToPath = new Map<string, string>();
@@ -140,6 +141,7 @@ function createEncodingStore() {
     if (!files.length || encoding) return;
     encoding = true;
     summary  = null;
+    manuallyCancelled = false;
 
     const readyFiles  = files.filter((f) => f.status === "ready");
     const targetFiles =
@@ -245,20 +247,22 @@ function createEncodingStore() {
         errors > 0 && ok === 0 ? "error" : "success",
       );
 
-      if (errors > 0 && ok === 0)
-        toasts.error(`Batch échoué — ${errors}/${jobs.length} erreurs`);
-      else if (errors > 0 || cancelled > 0)
-        toasts.warn(
-          `${ok}/${jobs.length} réussis` +
-            (gain ? ` · −${gain}%` : "") +
-            (errors > 0 ? ` · ${errors} erreur${errors > 1 ? "s" : ""}` : ""),
-        );
-      else
-        toasts.success(
-          `${ok} fichier${ok > 1 ? "s" : ""} encodé${ok > 1 ? "s" : ""}` +
-            (gain ? ` · −${gain}% (${formatMb(savedMb)})` : "") +
-            (dur  ? ` · ${dur}` : ""),
-        );
+      if (!manuallyCancelled) {
+        if (errors > 0 && ok === 0)
+          toasts.error(`Batch échoué — ${errors}/${jobs.length} erreurs`);
+        else if (errors > 0 || cancelled > 0)
+          toasts.warn(
+            `${ok}/${jobs.length} réussis` +
+              (gain ? ` · −${gain}%` : "") +
+              (errors > 0 ? ` · ${errors} erreur${errors > 1 ? "s" : ""}` : ""),
+          );
+        else
+          toasts.success(
+            `${ok} fichier${ok > 1 ? "s" : ""} encodé${ok > 1 ? "s" : ""}` +
+              (gain ? ` · −${gain}% (${formatMb(savedMb)})` : "") +
+              (dur  ? ` · ${dur}` : ""),
+          );
+      }
     } catch (e) {
       log(`Erreur fatale encodage : ${e}`, "error");
       toasts.error(`Erreur fatale : ${e}`);
@@ -278,8 +282,15 @@ function createEncodingStore() {
       await invoke("resume_encoding");
       paused = false;
     }
+    manuallyCancelled = true;
     invoke("cancel_encoding");
     encoding = false;
+    // Marquer les fichiers encore en attente / en cours comme annulés
+    filesStore.files = filesStore.files.map((f) =>
+      f.status === "queued" || f.status === "encoding"
+        ? { ...f, status: "error" as const, result: { ...f.result, status: "cancelled" } as any }
+        : f,
+    );
     log("Encodage annulé par l'utilisateur", "warn");
     toasts.warn("Encodage annulé");
   }
