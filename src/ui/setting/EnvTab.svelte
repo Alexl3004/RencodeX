@@ -25,16 +25,19 @@
   const vars = $derived([
     {
       key: "RENCODEX_FFMPEG_PATH",
-      active: effective?.ffmpeg_path !== form.ffmpeg_path,
+      active: !!effective?.ffmpeg_path,
     },
-    { key: "RENCODEX_DISCORD_TOKEN", active: effective?.discord_token_set },
+    {
+      key: "RENCODEX_DISCORD_TOKEN",
+      active: effective?.discord_token_set,
+    },
     {
       key: "RENCODEX_DISCORD_LOG_CHANNEL",
-      active: effective?.discord_log_channel_id !== form.discord_log_channel_id,
+      active: !!effective?.discord_log_channel_id,
     },
     {
       key: "RENCODEX_DISCORD_CMD_CHANNEL",
-      active: effective?.discord_cmd_channel_id !== form.discord_cmd_channel_id,
+      active: !!effective?.discord_cmd_channel_id,
     },
   ]);
 </script>
