@@ -1,3 +1,4 @@
+use tauri::{AppHandle, Emitter};
 use std::sync::atomic::Ordering;
 use crate::state::{
     ENCODING, snapshot,
@@ -10,6 +11,7 @@ use serenity::prelude::*;
 
 struct Handler {
     channel_id: u64,
+    app: AppHandle,
 }
 
 #[async_trait]
@@ -23,6 +25,9 @@ impl EventHandler for Handler {
         }
 
         let content = msg.content.trim().to_lowercase();
+        if !content.starts_with('!') {
+            return;
+        }
         let reply = match content.as_str() {
             "!help"   => format_help(),
             "!status" => format_status(),
@@ -30,6 +35,7 @@ impl EventHandler for Handler {
             "!skip" => {
                 if ENCODING.load(Ordering::Acquire) {
                     kill_ffmpeg_process();
+                    let _ = self.app.emit("encode-cancelled", ());
                     "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
                 } else {
                     "ℹ️ Aucun encodage en cours.".to_string()
@@ -38,6 +44,7 @@ impl EventHandler for Handler {
             "!cancel" => {
                 if ENCODING.load(Ordering::Acquire) {
                     kill_ffmpeg_process();
+                    let _ = self.app.emit("encode-cancelled", ());
                     "⏹ Encodage annulé depuis Discord.".to_string()
                 } else {
                     "ℹ️ Aucun encodage en cours.".to_string()
@@ -45,6 +52,7 @@ impl EventHandler for Handler {
             }
             "!pause" => {
                 if pause_ffmpeg_process() {
+                    let _ = self.app.emit("encode-paused", true);
                     "⏸ Encodage mis en pause.".to_string()
                 } else {
                     "ℹ️ Impossible de mettre en pause (aucun encodage actif ou déjà en pause).".to_string()
@@ -52,6 +60,7 @@ impl EventHandler for Handler {
             }
             "!resume" => {
                 if resume_ffmpeg_process() {
+                    let _ = self.app.emit("encode-paused", false);
                     "▶️ Encodage repris.".to_string()
                 } else {
                     "ℹ️ Impossible de reprendre (aucune pause active).".to_string()
@@ -72,13 +81,13 @@ impl EventHandler for Handler {
 
 fn format_help() -> String {
     "**RenCodeX — Commandes disponibles**\n\
-        `!status`  — Progression de l'encodage en cours\n\
-        `!queue`   — Liste des fichiers en attente\n\
-        `!skip`    — Passer au fichier suivant\n\
-        `!pause`   — Mettre en pause\n\
-        `!resume`  — Reprendre\n\
-        `!cancel`  — Annuler l'encodage\n\
-        `!help`    — Afficher cette aide"
+     `!status`  — Progression de l'encodage en cours\n\
+     `!queue`   — Liste des fichiers en attente\n\
+     `!skip`    — Passer au fichier suivant\n\
+     `!pause`   — Mettre en pause\n\
+     `!resume`  — Reprendre\n\
+     `!cancel`  — Annuler l'encodage\n\
+     `!help`    — Afficher cette aide"
         .to_string()
 }
 
@@ -94,10 +103,10 @@ fn format_status() -> String {
     let rem_s = s.remaining as u64 % 60;
     format!(
         "**📦 Encodage en cours**\n\
-            Fichier : `{}` ({}/{})\n\
-            {} **{:.1}%**\n\
-            Vitesse : `{:.2}x`  |  Restant : `{}m{}s`\n\
-            Temps écoulé : `{}m{}s`",
+         Fichier : `{}` ({}/{})\n\
+         {} **{:.1}%**\n\
+         Vitesse : `{:.2}x`  |  Restant : `{}m{}s`\n\
+         Temps écoulé : `{}m{}s`",
         s.current_file, s.file_index + 1, s.file_total,
         bar, s.percent, s.speed,
         rem_m, rem_s, elapsed / 60, elapsed % 60,
@@ -122,13 +131,13 @@ fn format_queue() -> String {
     lines
 }
 
-pub async fn start(token: String, channel_id: u64) {
+pub async fn start(token: String, channel_id: u64, app: AppHandle) {
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
 
     let mut client = match Client::builder(&token, intents)
-        .event_handler(Handler { channel_id })
+        .event_handler(Handler { channel_id, app })
         .await
     {
         Ok(c) => c,

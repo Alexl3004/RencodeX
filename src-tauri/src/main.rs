@@ -17,30 +17,12 @@ fn main() {
 
     let cfg = resolve_config(load_config());
 
-    // ── Vérification FFmpeg au démarrage ──────────────────────────────────────
-    // On vérifie avant tout que le binaire configuré est accessible.
-    // L'erreur apparaîtra dans les logs console et, côté Svelte, dans le panneau
-    // de logs via la commande `check_ffmpeg` appelée dans `encoder.init()`.
     if !std::path::Path::new(&cfg.ffmpeg_path).exists() {
         eprintln!(
             "[startup] AVERTISSEMENT : ffmpeg introuvable à « {} ».\n\
              Configurez le chemin dans Paramètres › FFmpeg avant d'encoder.",
             cfg.ffmpeg_path
         );
-    }
-    // ─────────────────────────────────────────────────────────────────────────
-
-    if cfg.discord_enabled
-        && !cfg.discord_bot_token.is_empty()
-        && !cfg.discord_cmd_channel_id.is_empty()
-    {
-        if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
-            let token = cfg.discord_bot_token.clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(services::discord_bot::start(token, cmd_channel_id));
-            });
-        }
     }
 
     tauri::Builder::default()
@@ -50,7 +32,7 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            // setting
+            // settings
             commands::settings::load_config,
             commands::settings::save_config,
             commands::settings::load_encoding_prefs,
@@ -81,8 +63,24 @@ fn main() {
             commands::discord::send_discord_stats_notification,
             commands::discord::send_discord_progress_notification,
             commands::discord::send_email_report,
-
         ])
+        .setup(move|app| {
+            // On accède au AppHandle ici, après que Tauri l'a construit
+            if cfg.discord_enabled
+                && !cfg.discord_bot_token.is_empty()
+                && !cfg.discord_cmd_channel_id.is_empty()
+            {
+                if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
+                    let token = cfg.discord_bot_token.clone();
+                    let app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(services::discord_bot::start(token, cmd_channel_id, app_handle));
+                    });
+                }
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let is_encoding = crate::state::ENCODING.load(std::sync::atomic::Ordering::Acquire);

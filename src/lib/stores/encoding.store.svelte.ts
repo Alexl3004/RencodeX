@@ -111,8 +111,26 @@ function createEncodingStore() {
         );
       }
     });
+    const u3 = await listen<boolean>("encode-paused", (e) => {
+    paused = e.payload;
+    if (e.payload) {
+        log("Encodage mis en pause (Discord)", "info");
+        toasts.warn("Encodage en pause");
+    } else {
+        log("Encodage repris (Discord)", "info");
+        toasts.success("Encodage repris");
+    }
+});
 
-    _unlisten = [u1, u2];
+    const u4 = await listen("encode-cancelled", () => {
+        encoding = false;
+        paused   = false;
+        progress = null;
+        log("Encodage annulé depuis Discord", "warn");
+        toasts.warn("Encodage annulé via Discord");
+    });
+
+    _unlisten = [u1, u2, u3, u4];
   }
 
   // ─── Encodage ─────────────────────────────────────────────────────────────
