@@ -36,6 +36,34 @@
       ? Math.round((totalExtractedFiles / totalExtractLaunched) * 100)
       : 0
   );
+
+  type SortCol = "date" | "files" | "tracks";
+  type SortDir = "asc" | "desc";
+  let sortCol = $state<SortCol>("date");
+  let sortDir = $state<SortDir>("desc");
+
+  function toggleSort(col: SortCol) {
+    if (sortCol === col) {
+      sortDir = sortDir === "asc" ? "desc" : "asc";
+    } else {
+      sortCol = col;
+      sortDir = "desc";
+    }
+  }
+
+  let sortedSessions = $derived(
+    [...extractSessions].sort((a, b) => {
+      let av: any, bv: any;
+      if (sortCol === "date") {
+        av = new Date(a.date).getTime();
+        bv = new Date(b.date).getTime();
+      } else {
+        av = a[sortCol];
+        bv = b[sortCol];
+      }
+      return sortDir === "asc" ? av - bv : bv - av;
+    })
+  );
 </script>
 
 <section class="content-section">
@@ -132,19 +160,45 @@
           </div>
         {/if}
 
-        <div class="sessions-list">
-          <div class="sessions-list-header">
-            <span>Date</span>
-            <span>Fichiers</span>
-            <span>Pistes extraites</span>
-          </div>
-          {#each extractSessions as s, i}
-            <div class="session-row {i === 0 ? 'session-row--latest' : ''}">
-              <span class="session-date">{shortDate(s.date)}</span>
-              <span class="session-files">{s.files} fichier{s.files > 1 ? "s" : ""}</span>
-              <span class="session-tracks">{s.tracks} piste{s.tracks > 1 ? "s" : ""}</span>
-            </div>
-          {/each}
+        <div class="table-wrap">
+          <table class="sess-table">
+            <colgroup>
+              <col style="width: 42%;" />
+              <col style="width: 29%;" />
+              <col style="width: 29%;" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th class="th-left">
+                  <button class="th-sort-btn" onclick={() => toggleSort('date')}>
+                    Date
+                    <span class="sort-icon">{sortCol === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  </button>
+                </th>
+                <th class="th-right">
+                  <button class="th-sort-btn th-sort-right" onclick={() => toggleSort('files')}>
+                    Fichiers
+                    <span class="sort-icon">{sortCol === 'files' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  </button>
+                </th>
+                <th class="th-right">
+                  <button class="th-sort-btn th-sort-right" onclick={() => toggleSort('tracks')}>
+                    Pistes extraites
+                    <span class="sort-icon">{sortCol === 'tracks' ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each sortedSessions as s, i}
+                <tr class="sess-row {i === 0 && sortCol === 'date' && sortDir === 'desc' ? 'sess-row--latest' : ''}">
+                  <td class="td-date">{shortDate(s.date)}</td>
+                  <td class="td-right">{s.files} fichier{s.files > 1 ? "s" : ""}</td>
+                  <td class="td-right td-tracks">{s.tracks} piste{s.tracks > 1 ? "s" : ""}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
       </div>
     {/if}
@@ -310,41 +364,100 @@
     letter-spacing: 0.06em;
     color: var(--color-subtext2);
   }
-  .sessions-list {
-    display: flex;
-    flex-direction: column;
+  .table-wrap {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
-    overflow: hidden;
+    max-height: 300px;
+    overflow-y: overlay;
+    position: relative;
   }
-  .sessions-list-header {
-    display: grid;
-    grid-template-columns: 1fr 120px 160px;
-    padding: 8px 16px;
-    background: color-mix(in srgb, var(--color-muted) 40%, var(--color-panel));
+  .table-wrap::-webkit-scrollbar { width: 6px; }
+  .table-wrap::-webkit-scrollbar-track { background: transparent; }
+  .table-wrap::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-subtext2) 40%, transparent);
+    border-radius: 3px;
+  }
+  .table-wrap::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--color-subtext2) 70%, transparent);
+  }
+
+  .sess-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+
+  .sess-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-surface);
+  }
+
+  .sess-table thead tr {
     border-bottom: 1px solid var(--color-border);
+  }
+
+  .sess-table th {
+    padding: 5px 6px;
     font-family: "Geist Mono", monospace;
     font-size: 9px;
+    font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--color-subtext2);
+    white-space: nowrap;
   }
-  .session-row {
-    display: grid;
-    grid-template-columns: 1fr 120px 160px;
-    align-items: center;
-    padding: 10px 16px;
-    font-family: "Geist Mono", monospace;
-    font-size: 11px;
-    color: var(--color-subtext);
+  .th-left  { text-align: left; }
+  .th-right { text-align: right; }
+
+  .sess-table tbody tr {
+    height: 38px;
     border-bottom: 1px solid var(--color-border);
     transition: background 0.08s;
   }
-  .session-row:last-child { border-bottom: none; }
-  .session-row--latest {
-    background: color-mix(in srgb, var(--color-accent) 5%, var(--color-panel));
-    color: var(--color-text);
+  .sess-table tbody tr:last-child { border-bottom: none; }
+
+  .sess-row--latest td {
+    background: color-mix(in srgb, var(--color-accent) 5%, transparent);
   }
-  .session-date { color: var(--color-subtext2); }
-  .session-tracks { font-weight: 700; color: var(--color-accent); }
+
+  .sess-table td {
+    padding: 0 6px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    color: var(--color-subtext);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .td-right  { text-align: right; }
+  .td-date   { color: var(--color-subtext2); }
+  .td-tracks { font-weight: 700; color: var(--color-accent); }
+
+  .th-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: "Geist Mono", monospace;
+    font-size: inherit;
+    font-weight: inherit;
+    color: var(--color-subtext2);
+    padding: 0;
+    white-space: nowrap;
+    transition: color 0.1s;
+    letter-spacing: inherit;
+    text-transform: inherit;
+  }
+  .th-sort-btn:hover { color: var(--color-text); }
+  .th-sort-right { margin-left: auto; }
+
+  .sort-icon {
+    font-size: 9px;
+    opacity: 0.45;
+    line-height: 1;
+  }
 </style>
