@@ -290,6 +290,8 @@ pub async fn save_stats_to_db(s: &Stats) -> Result<(), sea_orm::DbErr> {
     if let Some(session) = s.encode_sessions.first() {
         let exists = encode_sessions::Entity::find()
             .filter(encode_sessions::Column::Date.eq(&session.date))
+            .filter(encode_sessions::Column::Files.eq(session.files as i32))
+            .filter(encode_sessions::Column::SavedMb.eq(session.saved_mb))
             .count(conn())
             .await?;
 
@@ -310,6 +312,8 @@ pub async fn save_stats_to_db(s: &Stats) -> Result<(), sea_orm::DbErr> {
     if let Some(session) = s.extract_sessions.first() {
         let exists = extract_sessions::Entity::find()
             .filter(extract_sessions::Column::Date.eq(&session.date))
+            .filter(extract_sessions::Column::Files.eq(session.files as i32))
+            .filter(extract_sessions::Column::Tracks.eq(session.tracks as i32))
             .count(conn())
             .await?;
 
