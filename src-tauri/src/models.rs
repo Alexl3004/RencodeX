@@ -37,6 +37,7 @@ pub struct EncodeJob {
     pub fps: f64,
     pub crf:             u32,
     pub preset:          String,
+    pub video_mode:      String,   // "encode" | "copy"
     pub audio_mode:      String,
     pub audio_bitrate:   u32,
     pub spatial_aq:      bool,
@@ -148,6 +149,8 @@ pub struct EncodingPrefs {
     pub tag_order: Vec<String>,
     #[serde(default)]
     pub team: String,
+    #[serde(default = "default_video_mode")]
+    pub video_mode: String,
     #[serde(default = "default_audio_mode")]
     pub audio_mode: String,
     #[serde(default = "default_audio_bitrate")]
@@ -205,6 +208,7 @@ fn default_tag_order() -> Vec<String> {
         "codec", "bitdepth", "audioCodec", "team", "japver",
     ].into_iter().map(String::from).collect()
 }
+fn default_video_mode() -> String { "encode".to_string() }
 fn default_audio_mode() -> String { "reencode".to_string() }
 fn default_audio_bitrate() -> u32 { 192 }
 fn default_aq_strength() -> u32 { 8 }
@@ -231,6 +235,7 @@ impl Default for EncodingPrefs {
             se_format: default_se_format(),
             tag_order: default_tag_order(),
             team: String::new(),
+            video_mode: default_video_mode(),
             audio_mode: default_audio_mode(),
             audio_bitrate: default_audio_bitrate(),
             spatial_aq: false,

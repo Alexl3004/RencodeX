@@ -249,29 +249,38 @@ pub async fn start_encoding(
         }
         if !sub_mapped { cmd_args.push("-sn".into()); }
 
-        // Paramètres d'encodage DYNAMIQUES (CRF et Preset depuis le job)
-        cmd_args.extend([
-            "-c:v".into(), "hevc_nvenc".into(),
-            "-profile:v".into(), "main10".into(),
-            "-pix_fmt".into(), "p010le".into(),
-            "-preset".into(), job.preset.clone(),
-            "-cq".into(), job.crf.to_string(),
-        ]);
+        // ── Codec vidéo : copie ou réencodage NVENC ───────────────────────
+        if job.video_mode == "copy" {
+            // Remuxage pur : le flux vidéo est copié bit-à-bit, aucune dégradation.
+            // Les paramètres CRF, preset, AQ et multipass sont ignorés.
+            cmd_args.extend([
+                "-c:v".into(), "copy".into(),
+            ]);
+        } else {
+            // Paramètres d'encodage DYNAMIQUES (CRF et Preset depuis le job)
+            cmd_args.extend([
+                "-c:v".into(), "hevc_nvenc".into(),
+                "-profile:v".into(), "main10".into(),
+                "-pix_fmt".into(), "p010le".into(),
+                "-preset".into(), job.preset.clone(),
+                "-cq".into(), job.crf.to_string(),
+            ]);
 
-        // Qualité NVENC avancée : AQ spatiale/temporelle + multipass
-        cmd_args.extend([
-            "-spatial-aq".into(), if job.spatial_aq { "1".into() } else { "0".into() },
-            "-temporal-aq".into(), if job.temporal_aq { "1".into() } else { "0".into() },
-        ]);
-        if job.spatial_aq || job.temporal_aq {
-            cmd_args.extend(["-aq-strength".into(), job.aq_strength.to_string()]);
+            // Qualité NVENC avancée : AQ spatiale/temporelle + multipass
+            cmd_args.extend([
+                "-spatial-aq".into(), if job.spatial_aq { "1".into() } else { "0".into() },
+                "-temporal-aq".into(), if job.temporal_aq { "1".into() } else { "0".into() },
+            ]);
+            if job.spatial_aq || job.temporal_aq {
+                cmd_args.extend(["-aq-strength".into(), job.aq_strength.to_string()]);
+            }
+            let multipass_val = match job.multipass.as_str() {
+                "qres" => "qres",
+                "fullres" => "fullres",
+                _ => "disabled",
+            };
+            cmd_args.extend(["-multipass".into(), multipass_val.into()]);
         }
-        let multipass_val = match job.multipass.as_str() {
-            "qres" => "qres",
-            "fullres" => "fullres",
-            _ => "disabled",
-        };
-        cmd_args.extend(["-multipass".into(), multipass_val.into()]);
 
         cmd_args.extend(audio_codec_args);
         if !sub_meta.is_empty() {

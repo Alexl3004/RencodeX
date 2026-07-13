@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { VideoMode } from "./types";
 import type {
   YearFormat,
   SeasonEpisodeFormat,
@@ -34,6 +35,7 @@ export const BUILTIN_PRESETS: EncodePreset[] = [
     label:        "Rapide",
     crf:          30,
     preset:       "p3",
+    videoMode:    "encode",
     audioMode:    "copy",
     audioBitrate: 192,
     spatialAq:    false,
@@ -46,6 +48,7 @@ export const BUILTIN_PRESETS: EncodePreset[] = [
     label:        "Équilibré",
     crf:          28,
     preset:       "p5",
+    videoMode:    "encode",
     audioMode:    "reencode",
     audioBitrate: 192,
     spatialAq:    false,
@@ -58,6 +61,7 @@ export const BUILTIN_PRESETS: EncodePreset[] = [
     label:        "Haute qualité",
     crf:          24,
     preset:       "p7",
+    videoMode:    "encode",
     audioMode:    "reencode",
     audioBitrate: 320,
     spatialAq:    true,
@@ -70,6 +74,7 @@ export const BUILTIN_PRESETS: EncodePreset[] = [
     label:        "Archive",
     crf:          20,
     preset:       "p7",
+    videoMode:    "encode",
     audioMode:    "copy",
     audioBitrate: 192,
     spatialAq:    true,
@@ -112,6 +117,7 @@ function createPrefsStore() {
   let defaultSubLangs     = $state<string[]>(["fre"]);
 
   // Audio / vidéo
+  let videoMode    = $state<VideoMode>("encode");
   let audioMode    = $state<AudioMode>("reencode");
   let audioBitrate = $state(192);
   let spatialAq    = $state(false);
@@ -153,6 +159,7 @@ function createPrefsStore() {
       lang_order:              langOrder,
       default_audio_langs:     defaultAudioLangs,
       default_sub_langs:       defaultSubLangs,
+      video_mode:              videoMode,
       audio_mode:              audioMode,
       audio_bitrate:           audioBitrate,
       spatial_aq:              spatialAq,
@@ -272,6 +279,7 @@ function createPrefsStore() {
         se_format: string;
         tag_order: string[];
         team: string;
+        video_mode?: string;
         audio_mode: string;
         audio_bitrate: number;
         spatial_aq: boolean;
@@ -353,6 +361,8 @@ function createPrefsStore() {
         defaultAudioLangs = prefs.default_audio_langs as string[];
       if (Array.isArray(prefs.default_sub_langs))
         defaultSubLangs = prefs.default_sub_langs as string[];
+      if (prefs.video_mode === "encode" || prefs.video_mode === "copy")
+        videoMode = prefs.video_mode;
       if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
         audioMode = prefs.audio_mode;
       if (typeof prefs.audio_bitrate === "number") audioBitrate = prefs.audio_bitrate;
@@ -414,6 +424,7 @@ function createPrefsStore() {
 
   function setCrf(value: number)            { crf = value;          _markCustom(); schedule(); }
   function setPreset(value: string)         { preset = value;       _markCustom(); schedule(); }
+  function setVideoMode(v: VideoMode)       { videoMode = v;        _markCustom(); schedule(); }
   function setAudioMode(v: AudioMode)       { audioMode = v;        _markCustom(); schedule(); }
   function setAudioBitrate(v: number)       { audioBitrate = v;     _markCustom(); schedule(); }
   function setSpatialAq(v: boolean)         { spatialAq = v;        _markCustom(); schedule(); }
@@ -477,6 +488,7 @@ function createPrefsStore() {
     disabledTags         = new Set<TagId>(["japver"]);
     team                 = "";
     keepJapaneseVer      = false;
+    videoMode            = "encode";
     audioMode            = "reencode";
     audioBitrate         = 192;
     spatialAq            = false;
@@ -527,6 +539,7 @@ function createPrefsStore() {
     get langOrder()            { return langOrder; },
     get defaultAudioLangs()    { return defaultAudioLangs; },
     get defaultSubLangs()      { return defaultSubLangs; },
+    get videoMode()            { return videoMode; },
     get audioMode()            { return audioMode; },
     get audioBitrate()         { return audioBitrate; },
     get spatialAq()            { return spatialAq; },
@@ -564,6 +577,7 @@ function createPrefsStore() {
     setLangOrder,
     setDefaultAudioLangs,
     setDefaultSubLangs,
+    setVideoMode,
     setAudioMode,
     setAudioBitrate,
     setSpatialAq,

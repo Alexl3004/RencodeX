@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { buildOutputName, computeTag } from "$lib/stores/naming";
+  import { buildOutputName, computeTag, computeVideoCodecTag } from "$lib/stores/naming";
   import type { AppFile, CleanedName } from "$lib/stores/types";
   import { Loader2, RefreshCw, CircleCheck, X, Pencil } from "@lucide/svelte";
 
@@ -36,6 +36,7 @@
       encoder.selAudio,
       encoder.selSubs,
     );
+    const codecTag = computeVideoCodecTag(file.streams, encoder.videoMode, encoder.codecFormat);
     return buildOutputName(
       cleaned,
       tag,
@@ -47,7 +48,7 @@
         disabledTags: encoder.disabledTags,
         resolutionCase: encoder.resolutionCase,
         titleCase: encoder.titleCase,
-        codecFormat: encoder.codecFormat,
+        codecFormat: codecTag as import("$lib/stores/types").CodecFormat,
         sourceCase: encoder.sourceCase,
       },
     );
@@ -72,7 +73,8 @@
           encoder.selAudio,
           encoder.selSubs,
         );
-        if (r)
+        if (r) {
+          const codecTag = computeVideoCodecTag(file.streams, encoder.videoMode, encoder.codecFormat);
           editValue = buildOutputName(
             r,
             tag,
@@ -84,10 +86,11 @@
               disabledTags: encoder.disabledTags,
               resolutionCase: encoder.resolutionCase,
               titleCase: encoder.titleCase,
-              codecFormat: encoder.codecFormat,
+              codecFormat: codecTag as import("$lib/stores/types").CodecFormat,
               sourceCase: encoder.sourceCase,
             },
           );
+        }
       })
       .catch(() => {})
       .finally(() => {

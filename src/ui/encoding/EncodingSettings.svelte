@@ -1,8 +1,9 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { Zap, Volume2, Box, Subtitles, Languages } from "@lucide/svelte";
+  import { Zap, Video, Volume2, Box, Subtitles, Languages } from "@lucide/svelte";
 
   import PresetsTab from "./PresetsTab.svelte";
+  import VideoTab from "./VideoTab.svelte";
   import AudioTab from "./AudioTab.svelte";
   import ContainerTab from "./ContainerTab.svelte";
   import SubtitlesTab from "./SubtitlesTab.svelte";
@@ -12,6 +13,7 @@
 
   type SectionId =
     | "presets"
+    | "video"
     | "audio"
     | "container"
     | "subtitles"
@@ -25,6 +27,7 @@
         icon: Zap,
         desc: "Qualité & vitesse",
       },
+      { id: "video", label: "Vidéo", icon: Video, desc: "Encodage / copie" },
       { id: "audio", label: "Audio", icon: Volume2, desc: "Codec & débit" },
       { id: "container", label: "Conteneur", icon: Box, desc: "MKV / MP4" },
       {
@@ -52,7 +55,7 @@
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="sidebar-title">Encodage</span>
-      <span class="sidebar-sub">H.265 · NVENC</span>
+      <span class="sidebar-sub">{encoder.videoMode === "copy" ? "Copie · Remux" : "H.265 · NVENC"}</span>
     </div>
 
     <nav class="sidebar-nav" aria-label="Sections">
@@ -82,6 +85,8 @@
   <div class="content-panel">
     {#if activeSection === "presets"}
       <PresetsTab />
+    {:else if activeSection === "video"}
+      <VideoTab />
     {:else if activeSection === "audio"}
       <AudioTab />
     {:else if activeSection === "container"}

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { prefs } from "./prefs.store.svelte";
 import { filesStore } from "./files.store.svelte";
 import { encodingStore } from "./encoding.store.svelte";
-import { applySeFormat, DEFAULT_TAG_ORDER } from "./naming";
+import { applySeFormat, DEFAULT_TAG_ORDER, computeVideoCodecTag } from "./naming";
 import type { AppFile, NamingOptions } from "./types";
 import { stats } from "./stats.svelte";
 
@@ -87,11 +87,12 @@ function createEncoder() {
   // ─── Helpers nommage (délégués à prefs + files) ───────────────────────────
 
   function getDisplayName(file: AppFile): string {
+    const codecTag = computeVideoCodecTag(file.streams, prefs.videoMode, prefs.codecFormat);
     return applySeFormat(file, prefs.seasonEpisodeFormat, prefs.tagOrder, prefs.team, {
       disabledTags:    prefs.disabledTags,
       resolutionCase:  prefs.resolutionCase,
       titleCase:       prefs.titleCase,
-      codecFormat:     prefs.codecFormat,
+      codecFormat:     codecTag as import("./types").CodecFormat,
       sourceCase:      prefs.sourceCase,
       yearFormat:      prefs.yearFormat,
       webSourceFormat: prefs.webSourceFormat,
@@ -294,6 +295,7 @@ function createEncoder() {
     get providerCase()         { return prefs.providerCase; },
     get team()                 { return prefs.team; },
     get keepJapaneseVer()      { return prefs.keepJapaneseVer; },
+    get videoMode()            { return prefs.videoMode; },
     get audioMode()            { return prefs.audioMode; },
     get audioBitrate()         { return prefs.audioBitrate; },
     get spatialAq()            { return prefs.spatialAq; },
@@ -325,6 +327,7 @@ function createEncoder() {
     setProviderCase,
     setTeam,
     setKeepJapaneseVer,
+    setVideoMode: prefs.setVideoMode,
     setAudioMode,
     setAudioBitrate:       prefs.setAudioBitrate,
     setSpatialAq:          prefs.setSpatialAq,

@@ -3,6 +3,7 @@ import type { AppFile, FileAnalysis, CleanedName } from "./types";
 import {
   computeTag,
   computeAudioTag,
+  computeVideoCodecTag,
   buildOutputName,
   formatDuration,
   formatMb,
@@ -61,7 +62,7 @@ function createFilesStore() {
       titleCase:       prefs.titleCase,
       codecFormat:     prefs.codecFormat,
       sourceCase:      prefs.sourceCase,
-      yearParentheses: prefs.yearParentheses,
+      yearFormat:      prefs.yearFormat,
       webSourceFormat: prefs.webSourceFormat,
       tagSeparator:    prefs.tagSeparator,
       providerCase:    prefs.providerCase,
@@ -89,7 +90,7 @@ function createFilesStore() {
     const _titleCase    = prefs.titleCase;
     const _codecFmt     = prefs.codecFormat;
     const _srcCase      = prefs.sourceCase;
-    const _yearParen    = prefs.yearParentheses;
+    const _yearParen    = prefs.yearFormat;
     const _webFmt       = prefs.webSourceFormat;
     const _tagSep       = prefs.tagSeparator;
     const _provCase     = prefs.providerCase;
@@ -101,6 +102,7 @@ function createFilesStore() {
     const _fileSelSubs  = fileSelSubs;
     const _keepJapVer   = prefs.keepJapaneseVer;
     const _audioMode    = prefs.audioMode;
+    const _videoMode    = prefs.videoMode;
 
     files = files.map((f) => {
       if (!f.cleaned || f.status === "encoding" || f.status === "done") return f;
@@ -108,6 +110,7 @@ function createFilesStore() {
       const effSubs  = _fileSelSubs.get(f.path)  ?? _selSubs;
       const tag      = computeTag(f.audio_langs, f.sub_langs, effAudio, effSubs);
       const audioTag = computeAudioTag(f.streams, effAudio, _audioMode);
+      const codecTag = computeVideoCodecTag(f.streams, _videoMode, _codecFmt);
       const name     = buildOutputName(
         f.cleaned,
         tag,
@@ -119,9 +122,9 @@ function createFilesStore() {
           disabledTags:    _disabled,
           resolutionCase:  _resCase,
           titleCase:       _titleCase,
-          codecFormat:     _codecFmt,
+          codecFormat:     codecTag as import("./types").CodecFormat,
           sourceCase:      _srcCase,
-          yearParentheses: _yearParen,
+          yearFormat:      _yearParen,
           webSourceFormat: _webFmt,
           tagSeparator:    _tagSep,
           providerCase:    _provCase,
@@ -185,6 +188,7 @@ function createFilesStore() {
 
           const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, getSelAudio(), getSelSubs());
           const audioTag = computeAudioTag(analysis.streams, getSelAudio(), prefs.audioMode);
+          const codecTag = computeVideoCodecTag(analysis.streams, prefs.videoMode, prefs.codecFormat);
           const outName  = buildOutputName(
             cleaned,
             tag,
@@ -192,7 +196,7 @@ function createFilesStore() {
             audioTag,
             prefs.tagOrder,
             prefs.team,
-            _buildOptions(),
+            { ..._buildOptions(), codecFormat: codecTag as import("./types").CodecFormat },
           );
 
           const updated: AppFile = {

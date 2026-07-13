@@ -21,6 +21,7 @@ export interface FileAnalysis {
 }
 
 export type AudioMode = "reencode" | "copy";
+export type VideoMode = "encode" | "copy";
 export type MultipassMode = "disabled" | "qres" | "fullres";
 export type ContainerFormat = "mkv" | "mp4";
 
@@ -44,6 +45,7 @@ export interface EncodeJob {
   crf: number;
   preset: string;
   audio_mode: AudioMode;
+  video_mode: VideoMode;
   audio_bitrate: number;
   spatial_aq: boolean;
   temporal_aq: boolean;
@@ -171,6 +173,7 @@ export interface EncodePreset {
   crf:          number;
   preset:       string;
   audioMode:    AudioMode;
+  videoMode:    VideoMode;
   audioBitrate: number;
   spatialAq:    boolean;
   temporalAq:   boolean;

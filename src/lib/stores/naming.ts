@@ -5,6 +5,7 @@ import type {
   StreamInfo,
   AppFile,
   AudioMode,
+  VideoMode,
   TagId,
 } from "./types";
 
@@ -197,6 +198,33 @@ export function computeAudioTag(
   );
   if (codecs.size === 0) return "AAC";
   return [...codecs].sort().join("-");
+}
+
+export function computeVideoCodecTag(
+  streams: StreamInfo[],
+  videoMode: VideoMode,
+  codecFormat: string,
+): string {
+  if (videoMode === "encode") return codecFormat;
+  const video = streams.find((s) => s.codec_type === "video");
+  if (!video) return codecFormat;
+  const MAP: Record<string, string> = {
+    hevc:        "H265",
+    h265:        "H265",
+    h264:        "H264",
+    avc:         "H264",
+    av1:         "AV1",
+    vp9:         "VP9",
+    vp8:         "VP8",
+    mpeg2video:  "MPEG2",
+    mpeg4:       "MPEG4",
+    xvid:        "XviD",
+    divx:        "DivX",
+    theora:      "Theora",
+    vc1:         "VC-1",
+    wmv3:        "WMV",
+  };
+  return MAP[video.codec_name.toLowerCase()] ?? video.codec_name.toUpperCase();
 }
 
 // ─── Construction du nom de sortie ───────────────────────────────────────────

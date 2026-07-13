@@ -187,6 +187,7 @@ function createEncodingStore() {
         fps:                     f.fps ?? 25,
         crf:                     prefs.crf,
         preset:                  prefs.preset,
+        video_mode:              prefs.videoMode,
         audio_mode:              prefs.audioMode,
         audio_bitrate:           prefs.audioBitrate,
         spatial_aq:              prefs.spatialAq,
