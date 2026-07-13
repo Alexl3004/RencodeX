@@ -691,17 +691,5 @@
     flex-shrink: 1;
   }
 
-  /* ── Couleurs de fond par état ──────────────────────────────── */
-  .encode-row {
-    background: color-mix(in srgb, var(--color-accent) 3%, transparent);
-  }
-  .summary-row {
-    background: color-mix(in srgb, var(--color-success) 3%, transparent);
-  }
-  .idle-ready-row {
-    background: color-mix(in srgb, var(--color-success) 2%, transparent);
-  }
-  .cancelled-row {
-    background: color-mix(in srgb, var(--color-warning) 3%, transparent);
-  }
+
 </style>

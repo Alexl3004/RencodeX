@@ -1285,18 +1285,23 @@
 
   /* ── Shimmer sur la ligne en cours d'encodage ─────────────────────────── */
   @keyframes row-shimmer {
-    0%   { background-position: -200% center; }
+    0%   { background-position: -100% center; }
     100% { background-position:  200% center; }
   }
-  .row-encoding td {
+  .row-encoding {
     background: linear-gradient(
       90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--color-accent) 9%, transparent) 50%,
-      transparent 100%
+      color-mix(in srgb, var(--color-accent) 5%, transparent) 0%,
+      color-mix(in srgb, var(--color-accent) 5%, transparent) 35%,
+      color-mix(in srgb, var(--color-accent) 20%, transparent) 50%,
+      color-mix(in srgb, var(--color-accent) 5%, transparent) 65%,
+      color-mix(in srgb, var(--color-accent) 5%, transparent) 100%
     );
-    background-size: 200% 100%;
-    animation: row-shimmer 2s linear infinite;
+    background-size: 300% 100%;
+    animation: row-shimmer 2.5s ease-in-out infinite;
+  }
+  .row-encoding td {
+    background: transparent !important;
   }
 
   /* Sélectionné encodage → teinte verte/primaire */
