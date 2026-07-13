@@ -5,23 +5,17 @@
   import { Volume2, Subtitles } from "@lucide/svelte";
 
   let langOrder = $state<string[]>([...prefs.langOrder]);
-  $effect(() => {
-    langOrder = [...prefs.langOrder];
-  });
+  $effect(() => { langOrder = [...prefs.langOrder]; });
+
+  let defaultAudioLangs = $state<string[]>([...prefs.defaultAudioLangs]);
+  let defaultSubLangs   = $state<string[]>([...prefs.defaultSubLangs]);
+
+  $effect(() => { defaultAudioLangs = [...prefs.defaultAudioLangs]; });
+  $effect(() => { defaultSubLangs   = [...prefs.defaultSubLangs]; });
 
   function langLabel(code: string) {
     return LANG_NAMES[code] ?? code.toUpperCase();
   }
-
-  let defaultAudioLangs = $state<string[]>([...prefs.defaultAudioLangs]);
-  let defaultSubLangs = $state<string[]>([...prefs.defaultSubLangs]);
-
-  $effect(() => {
-    defaultAudioLangs = [...prefs.defaultAudioLangs];
-  });
-  $effect(() => {
-    defaultSubLangs = [...prefs.defaultSubLangs];
-  });
 
   function toggleDefaultAudio(code: string) {
     const next = defaultAudioLangs.includes(code)
@@ -30,6 +24,7 @@
     defaultAudioLangs = next;
     prefs.setDefaultAudioLangs(next);
   }
+
   function toggleDefaultSub(code: string) {
     const next = defaultSubLangs.includes(code)
       ? defaultSubLangs.filter((c) => c !== code)
@@ -39,37 +34,35 @@
   }
 </script>
 
-<section class="content-section">
-  <header class="section-header">
-    <div>
-      <h2 class="section-title">Langues par défaut</h2>
-      <p class="section-desc">
-        Pistes activées automatiquement à l'ouverture d'un fichier.
-      </p>
-    </div>
+<section class="tab">
+  <header class="tab-header">
+    <h2 class="tab-title">Pistes par défaut</h2>
+    <p class="tab-desc">
+      Pistes activées automatiquement à l'ouverture d'un fichier.
+    </p>
   </header>
 
   <div class="lang-grid">
-    <!-- ── Colonne Audio ── -->
+    <!-- Audio -->
     <div class="lang-col">
       <div class="lang-col-header">
         <Volume2 class="w-3.5 h-3.5" />
         <span>Audio</span>
       </div>
-      <ul class="lang-toggle-list" aria-label="Langues audio par défaut">
+      <ul class="lang-list" aria-label="Langues audio par défaut">
         {#each langOrder as code (code)}
           {@const on = defaultAudioLangs.includes(code)}
           <li>
             <button
               type="button"
-              class="lang-toggle {on ? 'lang-toggle--on' : ''}"
+              class="lang-row {on ? 'lang-row--on' : ''}"
               onclick={() => toggleDefaultAudio(code)}
               aria-pressed={on}
             >
-              <span class="lang-toggle-name">{langLabel(code)}</span>
-              <span class="lang-toggle-code">{code}</span>
-              <span class="lang-toggle-pill" aria-hidden="true">
-                <span class="lang-toggle-thumb"></span>
+              <span class="lang-name">{langLabel(code)}</span>
+              <span class="lang-code">{code}</span>
+              <span class="pill" aria-hidden="true">
+                <span class="pill-thumb"></span>
               </span>
             </button>
           </li>
@@ -77,26 +70,26 @@
       </ul>
     </div>
 
-    <!-- ── Colonne Sous-titres ── -->
+    <!-- Sous-titres -->
     <div class="lang-col">
       <div class="lang-col-header">
         <Subtitles class="w-3.5 h-3.5" />
         <span>Sous-titres</span>
       </div>
-      <ul class="lang-toggle-list" aria-label="Langues sous-titres par défaut">
+      <ul class="lang-list" aria-label="Langues sous-titres par défaut">
         {#each langOrder as code (code)}
           {@const on = defaultSubLangs.includes(code)}
           <li>
             <button
               type="button"
-              class="lang-toggle {on ? 'lang-toggle--on' : ''}"
+              class="lang-row {on ? 'lang-row--on' : ''}"
               onclick={() => toggleDefaultSub(code)}
               aria-pressed={on}
             >
-              <span class="lang-toggle-name">{langLabel(code)}</span>
-              <span class="lang-toggle-code">{code}</span>
-              <span class="lang-toggle-pill" aria-hidden="true">
-                <span class="lang-toggle-thumb"></span>
+              <span class="lang-name">{langLabel(code)}</span>
+              <span class="lang-code">{code}</span>
+              <span class="pill" aria-hidden="true">
+                <span class="pill-thumb"></span>
               </span>
             </button>
           </li>
@@ -107,32 +100,26 @@
 </section>
 
 <style>
-  .content-section {
-    padding: 28px 32px;
-    max-width: 680px;
+  .tab {
+    padding: 24px 28px;
+    max-width: 560px;
   }
 
-  .section-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 20px;
+  .tab-header {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
     border-bottom: 1px solid var(--color-border);
   }
-  .section-title {
-    font-size: 16px;
+  .tab-title {
+    font-size: 15px;
     font-weight: 600;
     color: var(--color-text);
     letter-spacing: -0.02em;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
   }
-  .section-desc {
+  .tab-desc {
     font-size: 12px;
     color: var(--color-subtext);
-    line-height: 1.6;
-    max-width: 420px;
     margin: 0;
   }
 
@@ -142,6 +129,7 @@
     gap: 16px;
     align-items: start;
   }
+
   .lang-col {
     display: flex;
     flex-direction: column;
@@ -151,16 +139,17 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 600;
     color: var(--color-subtext2);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0 2px 4px;
+    letter-spacing: 0.06em;
+    padding-bottom: 6px;
     border-bottom: 1px solid var(--color-border);
     margin-bottom: 2px;
   }
-  .lang-toggle-list {
+
+  .lang-list {
     list-style: none;
     margin: 0;
     padding: 0;
@@ -169,51 +158,33 @@
     gap: 3px;
   }
 
-  .lang-toggle {
+  .lang-row {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     width: 100%;
     padding: 8px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     cursor: pointer;
-    text-align: left;
-    transition:
-      border-color 0.12s,
-      background 0.12s;
+    transition: border-color 0.12s, background 0.12s;
     user-select: none;
   }
-  .lang-toggle:hover {
+  .lang-row:hover {
     border-color: var(--color-subtext2);
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 3%,
-      var(--color-surface)
-    );
+    background: color-mix(in srgb, var(--color-accent) 3%, var(--color-surface));
   }
-  .lang-toggle--on {
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 45%,
-      var(--color-border)
-    );
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 6%,
-      var(--color-surface)
-    );
+  .lang-row--on {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border));
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
   }
-  .lang-toggle--on:hover {
+  .lang-row--on:hover {
     border-color: var(--color-accent);
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 10%,
-      var(--color-surface)
-    );
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   }
-  .lang-toggle-name {
+
+  .lang-name {
     flex: 1;
     font-size: 12px;
     font-weight: 500;
@@ -221,15 +192,16 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: left;
   }
-  .lang-toggle-code {
+  .lang-code {
     font-family: "Geist Mono", monospace;
     font-size: 10px;
     color: var(--color-subtext2);
     flex-shrink: 0;
   }
 
-  .lang-toggle-pill {
+  .pill {
     position: relative;
     width: 28px;
     height: 16px;
@@ -238,10 +210,8 @@
     flex-shrink: 0;
     transition: background 0.18s;
   }
-  .lang-toggle--on .lang-toggle-pill {
-    background: var(--color-accent);
-  }
-  .lang-toggle-thumb {
+  .lang-row--on .pill { background: var(--color-accent); }
+  .pill-thumb {
     position: absolute;
     top: 2px;
     left: 2px;
@@ -249,10 +219,8 @@
     height: 12px;
     border-radius: 50%;
     background: white;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     transition: transform 0.18s;
   }
-  .lang-toggle--on .lang-toggle-thumb {
-    transform: translateX(12px);
-  }
+  .lang-row--on .pill-thumb { transform: translateX(12px); }
 </style>

@@ -134,9 +134,7 @@
           </div>
           <div class="nav-item-text">
             <span class="nav-item-label">{sec.label}</span>
-            <span class="nav-item-desc">
-              {sec.id === "team" ? team || "non définie" : sec.desc}
-            </span>
+            <span class="nav-item-desc">{sec.id === "team" ? team || "non définie" : sec.desc}</span>
           </div>
           {#if activeSection === sec.id}
             <div class="nav-item-indicator" aria-hidden="true"></div>
@@ -212,7 +210,7 @@
 
   /* ── Sidebar ────────────────────────────────────────────────────────────── */
   .sidebar {
-    width: 220px;
+    width: 200px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -228,28 +226,27 @@
   }
   .sidebar-title {
     display: block;
+    font-family: "Geist Mono", monospace;
     font-size: 13px;
     font-weight: 600;
     color: var(--color-text);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
   .sidebar-sub {
     display: block;
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
-    letter-spacing: 0.06em;
-    color: var(--color-subtext2);
-    margin-top: 3px;
-    text-transform: uppercase;
+    font-size: 10px;
+    color: var(--color-subtext);
+    margin-top: 2px;
   }
 
   .sidebar-nav {
     flex: 1;
-    overflow-y: auto;
-    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    padding: 8px 0;
+    gap: 1px;
+    overflow-y: auto;
   }
 
   /* ── Nav items ───────────────────────────────────────────────────────────── */
@@ -258,53 +255,32 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
+    padding: 8px 14px;
+    min-height: 48px;
+    width: 100%;
     background: transparent;
+    border: none;
+    border-left: 2px solid transparent;
     cursor: pointer;
     text-align: left;
-    transition:
-      background 0.1s,
-      border-color 0.1s;
-    width: 100%;
+    transition: background 0.12s, border-color 0.12s;
   }
   .nav-item:hover {
-    background: color-mix(in srgb, var(--color-muted) 30%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   }
   .nav-item--active {
-    background: color-mix(in srgb, var(--color-accent) 9%, transparent);
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 22%,
-      var(--color-border)
-    );
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border-left-color: var(--color-accent);
   }
 
   .nav-item-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-xs);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
     color: var(--color-subtext);
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
   .nav-item--active .nav-item-icon {
     color: var(--color-accent);
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 30%,
-      var(--color-border)
-    );
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 8%,
-      var(--color-surface)
-    );
   }
 
   .nav-item-text {
@@ -336,12 +312,12 @@
 
   .nav-item-indicator {
     position: absolute;
-    right: 8px;
+    right: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+    width: 3px;
+    height: 16px;
+    border-radius: 2px 0 0 2px;
     background: var(--color-accent);
   }
 

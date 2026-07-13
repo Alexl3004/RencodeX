@@ -2,60 +2,40 @@
   import { encoder } from "$lib/stores/encoder.svelte";
   import { Zap, Video, Volume2, Box, Subtitles, Languages } from "@lucide/svelte";
 
-  import PresetsTab from "./PresetsTab.svelte";
-  import VideoTab from "./VideoTab.svelte";
-  import AudioTab from "./AudioTab.svelte";
+  import PresetsTab   from "./PresetsTab.svelte";
+  import VideoTab     from "./VideoTab.svelte";
+  import AudioTab     from "./AudioTab.svelte";
   import ContainerTab from "./ContainerTab.svelte";
   import SubtitlesTab from "./SubtitlesTab.svelte";
   import LanguagesTab from "./LanguagesTab.svelte";
 
   let { onClose }: { onClose?: () => void } = $props();
 
-  type SectionId =
-    | "presets"
-    | "video"
-    | "audio"
-    | "container"
-    | "subtitles"
-    | "languages";
+  type SectionId = "presets" | "video" | "audio" | "container" | "subtitles" | "languages";
 
-  const SECTIONS: { id: SectionId; label: string; icon: any; desc: string }[] =
-    [
-      {
-        id: "presets",
-        label: "Préréglages",
-        icon: Zap,
-        desc: "Qualité & vitesse",
-      },
-      { id: "video", label: "Vidéo", icon: Video, desc: "Encodage / copie" },
-      { id: "audio", label: "Audio", icon: Volume2, desc: "Codec & débit" },
-      { id: "container", label: "Conteneur", icon: Box, desc: "MKV / MP4" },
-      {
-        id: "subtitles",
-        label: "Sous-titres",
-        icon: Subtitles,
-        desc: "Extraction",
-      },
-      {
-        id: "languages",
-        label: "Pistes",
-        icon: Languages,
-        desc: "Ordre de priorité",
-      },
-    ];
+  const SECTIONS: { id: SectionId; label: string; icon: any; desc: string }[] = [
+    { id: "presets",   label: "Préréglages", icon: Zap,       desc: "Qualité & vitesse"   },
+    { id: "video",     label: "Vidéo",       icon: Video,     desc: "Encodage / copie"    },
+    { id: "audio",     label: "Audio",       icon: Volume2,   desc: "Codec & débit"       },
+    { id: "container", label: "Conteneur",   icon: Box,       desc: "MKV / MP4"           },
+    { id: "subtitles", label: "Sous-titres", icon: Subtitles, desc: "Extraction"          },
+    { id: "languages", label: "Pistes",      icon: Languages, desc: "Ordre de priorité"   },
+  ];
 
   let activeSection = $state<SectionId>("presets");
 </script>
 
 <div
-  class="page-root"
-  class:page-root--horizontal={encoder.innerNavLayout === "horizontal"}
+  class="root"
+  class:root--horizontal={encoder.innerNavLayout === "horizontal"}
 >
-  <!-- ── Sidebar navigation ─────────────────────────────────────────────── -->
+  <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="sidebar-title">Encodage</span>
-      <span class="sidebar-sub">{encoder.videoMode === "copy" ? "Copie · Remux" : "H.265 · NVENC"}</span>
+      <span class="sidebar-sub">
+        {encoder.videoMode === "copy" ? "Copie · Remux" : "H.265 · NVENC"}
+      </span>
     </div>
 
     <nav class="sidebar-nav" aria-label="Sections">
@@ -81,8 +61,8 @@
     </nav>
   </aside>
 
-  <!-- ── Content panel ───────────────────────────────────────────────────── -->
-  <div class="content-panel">
+  <!-- Contenu -->
+  <div class="content">
     {#if activeSection === "presets"}
       <PresetsTab />
     {:else if activeSection === "video"}
@@ -100,8 +80,7 @@
 </div>
 
 <style>
-  /* ── Layout racine ──────────────────────────────────────────────────────── */
-  .page-root {
+  .root {
     display: flex;
     height: 100%;
     overflow: hidden;
@@ -110,7 +89,7 @@
 
   /* ── Sidebar ────────────────────────────────────────────────────────────── */
   .sidebar {
-    width: 220px;
+    width: 200px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -126,28 +105,27 @@
   }
   .sidebar-title {
     display: block;
+    font-family: "Geist Mono", monospace;
     font-size: 13px;
     font-weight: 600;
     color: var(--color-text);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
   .sidebar-sub {
     display: block;
     font-family: "Geist Mono", monospace;
-    font-size: 9px;
-    letter-spacing: 0.06em;
-    color: var(--color-subtext2);
-    margin-top: 3px;
-    text-transform: uppercase;
+    font-size: 10px;
+    color: var(--color-subtext);
+    margin-top: 2px;
   }
 
   .sidebar-nav {
     flex: 1;
-    overflow-y: auto;
-    padding: 8px 8px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    padding: 8px 0;
+    gap: 1px;
+    overflow-y: auto;
   }
 
   .nav-item {
@@ -155,75 +133,51 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
+    padding: 8px 14px;
+    min-height: 48px;
+    width: 100%;
     background: transparent;
+    border: none;
+    border-left: 2px solid transparent;
     cursor: pointer;
     text-align: left;
-    transition:
-      background 0.1s,
-      border-color 0.1s;
-    width: 100%;
+    transition: background 0.12s, border-color 0.12s;
   }
   .nav-item:hover {
-    background: color-mix(in srgb, var(--color-muted) 30%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 6%, transparent);
   }
   .nav-item--active {
-    background: color-mix(in srgb, var(--color-accent) 9%, transparent);
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 22%,
-      var(--color-border)
-    );
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    border-left-color: var(--color-accent);
   }
 
   .nav-item-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-xs);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
     color: var(--color-subtext);
     flex-shrink: 0;
-    transition:
-      background 0.1s,
-      color 0.1s,
-      border-color 0.1s;
+    display: flex;
+    align-items: center;
   }
   .nav-item--active .nav-item-icon {
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 12%,
-      var(--color-surface)
-    );
-    border-color: color-mix(
-      in srgb,
-      var(--color-accent) 30%,
-      var(--color-border)
-    );
     color: var(--color-accent);
   }
 
   .nav-item-text {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
     min-width: 0;
   }
   .nav-item-label {
-    font-size: 12px;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
     font-weight: 500;
     color: var(--color-subtext);
-    line-height: 1.2;
-    transition: color 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .nav-item--active .nav-item-label {
-    color: var(--color-accent);
-    font-weight: 600;
+    color: var(--color-text);
   }
   .nav-item-desc {
     font-family: "Geist Mono", monospace;
@@ -240,41 +194,37 @@
     top: 50%;
     transform: translateY(-50%);
     width: 3px;
-    height: 18px;
+    height: 16px;
     border-radius: 2px 0 0 2px;
     background: var(--color-accent);
   }
 
-  /* ── Content panel ──────────────────────────────────────────────────────── */
-  .content-panel {
+  /* ── Contenu ────────────────────────────────────────────────────────────── */
+  .content {
     flex: 1;
     overflow-y: auto;
-    padding: 0;
   }
 
   /* ── Layout horizontal ──────────────────────────────────────────────────── */
-  .page-root--horizontal {
+  .root--horizontal {
     flex-direction: column;
     height: 100%;
     min-height: 0;
   }
-  .page-root--horizontal .sidebar {
+  .root--horizontal .sidebar {
     width: 100%;
     height: auto;
     flex-direction: row;
     align-items: center;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
-    padding: 0 12px;
-    gap: 0;
+    padding: 0 10px;
     overflow-x: auto;
     overflow-y: visible;
     flex-shrink: 0;
   }
-  .page-root--horizontal .sidebar-header {
-    display: none;
-  }
-  .page-root--horizontal .sidebar-nav {
+  .root--horizontal .sidebar-header { display: none; }
+  .root--horizontal .sidebar-nav {
     flex-direction: row;
     padding: 0;
     gap: 2px;
@@ -282,7 +232,7 @@
     flex: 1;
     justify-content: center;
   }
-  .page-root--horizontal .nav-item {
+  .root--horizontal .nav-item {
     flex-direction: row;
     min-height: 36px;
     width: auto;
@@ -293,28 +243,20 @@
     border-radius: var(--radius-sm);
     white-space: nowrap;
   }
-  .page-root--horizontal .nav-item--active {
+  .root--horizontal .nav-item--active {
     border-left-color: transparent;
   }
-  .page-root--horizontal .nav-item-indicator {
-    display: none;
-  }
-  .page-root--horizontal .nav-item-text {
-    display: flex;
+  .root--horizontal .nav-item-indicator { display: none; }
+  .root--horizontal .nav-item-text {
     flex-direction: row;
     align-items: center;
     gap: 6px;
   }
-  .page-root--horizontal .nav-item-desc {
-    display: none;
-  }
-  .page-root--horizontal .content-panel {
+  .root--horizontal .nav-item-desc { display: none; }
+  .root--horizontal .content {
     flex: 1 1 0;
     min-height: 0;
     min-width: 0;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
   }
 </style>

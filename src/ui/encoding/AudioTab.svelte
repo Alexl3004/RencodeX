@@ -1,107 +1,105 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
 
-  let audioMode = $derived(encoder.audioMode);
+  let audioMode    = $derived(encoder.audioMode);
   let audioBitrate = $derived(encoder.audioBitrate);
+
+  const BITRATE_HINTS: Record<number, string> = {
+    128: "Standard",
+    192: "Recommandé",
+    256: "Haute qualité",
+    320: "Maximum",
+  };
 </script>
 
-<section class="content-section">
-  <header class="section-header">
-    <div>
-      <h2 class="section-title">Audio</h2>
-      <p class="section-desc">
-        Réencoder en AAC garantit la compatibilité maximale. La copie conserve
-        la piste originale sans dégradation supplémentaire.
-      </p>
-    </div>
+<section class="tab">
+  <header class="tab-header">
+    <h2 class="tab-title">Audio</h2>
+    <p class="tab-desc">
+      Réencoder en AAC garantit la compatibilité. La copie conserve la piste d'origine sans dégradation.
+    </p>
   </header>
 
-  <div class="field-block">
-    <div class="field-label">Mode</div>
-    <div class="toggle-row">
+  <!-- Mode -->
+  <div class="field">
+    <span class="field-label">Mode</span>
+    <div class="mode-grid">
       <button
         type="button"
-        class="toggle-opt {audioMode === 'reencode'
-          ? 'toggle-opt--active'
-          : ''}"
+        class="mode-card {audioMode === 'reencode' ? 'mode-card--active' : ''}"
         onclick={() => encoder.setAudioMode("reencode")}
       >
-        <span class="toggle-opt-title">Réencoder</span>
-        <span class="toggle-opt-sub">AAC · compatibilité maximale</span>
+        <span class="mode-name">Réencoder</span>
+        <span class="mode-hint">AAC · compatibilité maximale</span>
       </button>
       <button
         type="button"
-        class="toggle-opt {audioMode === 'copy' ? 'toggle-opt--active' : ''}"
+        class="mode-card {audioMode === 'copy' ? 'mode-card--active' : ''}"
         onclick={() => encoder.setAudioMode("copy")}
       >
-        <span class="toggle-opt-title">Copier</span>
-        <span class="toggle-opt-sub">-c:a copy · sans perte</span>
+        <span class="mode-name">Copier</span>
+        <span class="mode-hint">-c:a copy · sans dégradation</span>
       </button>
     </div>
   </div>
 
+  <!-- Débit (visible seulement en mode reencode) -->
   {#if audioMode === "reencode"}
-    <div class="field-block">
-      <div class="field-label">Débit AAC</div>
-      <div class="bitrate-row">
+    <div class="field" style="animation: fade-in 0.14s ease">
+      <span class="field-label">Débit AAC</span>
+      <div class="bitrate-grid">
         {#each [128, 192, 256, 320] as br}
+          {@const active = audioBitrate === br}
           <button
             type="button"
-            class="bitrate-btn {audioBitrate === br
-              ? 'bitrate-btn--active'
-              : ''}"
+            class="bitrate-btn {active ? 'bitrate-btn--active' : ''}"
             onclick={() => encoder.setAudioBitrate(br)}
           >
             <span class="bitrate-val">{br}</span>
             <span class="bitrate-unit">kbps</span>
+            <span class="bitrate-hint">{BITRATE_HINTS[br]}</span>
           </button>
         {/each}
       </div>
     </div>
   {:else}
-    <div class="info-callout">
-      La piste audio source est conservée telle quelle — aucune dégradation
-      supplémentaire.
+    <div class="callout" style="animation: fade-in 0.14s ease">
+      La piste audio source est conservée telle quelle — aucune dégradation supplémentaire.
     </div>
   {/if}
 </section>
 
 <style>
-  .content-section {
-    padding: 28px 32px;
-    max-width: 680px;
+  .tab {
+    padding: 24px 28px;
+    max-width: 520px;
   }
 
-  .section-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 28px;
-    padding-bottom: 20px;
+  .tab-header {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
     border-bottom: 1px solid var(--color-border);
   }
-  .section-title {
-    font-size: 16px;
+  .tab-title {
+    font-size: 15px;
     font-weight: 600;
     color: var(--color-text);
     letter-spacing: -0.02em;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
   }
-  .section-desc {
+  .tab-desc {
     font-size: 12px;
     color: var(--color-subtext);
-    line-height: 1.6;
-    max-width: 420px;
     margin: 0;
   }
 
-  .field-block {
-    margin-bottom: 24px;
+  .field {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  .field-block:last-child {
-    margin-bottom: 0;
-  }
+  .field:last-child { margin-bottom: 0; }
 
   .field-label {
     font-family: "Geist Mono", monospace;
@@ -109,103 +107,90 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--color-subtext);
-    margin-bottom: 10px;
   }
 
-  .toggle-row {
+  /* ── Mode cards ─────────────────────────────────────────────────────────── */
+  .mode-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
-  .toggle-opt {
+  .mode-card {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    padding: 12px 14px;
+    gap: 4px;
+    padding: 13px 14px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     cursor: pointer;
     text-align: left;
-    transition:
-      border-color 0.15s,
-      background 0.15s;
+    transition: border-color 0.12s, background 0.12s;
   }
-  .toggle-opt:hover {
-    border-color: var(--color-subtext2);
-  }
-  .toggle-opt--active {
+  .mode-card:hover { border-color: var(--color-subtext2); }
+  .mode-card--active {
     border-color: var(--color-accent);
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 8%,
-      var(--color-surface)
-    );
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   }
-  .toggle-opt-title {
-    font-size: 12px;
+  .mode-name {
+    font-size: 13px;
     font-weight: 600;
     color: var(--color-subtext);
-    transition: color 0.15s;
+    transition: color 0.12s;
   }
-  .toggle-opt--active .toggle-opt-title {
-    color: var(--color-accent);
-  }
-  .toggle-opt-sub {
+  .mode-card--active .mode-name { color: var(--color-accent); }
+  .mode-hint {
     font-family: "Geist Mono", monospace;
     font-size: 9px;
     color: var(--color-subtext2);
   }
 
-  .bitrate-row {
+  /* ── Débit ──────────────────────────────────────────────────────────────── */
+  .bitrate-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    gap: 6px;
   }
   .bitrate-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 10px 6px;
+    padding: 12px 6px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     cursor: pointer;
-    transition:
-      border-color 0.15s,
-      background 0.15s;
+    transition: border-color 0.12s, background 0.12s;
   }
-  .bitrate-btn:hover {
-    border-color: var(--color-subtext2);
-  }
+  .bitrate-btn:hover { border-color: var(--color-subtext2); }
   .bitrate-btn--active {
     border-color: var(--color-accent);
-    background: color-mix(
-      in srgb,
-      var(--color-accent) 8%,
-      var(--color-surface)
-    );
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   }
   .bitrate-val {
     font-family: "Geist Mono", monospace;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--color-subtext);
     line-height: 1;
-    transition: color 0.15s;
+    transition: color 0.12s;
   }
-  .bitrate-btn--active .bitrate-val {
-    color: var(--color-accent);
-  }
+  .bitrate-btn--active .bitrate-val { color: var(--color-accent); }
   .bitrate-unit {
     font-family: "Geist Mono", monospace;
     font-size: 8px;
     color: var(--color-subtext2);
   }
+  .bitrate-hint {
+    font-size: 9px;
+    color: var(--color-subtext2);
+    margin-top: 2px;
+  }
+  .bitrate-btn--active .bitrate-hint { color: var(--color-accent); opacity: 0.8; }
 
-  .info-callout {
+  /* ── Callout ────────────────────────────────────────────────────────────── */
+  .callout {
     padding: 11px 14px;
     border-radius: var(--radius-sm);
     background: var(--color-surface);
@@ -213,5 +198,10 @@
     font-size: 12px;
     color: var(--color-subtext);
     line-height: 1.5;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(3px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 </style>

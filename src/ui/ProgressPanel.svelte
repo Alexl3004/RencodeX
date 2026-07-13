@@ -13,6 +13,9 @@
     ChevronRight,
     PauseCircle,
     XCircle,
+    Video,
+    Volume2,
+    Box,
   } from "@lucide/svelte";
 
   let p = $derived(encoder.progress);
@@ -109,6 +112,24 @@
   let okCount = $derived(
     s ? s.files.filter((f) => f.status === "ok").length : 0,
   );
+
+  // ── Résumé EncodingSettings ─────────────────────────────────────────────
+  let presetLabel = $derived.by(() => {
+    const id = encoder.activePresetId;
+    if (!id) return null;
+    const labels: Record<string, string> = {
+      fast: "Rapide", balanced: "Équilibré", quality: "Qualité", archive: "Archive",
+    };
+    return labels[id] ?? null;
+  });
+  let videoSummary = $derived(
+    encoder.videoMode === "copy" ? "Copie" : `H.265 · CRF ${encoder.crf} · ${(encoder.preset ?? "p5").toUpperCase()}`
+  );
+  let audioSummary = $derived(
+    encoder.audioMode === "copy" ? "Copie" : `AAC · ${encoder.audioBitrate}k`
+  );
+  let containerSummary = $derived((encoder.container ?? "mkv").toUpperCase());
+  let subtitleSummary = $derived(encoder.subExtractFormat);
 </script>
 
 <div class="panel">
@@ -116,13 +137,44 @@
   {#if !encoder.encoding && !extractingSubs && !s}
     {#if encoder.files.length === 0}
       <div class="idle-empty">
-        <TvMinimalPlay
-          class="w-3.5 h-3.5 shrink-0"
-          style="color: var(--color-subtext2);"
-        />
-        <span class="idle-empty-text"
-          >Prêt à encoder — ajoutez des fichiers</span
-        >
+        <div class="idle-empty-top">
+          <TvMinimalPlay
+            class="w-3.5 h-3.5 shrink-0"
+            style="color: var(--color-subtext2);"
+          />
+          <span class="idle-empty-text">Prêt à encoder — ajoutez des fichiers</span>
+        </div>
+        <div class="settings-strip">
+          <span class="setting-chip">
+            <Zap class="w-3 h-3 shrink-0 chip-icon" />
+            <span class="chip-label">Préréglage</span>
+            <span class="chip-val">{presetLabel ?? "Custom"}</span>
+          </span>
+          <span class="strip-sep"></span>
+          <span class="setting-chip">
+            <Video class="w-3 h-3 shrink-0 chip-icon" />
+            <span class="chip-label">Vidéo</span>
+            <span class="chip-val">{videoSummary}</span>
+          </span>
+          <span class="strip-sep"></span>
+          <span class="setting-chip">
+            <Volume2 class="w-3 h-3 shrink-0 chip-icon" />
+            <span class="chip-label">Audio</span>
+            <span class="chip-val">{audioSummary}</span>
+          </span>
+          <span class="strip-sep"></span>
+          <span class="setting-chip">
+            <Box class="w-3 h-3 shrink-0 chip-icon" />
+            <span class="chip-label">Conteneur</span>
+            <span class="chip-val">{containerSummary}</span>
+          </span>
+          <span class="strip-sep"></span>
+          <span class="setting-chip">
+            <Subtitles class="w-3 h-3 shrink-0 chip-icon" />
+            <span class="chip-label">Sous-titres</span>
+            <span class="chip-val">{subtitleSummary}</span>
+          </span>
+        </div>
       </div>
     {:else}
       {@const readyCount = activeFiles.filter(
@@ -171,15 +223,39 @@
             </span>
           {/if}
         </div>
-        <!-- Ligne 3 : CTA -->
+        <!-- Ligne 3 : résumé des réglages d'encodage -->
         <div class="grid-row row-3">
-          <TvMinimalPlay
-            class="w-3 h-3 shrink-0"
-            style="color: var(--color-subtext2);"
-          />
-          <span class="idle-cta-hint"
-            >Configurez les options et lancez l'encodage</span
-          >
+          <div class="settings-strip">
+            <span class="setting-chip">
+              <Zap class="w-3 h-3 shrink-0 chip-icon" />
+              <span class="chip-label">Préréglage</span>
+              <span class="chip-val">{presetLabel}</span>
+            </span>
+            <span class="strip-sep"></span>
+            <span class="setting-chip">
+              <Video class="w-3 h-3 shrink-0 chip-icon" />
+              <span class="chip-label">Vidéo</span>
+              <span class="chip-val">{videoSummary}</span>
+            </span>
+            <span class="strip-sep"></span>
+            <span class="setting-chip">
+              <Volume2 class="w-3 h-3 shrink-0 chip-icon" />
+              <span class="chip-label">Audio</span>
+              <span class="chip-val">{audioSummary}</span>
+            </span>
+            <span class="strip-sep"></span>
+            <span class="setting-chip">
+              <Box class="w-3 h-3 shrink-0 chip-icon" />
+              <span class="chip-label">Conteneur</span>
+              <span class="chip-val">{containerSummary}</span>
+            </span>
+            <span class="strip-sep"></span>
+            <span class="setting-chip">
+              <Subtitles class="w-3 h-3 shrink-0 chip-icon" />
+              <span class="chip-label">Sous-titres</span>
+              <span class="chip-val">{subtitleSummary}</span>
+            </span>
+          </div>
         </div>
       </div>
     {/if}
@@ -645,10 +721,16 @@
   .idle-empty {
     flex: 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 6px;
+    padding: 5px 12px;
+  }
+  .idle-empty-top {
+    display: flex;
+    align-items: center;
     gap: 7px;
-    opacity: 0.4;
   }
   .idle-empty-text {
     font-size: 11px;
@@ -665,6 +747,53 @@
   .success-hint {
     color: var(--color-success);
     opacity: 0.8;
+  }
+
+  /* ── Settings strip ────────────────────────────────────────── */
+  .settings-strip {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow: hidden;
+    min-width: 0;
+    margin: 5px;
+  }
+
+  .setting-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .chip-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext2);
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+
+  .chip-val {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--color-subtext);
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .strip-sep {
+    width: 1px;
+    height: 10px;
+    background: var(--color-border);
+    flex-shrink: 0;
+    margin: 0 8px;
+    opacity: 0.7;
   }
 
   /* ── Pills échec ────────────────────────────────────────────── */
