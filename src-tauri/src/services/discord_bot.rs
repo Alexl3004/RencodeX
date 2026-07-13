@@ -1,5 +1,8 @@
 use tauri::{AppHandle, Emitter};
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
+use std::collections::HashMap;
+use std::time::Instant;
 use crate::state::{
     ENCODING, snapshot,
     pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process,
@@ -12,9 +15,41 @@ use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+
+/// Fenêtre glissante : max 5 commandes par utilisateur sur 10 secondes.
+const RATE_LIMIT_MAX: usize = 2;
+const RATE_LIMIT_WINDOW_SECS: u64 = 10;
+
+/// Horodatages des N dernières commandes par user_id.
+type RateLimitMap = Mutex<HashMap<u64, Vec<Instant>>>;
+
+/// Vérifie si `user_id` a dépassé la limite de taux.
+/// Retourne `true` si la commande est autorisée, `false` si bloquée.
+fn check_rate_limit(map: &RateLimitMap, user_id: u64) -> bool {
+    let mut guard = map.lock().unwrap();
+    let now = Instant::now();
+    let window = std::time::Duration::from_secs(RATE_LIMIT_WINDOW_SECS);
+
+    let timestamps = guard.entry(user_id).or_default();
+
+    // Supprimer les entrées expirées (hors fenêtre)
+    timestamps.retain(|t| now.duration_since(*t) < window);
+
+    if timestamps.len() >= RATE_LIMIT_MAX {
+        return false;
+    }
+
+    timestamps.push(now);
+    true
+}
+
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 struct Handler {
     channel_id: u64,
     app: AppHandle,
+    rate_limits: RateLimitMap,
 }
 
 #[async_trait]
@@ -29,6 +64,19 @@ impl EventHandler for Handler {
 
         let content = msg.content.trim().to_lowercase();
         if !content.starts_with('!') {
+            return;
+        }
+
+        // Rate limiting — vérifié avant tout traitement
+        let user_id = msg.author.id.get();
+        if !check_rate_limit(&self.rate_limits, user_id) {
+            let _ = msg.channel_id.say(
+                &ctx.http,
+                format!(
+                    "⏱️ Trop de commandes. Limite : {} commandes / {}s.",
+                    RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECS
+                ),
+            ).await;
             return;
         }
 
@@ -87,6 +135,21 @@ impl EventHandler for Handler {
     // Gestion des clics sur les boutons du panneau
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         let Interaction::Component(component) = interaction else { return };
+
+        // Rate limiting sur les interactions boutons (même pool que les commandes texte)
+        let user_id = component.user.id.get();
+        if !check_rate_limit(&self.rate_limits, user_id) {
+            let resp = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(format!(
+                        "⏱️ Trop de commandes. Limite : {} commandes / {}s.",
+                        RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECS
+                    ))
+                    .ephemeral(true),
+            );
+            let _ = component.create_response(&ctx.http, resp).await;
+            return;
+        }
 
         let response_text = match component.data.custom_id.as_str() {
             "status" => format_status(),
@@ -221,7 +284,11 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) {
         | GatewayIntents::MESSAGE_CONTENT;
 
     let mut client = match Client::builder(&token, intents)
-        .event_handler(Handler { channel_id, app })
+        .event_handler(Handler {
+            channel_id,
+            app,
+            rate_limits: Mutex::new(HashMap::new()),
+        })
         .await
     {
         Ok(c) => c,

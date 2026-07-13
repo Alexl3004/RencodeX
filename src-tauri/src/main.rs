@@ -12,6 +12,35 @@ use crate::utils::resolve_config;
 use crate::commands::settings::load_config;
 use tauri::Manager;
 
+// ── Supervision du bot Discord ────────────────────────────────────────────────
+
+/// Lance le bot Discord avec redémarrage automatique sur erreur.
+/// Chaque tentative attend `backoff` avant de redémarrer, avec un plafond
+/// de 5 minutes. Le bot tourne sur le runtime Tauri (pas de runtime dédié).
+async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHandle) {
+    const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+    let mut backoff_secs: u64 = 5;
+
+    loop {
+        eprintln!("[Discord bot] Démarrage…");
+
+        services::discord_bot::start(token.clone(), channel_id, app.clone()).await;
+
+        // `start()` est revenu — soit erreur de connexion, soit déconnexion.
+        eprintln!(
+            "[Discord bot] Arrêté. Nouvelle tentative dans {}s.",
+            backoff_secs
+        );
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+
+        // Backoff exponentiel plafonné
+        backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
+    }
+}
+
+// ── Point d'entrée ────────────────────────────────────────────────────────────
+
 fn main() {
     tauri::async_runtime::block_on(db::init());
 
@@ -64,8 +93,7 @@ fn main() {
             commands::discord::send_discord_progress_notification,
             commands::discord::send_email_report,
         ])
-        .setup(move|app| {
-            // On accède au AppHandle ici, après que Tauri l'a construit
+        .setup(move |app| {
             if cfg.discord_enabled
                 && !cfg.discord_bot_token.is_empty()
                 && !cfg.discord_cmd_channel_id.is_empty()
@@ -74,10 +102,14 @@ fn main() {
                     let token = std::env::var("RENCODEX_DISCORD_TOKEN")
                         .unwrap_or_else(|_| cfg.discord_bot_token.clone());
                     let app_handle = app.handle().clone();
-                    std::thread::spawn(move || {
-                        let rt = tokio::runtime::Runtime::new().unwrap();
-                        rt.block_on(services::discord_bot::start(token, cmd_channel_id, app_handle));
-                    });
+
+                    // tokio::spawn sur le runtime de Tauri — pas de thread ni de
+                    // runtime dédié. La supervision redémarre le bot automatiquement.
+                    tauri::async_runtime::spawn(supervise_discord_bot(
+                        token,
+                        cmd_channel_id,
+                        app_handle,
+                    ));
                 }
             }
             Ok(())
