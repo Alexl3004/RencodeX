@@ -131,6 +131,7 @@ export type SeasonEpisodeFormat = "S01E01" | "S1E01" | "S1 E01" | "1x01";
 
 export type TagId =
   | "title"
+  | "year"
   | "se"
   | "audio"
   | "resolution"
@@ -149,6 +150,7 @@ export type SourceCase      = "original" | "upper" | "lower";
 export type WebSourceFormat = "WEB-DL" | "WEBDL" | "Web-DL";
 export type TagSeparator    = " " | "." | "_";
 export type ProviderCase    = "upper" | "lower" | "hidden";
+export type YearFormat      = "parentheses" | "plain";
 
 export interface NamingOptions {
   disabledTags?:    Set<TagId>;
@@ -156,7 +158,7 @@ export interface NamingOptions {
   titleCase?:       TitleCaseMode;
   codecFormat?:     CodecFormat;
   sourceCase?:      SourceCase;
-  yearParentheses?: boolean;
+  yearFormat?:      YearFormat;
   webSourceFormat?: WebSourceFormat;
   tagSeparator?:    TagSeparator;
   providerCase?:    ProviderCase;

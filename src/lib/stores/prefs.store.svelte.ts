@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  YearFormat,
   SeasonEpisodeFormat,
   TagId,
   ResolutionCase,
@@ -100,7 +101,7 @@ function createPrefsStore() {
   let titleCase           = $state<TitleCaseMode>("original");
   let codecFormat         = $state<CodecFormat>("H265");
   let sourceCase          = $state<SourceCase>("original");
-  let yearParentheses     = $state<boolean>(true);
+  let yearFormat          = $state<YearFormat>("parentheses");
   let webSourceFormat     = $state<WebSourceFormat>("WEB-DL");
   let tagSeparator        = $state<TagSeparator>(" ");
   let providerCase        = $state<ProviderCase>("upper");
@@ -143,7 +144,7 @@ function createPrefsStore() {
       title_case:              titleCase,
       codec_format:            codecFormat,
       source_case:             sourceCase,
-      year_parentheses:        yearParentheses,
+      year_format:             yearFormat,
       web_source_format:       webSourceFormat,
       tag_separator:           tagSeparator,
       provider_case:           providerCase,
@@ -195,7 +196,7 @@ function createPrefsStore() {
         title_case:        titleCase,
         codec_format:      codecFormat,
         source_case:       sourceCase,
-        year_parentheses:  yearParentheses,
+        year_format:       yearFormat,
         web_source_format: webSourceFormat,
         tag_separator:     tagSeparator,
         provider_case:     providerCase,
@@ -214,10 +215,15 @@ function createPrefsStore() {
       if (!raw) return;
       const p = JSON.parse(raw) as Record<string, unknown>;
 
-      if (
-        Array.isArray(p.tag_order) &&
-        (p.tag_order as string[]).every((id) => DEFAULT_TAG_ORDER.includes(id as TagId))
-      ) tagOrder = p.tag_order as TagId[];
+      if (Array.isArray(p.tag_order)) {
+        const saved = (p.tag_order as string[]).filter((id) =>
+          DEFAULT_TAG_ORDER.includes(id as TagId)
+        ) as TagId[];
+        // Ajouter en fin de liste les tags présents dans DEFAULT_TAG_ORDER
+        // mais absents du tag_order sauvegardé (ex: "year" ajouté après coup).
+        const missing = DEFAULT_TAG_ORDER.filter((id) => !saved.includes(id));
+        tagOrder = [...saved, ...missing];
+      }
 
       if (Array.isArray(p.disabled_tags))
         disabledTags = new Set(
@@ -234,8 +240,10 @@ function createPrefsStore() {
         codecFormat = p.codec_format as CodecFormat;
       if (["original","upper","lower"].includes(p.source_case as string))
         sourceCase = p.source_case as SourceCase;
-      if (typeof p.year_parentheses === "boolean")
-        yearParentheses = p.year_parentheses;
+      if (p.year_format === "parentheses" || p.year_format === "plain")
+        yearFormat = p.year_format;
+      else if (typeof p.year_parentheses === "boolean")
+        yearFormat = p.year_parentheses ? "parentheses" : "plain";
       if (["WEB-DL","WEBDL","Web-DL"].includes(p.web_source_format as string))
         webSourceFormat = p.web_source_format as WebSourceFormat;
       if ([" ",".", "_"].includes(p.tag_separator as string))
@@ -281,6 +289,7 @@ function createPrefsStore() {
         title_case?: string;
         codec_format?: string;
         source_case?: string;
+        year_format?: string;
         year_parentheses?: boolean;
         web_source_format?: string;
         tag_separator?: string;
@@ -299,12 +308,15 @@ function createPrefsStore() {
       ) {
         seasonEpisodeFormat = prefs.se_format as SeasonEpisodeFormat;
       }
-      const parsedOrder = prefs.tag_order as TagId[] | undefined;
-      const isValidOrder =
-        Array.isArray(parsedOrder) &&
-        parsedOrder.length === DEFAULT_TAG_ORDER.length &&
-        DEFAULT_TAG_ORDER.every((id) => parsedOrder.includes(id));
-      if (isValidOrder) tagOrder = parsedOrder!;
+      if (Array.isArray(prefs.tag_order)) {
+        const saved = (prefs.tag_order as string[]).filter((id) =>
+          DEFAULT_TAG_ORDER.includes(id as TagId)
+        ) as TagId[];
+        // Ajouter en fin de liste les tags présents dans DEFAULT_TAG_ORDER
+        // mais absents du tag_order sauvegardé (ex: "year" ajouté après coup).
+        const missing = DEFAULT_TAG_ORDER.filter((id) => !saved.includes(id));
+        tagOrder = [...saved, ...missing];
+      }
 
       if (Array.isArray(prefs.disabled_tags)) {
         const valid = (prefs.disabled_tags as string[]).filter((id) =>
@@ -320,8 +332,10 @@ function createPrefsStore() {
         codecFormat = prefs.codec_format as CodecFormat;
       if (["original","upper","lower"].includes(prefs.source_case ?? ""))
         sourceCase = prefs.source_case as SourceCase;
-      if (typeof prefs.year_parentheses === "boolean")
-        yearParentheses = prefs.year_parentheses;
+      if (prefs.year_format === "parentheses" || prefs.year_format === "plain")
+        yearFormat = prefs.year_format;
+      else if (typeof prefs.year_parentheses === "boolean")
+        yearFormat = prefs.year_parentheses ? "parentheses" : "plain";
       if (["WEB-DL","WEBDL","Web-DL"].includes(prefs.web_source_format ?? ""))
         webSourceFormat = prefs.web_source_format as WebSourceFormat;
       if ([" ", ".", "_"].includes(prefs.tag_separator ?? ""))
@@ -425,7 +439,7 @@ function createPrefsStore() {
   function setTitleCase(v: TitleCaseMode)       { titleCase = v;        _namingChanged(); }
   function setCodecFormat(v: CodecFormat)       { codecFormat = v;      _namingChanged(); }
   function setSourceCase(v: SourceCase)         { sourceCase = v;       _namingChanged(); }
-  function setYearParentheses(v: boolean)       { yearParentheses = v;  _namingChanged(); }
+  function setYearFormat(v: YearFormat)          { yearFormat = v;       _namingChanged(); }
   function setWebSourceFormat(v: WebSourceFormat){ webSourceFormat = v; _namingChanged(); }
   function setTagSeparator(v: TagSeparator)     { tagSeparator = v;     _namingChanged(); }
   function setProviderCase(v: ProviderCase)     { providerCase = v;     _namingChanged(); }
@@ -447,7 +461,7 @@ function createPrefsStore() {
     titleCase           = "original";
     codecFormat         = "H265";
     sourceCase          = "original";
-    yearParentheses     = true;
+    yearFormat          = "parentheses";
     webSourceFormat     = "WEB-DL";
     tagSeparator        = " ";
     providerCase        = "upper";
@@ -479,7 +493,7 @@ function createPrefsStore() {
     titleCase            = "original";
     codecFormat          = "H265";
     sourceCase           = "original";
-    yearParentheses      = true;
+    yearFormat           = "parentheses";
     webSourceFormat      = "WEB-DL";
     tagSeparator         = " ";
     providerCase         = "upper";
@@ -504,7 +518,7 @@ function createPrefsStore() {
     get titleCase()            { return titleCase; },
     get codecFormat()          { return codecFormat; },
     get sourceCase()           { return sourceCase; },
-    get yearParentheses()      { return yearParentheses; },
+    get yearFormat()           { return yearFormat; },
     get webSourceFormat()      { return webSourceFormat; },
     get tagSeparator()         { return tagSeparator; },
     get providerCase()         { return providerCase; },
@@ -541,7 +555,7 @@ function createPrefsStore() {
     setTitleCase,
     setCodecFormat,
     setSourceCase,
-    setYearParentheses,
+    setYearFormat,
     setWebSourceFormat,
     setTagSeparator,
     setProviderCase,

@@ -41,7 +41,7 @@
   let titleCase = $derived(encoder.titleCase);
   let codecFmt = $derived(encoder.codecFormat);
   let sourceCase = $derived(encoder.sourceCase);
-  let yearParentheses = $derived(encoder.yearParentheses);
+  let yearFormat = $derived(encoder.yearFormat);
   let webSourceFmt = $derived(encoder.webSourceFormat);
   let tagSep = $derived(encoder.tagSeparator);
   let provCase = $derived(encoder.providerCase);
@@ -161,7 +161,7 @@
   <!-- ── Content panel ────────────────────────────────────────────────────── -->
   <div class="content-panel">
     {#if activeSection === "tags"}
-      <TagsTab {tagOrder} {disabledTags} />
+      <TagsTab {tagOrder} {disabledTags} {yearFormat} />
     {:else if activeSection === "format"}
       <FormatTab
         {previewSeries}
@@ -170,7 +170,7 @@
         {titleCase}
         {codecFmt}
         {sourceCase}
-        {yearParentheses}
+        {yearFormat}
         {webSourceFmt}
         {tagSep}
         {provCase}
@@ -195,7 +195,7 @@
         {webSourceFmt}
         {tagSep}
         {provCase}
-        {yearParentheses}
+        {yearFormat}
       />
     {/if}
   </div>

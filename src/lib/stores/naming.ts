@@ -23,6 +23,7 @@ export const SEASON_EPISODE_FORMATS: {
 
 export const DEFAULT_TAG_ORDER: TagId[] = [
   "title",
+  "year",
   "se",
   "audio",
   "resolution",
@@ -37,6 +38,7 @@ export const DEFAULT_TAG_ORDER: TagId[] = [
 
 export const TAG_LABELS: Record<TagId, string> = {
   title:      "Titre",
+  year:       "Année",
   se:         "Saison/Épisode",
   audio:      "Tag audio (VOSTFR, VF…)",
   resolution: "Résolution",
@@ -214,7 +216,7 @@ export function buildOutputName(
     titleCase       = "original",
     codecFormat     = "H265",
     sourceCase      = "original",
-    yearParentheses = true,
+    yearFormat      = "parentheses",
     webSourceFormat = "WEB-DL",
     tagSeparator    = " ",
     providerCase    = "upper",
@@ -259,9 +261,8 @@ export function buildOutputName(
     }
   };
 
-  const isMovieYear = !cleaned.season_episode && cleaned.year;
-  const yearStr = isMovieYear
-    ? (yearParentheses ? `(${cleaned.year})` : cleaned.year)
+  const yearValue = cleaned.year
+    ? (yearFormat === "parentheses" ? `(${cleaned.year})` : cleaned.year)
     : "";
 
   const stripDuplicateYear = (t: string): string => {
@@ -275,7 +276,8 @@ export function buildOutputName(
   const titleBase = stripDuplicateYear(applyTitleCase(cleaned.title));
 
   const values: Record<TagId, string> = {
-    title:      titleBase + (yearStr ? ` ${yearStr}` : ""),
+    title:      titleBase,
+    year:       yearValue,
     se:         formatSeasonEpisode(cleaned.season_episode, seFormat),
     audio:      tag,
     resolution: applyResCase(cleaned.resolution),

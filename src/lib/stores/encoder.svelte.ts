@@ -93,7 +93,7 @@ function createEncoder() {
       titleCase:       prefs.titleCase,
       codecFormat:     prefs.codecFormat,
       sourceCase:      prefs.sourceCase,
-      yearParentheses: prefs.yearParentheses,
+      yearFormat:      prefs.yearFormat,
       webSourceFormat: prefs.webSourceFormat,
       tagSeparator:    prefs.tagSeparator,
       providerCase:    prefs.providerCase,
@@ -154,8 +154,8 @@ function createEncoder() {
     prefs.setSourceCase(v);
     filesStore.refreshOutputNames();
   }
-  function setYearParentheses(v: boolean) {
-    prefs.setYearParentheses(v);
+  function setYearFormat(v: import("./types").YearFormat) {
+    prefs.setYearFormat(v);
     filesStore.refreshOutputNames();
   }
   function setWebSourceFormat(v: import("./types").WebSourceFormat) {
@@ -288,7 +288,7 @@ function createEncoder() {
     get titleCase()            { return prefs.titleCase; },
     get codecFormat()          { return prefs.codecFormat; },
     get sourceCase()           { return prefs.sourceCase; },
-    get yearParentheses()      { return prefs.yearParentheses; },
+    get yearFormat()           { return prefs.yearFormat; },
     get webSourceFormat()      { return prefs.webSourceFormat; },
     get tagSeparator()         { return prefs.tagSeparator; },
     get providerCase()         { return prefs.providerCase; },
@@ -319,7 +319,7 @@ function createEncoder() {
     setTitleCase,
     setCodecFormat,
     setSourceCase,
-    setYearParentheses,
+    setYearFormat,
     setWebSourceFormat,
     setTagSeparator,
     setProviderCase,

@@ -187,7 +187,7 @@ pub struct EncodingPrefs {
     #[serde(default = "default_provider_case")]
     pub provider_case: String,
     #[serde(default = "default_year_parentheses")]
-    pub year_parentheses: bool,
+    pub year_format: String,
     #[serde(default = "default_web_source_format")]
     pub web_source_format: String,
     #[serde(default)]
@@ -201,8 +201,8 @@ fn default_preset() -> String { "p5".to_string() }
 fn default_se_format() -> String { "S01E01".to_string() }
 fn default_tag_order() -> Vec<String> {
     vec![
-        "title", "se", "audio", "resolution", "provider", "source",
-        "codec", "bitdepth", "audioCodec", "team",
+        "title", "year", "se", "audio", "resolution", "provider", "source",
+        "codec", "bitdepth", "audioCodec", "team", "japver",
     ].into_iter().map(String::from).collect()
 }
 fn default_audio_mode() -> String { "reencode".to_string() }
@@ -218,7 +218,7 @@ fn default_resolution_case()   -> String { "upper".to_string() }
 fn default_title_case()        -> String { "original".to_string() }
 fn default_codec_format()      -> String { "H265".to_string() }
 fn default_source_case()       -> String { "original".to_string() }
-fn default_year_parentheses()  -> bool   { true }
+fn default_year_parentheses()  -> String { "parentheses".to_string() }
 fn default_web_source_format() -> String { "WEB-DL".to_string() }
 fn default_tag_separator()     -> String { " ".to_string() }
 fn default_provider_case()     -> String { "original".to_string() }
@@ -250,7 +250,7 @@ impl Default for EncodingPrefs {
             source_case: default_source_case(),
             tag_separator: default_tag_separator(),
             provider_case: default_provider_case(),
-            year_parentheses: default_year_parentheses(),
+            year_format: default_year_parentheses(),
             web_source_format: default_web_source_format(),
             keep_japanese_ver: false,
         }

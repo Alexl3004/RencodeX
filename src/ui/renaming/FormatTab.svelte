@@ -9,6 +9,7 @@
     WebSourceFormat,
     TagSeparator,
     ProviderCase,
+    YearFormat,
   } from "$lib/stores/types";
   import {
     RotateCcw,
@@ -31,7 +32,7 @@
     titleCase,
     codecFmt,
     sourceCase,
-    yearParentheses,
+    yearFormat,
     webSourceFmt,
     tagSep,
     provCase,
@@ -44,7 +45,7 @@
     titleCase: TitleCaseMode;
     codecFmt: CodecFormat;
     sourceCase: SourceCase;
-    yearParentheses: boolean;
+    yearFormat: YearFormat;
     webSourceFmt: WebSourceFormat;
     tagSep: TagSeparator;
     provCase: ProviderCase;
@@ -276,11 +277,11 @@
         <span class="format-card-label">Année (films)</span>
       </div>
       <div class="format-card-options">
-        {#each [[true, "(2024)"], [false, "2024"]] as const as [val, preview]}
+        {#each [["parentheses", "(2024)"], ["plain", "2024"]] as const as [val, preview]}
           <button
             type="button"
-            class="opt-pill {yearParentheses === val ? 'opt-pill--active' : ''}"
-            onclick={() => encoder.setYearParentheses(val)}>{preview}</button
+            class="opt-pill {yearFormat === val ? 'opt-pill--active' : ''}"
+            onclick={() => encoder.setYearFormat(val)}>{preview}</button
           >
         {/each}
       </div>

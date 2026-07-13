@@ -6,6 +6,7 @@
     ResolutionCase,
     ProviderCase,
     SeasonEpisodeFormat,
+    YearFormat,
   } from "$lib/stores/types";
   import { TAG_LABELS } from "$lib/stores/naming";
 
@@ -31,7 +32,7 @@
     webSourceFmt,
     tagSep,
     provCase,
-    yearParentheses,
+    yearFormat,
   }: {
     previewSeries: string;
     previewMovie: string;
@@ -47,7 +48,7 @@
     webSourceFmt: string;
     tagSep: string;
     provCase: ProviderCase;
-    yearParentheses: boolean;
+    yearFormat: YearFormat;
   } = $props();
 </script>
 
@@ -138,7 +139,7 @@
     </div>
     <div class="pp-row">
       <span class="pp-key">Année film</span>
-      <span class="pp-val">{yearParentheses ? "(2024)" : "2024"}</span>
+      <span class="pp-val">{yearFormat === "parentheses" ? "(2024)" : "2024"}</span>
     </div>
     {#if team}
       <div class="pp-row">

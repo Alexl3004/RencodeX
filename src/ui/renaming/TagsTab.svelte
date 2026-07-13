@@ -1,15 +1,17 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
   import { TAG_LABELS } from "$lib/stores/naming";
-  import type { TagId } from "$lib/stores/types";
+  import type { TagId, YearFormat } from "$lib/stores/types";
   import { ArrowUp, ArrowDown, GripVertical, RotateCcw } from "@lucide/svelte";
 
   let {
     tagOrder,
     disabledTags,
+    yearFormat,
   }: {
     tagOrder: TagId[];
     disabledTags: Set<TagId>;
+    yearFormat: YearFormat;
   } = $props();
 
   // ── Drag & drop ─────────────────────────────────────────────────────────────
@@ -106,68 +108,72 @@
           {dragOverIndex === i && dragIndex !== null && dragIndex !== i
           ? 'tag-row--over'
           : ''}
-          {disabled ? 'tag-row--disabled' : ''}"
+          {disabled ? 'tag-row--disabled' : ''}
+          {id === 'year' ? 'tag-row--with-sub' : ''}"
         role="listitem"
       >
-        <!-- Position badge -->
-        <div class="tag-pos">
-          {disabled
-            ? "—"
-            : i +
-              1 -
-              [...localOrder.slice(0, i)].filter((t) => disabledTags.has(t))
-                .length}
-        </div>
+        <!-- Ligne principale -->
+        <div class="tag-row-main">
+          <!-- Position badge -->
+          <div class="tag-pos">
+            {disabled
+              ? "—"
+              : i +
+                1 -
+                [...localOrder.slice(0, i)].filter((t) => disabledTags.has(t))
+                  .length}
+          </div>
 
-        <!-- Toggle -->
-        <button
-          type="button"
-          class="toggle-switch {disabled ? '' : 'toggle-switch--on'}"
-          onclick={() => encoder.toggleTag(id)}
-          aria-pressed={!disabled}
-          aria-label={disabled
-            ? `Activer ${TAG_LABELS[id]}`
-            : `Désactiver ${TAG_LABELS[id]}`}
-        >
-          <span class="toggle-thumb"></span>
-        </button>
-
-        <!-- Label -->
-        <span class="tag-label {disabled ? 'tag-label--off' : ''}">
-          {TAG_LABELS[id]}
-          {#if id === "team" && !encoder.team}
-            <span class="tag-empty">vide</span>
-          {/if}
-        </span>
-
-        <!-- Actions -->
-        <div class="tag-actions">
+          <!-- Toggle -->
           <button
             type="button"
-            class="icon-btn"
-            disabled={i === 0}
-            onclick={() => encoder.moveTag(id, -1)}
-            aria-label="Monter"
+            class="toggle-switch {disabled ? '' : 'toggle-switch--on'}"
+            onclick={() => encoder.toggleTag(id)}
+            aria-pressed={!disabled}
+            aria-label={disabled
+              ? `Activer ${TAG_LABELS[id]}`
+              : `Désactiver ${TAG_LABELS[id]}`}
           >
-            <ArrowUp class="w-3 h-3" />
+            <span class="toggle-thumb"></span>
           </button>
-          <button
-            type="button"
-            class="icon-btn"
-            disabled={i === localOrder.length - 1}
-            onclick={() => encoder.moveTag(id, 1)}
-            aria-label="Descendre"
-          >
-            <ArrowDown class="w-3 h-3" />
-          </button>
-          <button
-            type="button"
-            class="drag-handle"
-            aria-label="Déplacer"
-            onpointerdown={(e) => onHandlePointerDown(e, i)}
-          >
-            <GripVertical class="w-3.5 h-3.5" />
-          </button>
+
+          <!-- Label -->
+          <span class="tag-label {disabled ? 'tag-label--off' : ''}">
+            {TAG_LABELS[id]}
+            {#if id === "team" && !encoder.team}
+              <span class="tag-empty">vide</span>
+            {/if}
+          </span>
+
+          <!-- Actions -->
+          <div class="tag-actions">
+            <button
+              type="button"
+              class="icon-btn"
+              disabled={i === 0}
+              onclick={() => encoder.moveTag(id, -1)}
+              aria-label="Monter"
+            >
+              <ArrowUp class="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              class="icon-btn"
+              disabled={i === localOrder.length - 1}
+              onclick={() => encoder.moveTag(id, 1)}
+              aria-label="Descendre"
+            >
+              <ArrowDown class="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              class="drag-handle"
+              aria-label="Déplacer"
+              onpointerdown={(e) => onHandlePointerDown(e, i)}
+            >
+              <GripVertical class="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     {/each}
@@ -235,9 +241,9 @@
 
   .tag-row {
     display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
+    flex-direction: column;
+    gap: 0;
+    padding: 6px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
     background: var(--color-panel);
@@ -245,6 +251,13 @@
       background 0.12s,
       border-color 0.12s,
       opacity 0.12s;
+  }
+
+  .tag-row-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
   }
   .tag-row--dragging {
     opacity: 0.5;
@@ -370,5 +383,4 @@
   }
   .drag-handle:active {
     cursor: grabbing;
-  }
-</style>
+  }</style>
