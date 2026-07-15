@@ -66,17 +66,19 @@
       subLangs: initSubLangs,
     })
       .then((r) => {
-        cleaned = r;
+        const hdrTag = file.hdr_format || (r as any).hdr || "";
+        const rWithHdr = { ...r, hdr: hdrTag };
+        cleaned = rWithHdr;
         const tag = computeTag(
           audio_langs,
           sub_langs,
           encoder.selAudio,
           encoder.selSubs,
         );
-        if (r) {
+        if (rWithHdr) {
           const codecTag = computeVideoCodecTag(file.streams, encoder.videoMode, encoder.codecFormat);
           editValue = buildOutputName(
-            r,
+            rWithHdr,
             tag,
             encoder.seasonEpisodeFormat,
             "AAC",

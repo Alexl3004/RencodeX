@@ -18,6 +18,10 @@ export interface FileAnalysis {
   streams: StreamInfo[];
   audio_langs: string[];
   sub_langs: string[];
+  hdr_format: string;
+  color_primaries: string;
+  color_transfer: string;
+  color_space: string;
 }
 
 export type AudioMode = "reencode" | "copy";
@@ -88,6 +92,7 @@ export interface CleanedName {
   season_episode: string;
   resolution: string;
   source: string;
+  hdr?: string;
   provider: string;
   audio_tags: string;
   suggested: string;
@@ -116,6 +121,10 @@ export interface AppFile {
   cleaned?: CleanedName;
   sub_extract_status: "none" | "extracting" | "done" | "error";
   sub_extract_error?: string;
+  hdr_format?: string;
+  color_primaries?: string;
+  color_transfer?: string;
+  color_space?: string;
 }
 
 export interface SubExtractProgress {
@@ -139,6 +148,7 @@ export type TagId =
   | "resolution"
   | "provider"
   | "source"
+  | "hdr"
   | "codec"
   | "bitdepth"
   | "audioCodec"

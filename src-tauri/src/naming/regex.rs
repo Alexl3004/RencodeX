@@ -90,10 +90,87 @@ pub static SRC_WEB: Lazy<InnerRegex> = Lazy::new(||
 
 // ── HDR ───────────────────────────────────────────────────────────────────
 
-/// Tous les formats HDR courants, y compris Dolby Vision (DV/DoVi)
+/// Regex de détection individuelle des tokens HDR.
+///
+/// Stratégie : on utilise `find_iter` pour collecter TOUS les tokens HDR
+/// présents dans le nom de fichier, puis `normalize_hdr_tags` les combine
+/// en un tag canonique unique (ex: ["DV", "HDR10"] → "DV HDR10").
+///
+/// Pourquoi pas une alternance combinée ?
+/// Un seul `find` retourne le *premier* match — sur "DV HDR10" il renvoie
+/// "DV" et s'arrête. `find_iter` collecte les deux indépendamment de leur
+/// ordre dans la chaîne, ce qui gère aussi "HDR10 DV" ou "HLG DV".
+///
+/// Tokens reconnus (du plus spécifique au plus générique) :
+///   HDR10+, HDR10, HLG, DV, DoVi, Dolby Vision, HDR, SDR
+///
+/// Le suffix `(?:[^A-Za-z0-9]|$)` empêche de matcher "HDR" dans "HDRip".
 pub static HDR: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)\b(HDR10\+|HDR10|HDR|DV|DoVi|Dolby[.\s]?Vision|HLG|SDR)(?:[^A-Za-z0-9]|$)").unwrap()
+    InnerRegex::new(
+        r"(?i)\b(HDR10\+|HDR10|HLG|DV|DoVi|Dolby[\s.]?Vision|HDR|SDR)(?:[^A-Za-z0-9]|$)"
+    ).unwrap()
 );
+
+/// Collecte tous les tokens HDR d'un nom de fichier et retourne un tag
+/// canonique normalisé.
+///
+/// Exemples :
+/// ```
+/// "DV HDR10"        → "DV HDR10"
+/// "HDR10 DV"        → "DV HDR10"   (ordre normalisé : DV toujours en premier)
+/// "Dolby Vision"    → "DV"
+/// "DoVi HDR10+"     → "DV HDR10+"
+/// "HLG"             → "HLG"
+/// "HDR10"           → "HDR10"
+/// "SDR"             → ""           (SDR = pas de tag)
+/// ""                → ""
+/// ```
+pub fn normalize_hdr_tags(name: &str) -> String {
+    // Collecte tous les tokens bruts trouvés par find_iter
+    let raw_tags: Vec<String> = HDR
+        .captures_iter(name)
+        .filter_map(|cap| cap.get(1))
+        .map(|m| m.as_str().to_string())
+        .collect();
+
+    if raw_tags.is_empty() {
+        return String::new();
+    }
+
+    // Normalise chaque token vers une forme canonique
+    let mut has_dv      = false;
+    let mut has_hdr10p  = false;
+    let mut has_hdr10   = false;
+    let mut has_hlg     = false;
+    let mut has_hdr     = false;
+    // SDR et tokens inconnus sont ignorés (pas de tag dans le nom de sortie)
+
+    for raw in &raw_tags {
+        let up = raw.to_uppercase().replace([' ', '.'], "");
+        match up.as_str() {
+            "DV" | "DOVI" | "DOLBYVISION" => has_dv     = true,
+            "HDR10+"                       => has_hdr10p = true,
+            "HDR10"                        => has_hdr10  = true,
+            "HLG"                          => has_hlg    = true,
+            "HDR"                          => has_hdr    = true,
+            _                              => {}   // SDR ou inconnu → ignoré
+        }
+    }
+
+    // Combinaisons canoniques — ordre : DV d'abord, puis le format de base
+    match (has_dv, has_hdr10p, has_hdr10, has_hlg, has_hdr) {
+        (true,  true,  _,     _,     _    ) => "DV HDR10+".to_string(),
+        (true,  _,     true,  _,     _    ) => "DV HDR10".to_string(),
+        (true,  _,     _,     true,  _    ) => "DV HLG".to_string(),
+        (true,  _,     _,     _,     true ) => "DV HDR".to_string(),
+        (true,  _,     _,     _,     _    ) => "DV".to_string(),
+        (_,     true,  _,     _,     _    ) => "HDR10+".to_string(),
+        (_,     _,     true,  _,     _    ) => "HDR10".to_string(),
+        (_,     _,     _,     true,  _    ) => "HLG".to_string(),
+        (_,     _,     _,     _,     true ) => "HDR".to_string(),
+        _                                   => String::new(),
+    }
+}
 
 // ── Édition spéciale ─────────────────────────────────────────────────────
 

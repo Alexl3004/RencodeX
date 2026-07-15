@@ -21,6 +21,18 @@ pub struct FileAnalysis {
     pub streams: Vec<StreamInfo>,
     pub audio_langs: Vec<String>,
     pub sub_langs: Vec<String>,
+    /// Format HDR détecté depuis ffprobe : "HDR10", "HLG", "DV", ou "" si SDR
+    #[serde(default)]
+    pub hdr_format: String,
+    /// color_primaries brut ffprobe (ex: "bt2020")
+    #[serde(default)]
+    pub color_primaries: String,
+    /// color_transfer brut ffprobe (ex: "smpte2084" ou "arib-std-b67")
+    #[serde(default)]
+    pub color_transfer: String,
+    /// colorspace brut ffprobe (ex: "bt2020nc")
+    #[serde(default)]
+    pub color_space: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -45,6 +57,14 @@ pub struct EncodeJob {
     pub aq_strength:     u8,
     pub multipass:       String,
     pub container:       String,
+    #[serde(default)]
+    pub color_primaries: String,
+    #[serde(default)]
+    pub color_transfer: String,
+    #[serde(default)]
+    pub color_space: String,
+    #[serde(default)]
+    pub hdr_tag: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

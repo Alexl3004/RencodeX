@@ -30,6 +30,7 @@ export const DEFAULT_TAG_ORDER: TagId[] = [
   "resolution",
   "provider",
   "source",
+  "hdr", 
   "codec",
   "bitdepth",
   "audioCodec",
@@ -45,6 +46,7 @@ export const TAG_LABELS: Record<TagId, string> = {
   resolution: "Résolution",
   provider:   "Provider",
   source:     "Source (BluRay, WEB-DL…)",
+  hdr:        "HDR (HDR10, HLG, DV…)",
   codec:      "Codec vidéo (H265)",
   bitdepth:   "Profondeur (10bit)",
   audioCodec: "Codec audio (AAC…)",
@@ -237,6 +239,7 @@ export function buildOutputName(
   tagOrder: TagId[] = DEFAULT_TAG_ORDER,
   team: string = "",
   options: NamingOptions = {},
+  hdrOverride?: string,
 ): string {
   const {
     disabledTags    = new Set<TagId>(),
@@ -313,6 +316,7 @@ export function buildOutputName(
                 providerCase === "lower"  ? cleaned.provider.toLowerCase() :
                 cleaned.provider.toUpperCase(),
     source:     applySourceCase(cleaned.source),
+    hdr: hdrOverride ?? cleaned.hdr ?? "",
     codec:      codecFormat,
     bitdepth:   "10bit",
     audioCodec: audioTag,
@@ -357,6 +361,7 @@ export function applySeFormat(
       tagOrder,
       team,
       options,
+      file.hdr_format,
     );
   }
   return file.output_name.replace(

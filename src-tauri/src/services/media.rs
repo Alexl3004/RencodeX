@@ -7,7 +7,7 @@ use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_notification::NotificationExt;
-use crate::naming::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME};
+use crate::naming::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME, normalize_hdr_tags};
 
 use crate::models::{StreamInfo, EncodeJob, ProgressEvent, FileResult, EncodeSummary};
 use std::sync::atomic::Ordering;
@@ -94,7 +94,43 @@ pub async fn analyze_file(path: String) -> Result<crate::models::FileAnalysis, S
     let filename = std::path::Path::new(&path).file_name()
         .and_then(|f| f.to_str()).unwrap_or("").to_string();
 
-    Ok(crate::models::FileAnalysis { path, filename, size_mb, duration_secs: duration, fps, streams, audio_langs, sub_langs })
+    // ── Extraction des métadonnées HDR depuis le premier stream vidéo ────
+    let video_stream = json["streams"].as_array()
+        .and_then(|streams| streams.iter().find(|s| s["codec_type"].as_str() == Some("video")));
+
+    let color_primaries = video_stream
+        .and_then(|v| v["color_primaries"].as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let color_transfer = video_stream
+        .and_then(|v| v["color_transfer"].as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let color_space = video_stream
+        .and_then(|v| v["color_space"].as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let hdr_from_name = normalize_hdr_tags(&filename);
+    let hdr_format = if !hdr_from_name.is_empty() {
+        hdr_from_name
+    } else {
+        match color_transfer.as_str() {
+            "smpte2084"    => "HDR10".to_string(),  // PQ — HDR10 et HDR10+
+            "arib-std-b67" => "HLG".to_string(),    // HLG broadcast
+            _              => String::new(),         // SDR ou inconnu
+        }
+    };
+
+    Ok(crate::models::FileAnalysis {
+        path, filename, size_mb, duration_secs: duration, fps, streams, audio_langs, sub_langs,
+        hdr_format,
+        color_primaries,
+        color_transfer,
+        color_space,
+    })
 }
 
 pub async fn start_encoding(
@@ -265,6 +301,22 @@ pub async fn start_encoding(
                 "-preset".into(), job.preset.clone(),
                 "-cq".into(), job.crf.to_string(),
             ]);
+
+            // Préservation des métadonnées de couleur HDR
+            // Si les champs sont remplis (source HDR), on les copie explicitement.
+            // Si vides (source SDR), on ne touche pas — FFmpeg utilisera ses propres défauts.
+            if !job.color_primaries.is_empty() {
+                cmd_args.extend([
+                    "-color_primaries".into(), job.color_primaries.clone(),
+                    "-color_trc".into(),       job.color_transfer.clone(),
+                    "-colorspace".into(),      job.color_space.clone(),
+                ]);
+            }
+            // color_range : les sources BD/streaming HDR sont toujours "tv" (limited range).
+            // On force "tv" si HDR, on laisse FFmpeg décider sinon.
+            if !job.hdr_tag.is_empty() {
+                cmd_args.extend(["-color_range".into(), "tv".into()]);
+            }
 
             // Qualité NVENC avancée : AQ spatiale/temporelle + multipass
             cmd_args.extend([

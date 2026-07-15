@@ -195,6 +195,10 @@ function createEncodingStore() {
         aq_strength:             prefs.aqStrength,
         multipass:               prefs.multipass,
         container:               prefs.container,
+        color_primaries:         f.color_primaries ?? "",
+        color_transfer:          f.color_transfer  ?? "",
+        color_space:             f.color_space     ?? "",
+        hdr_tag:                 f.hdr_format      ?? "",
       };
     });
 

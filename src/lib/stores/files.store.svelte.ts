@@ -111,6 +111,7 @@ function createFilesStore() {
       const tag      = computeTag(f.audio_langs, f.sub_langs, effAudio, effSubs);
       const audioTag = computeAudioTag(f.streams, effAudio, _audioMode);
       const codecTag = computeVideoCodecTag(f.streams, _videoMode, _codecFmt);
+      console.log("f.hdr_format:", f.hdr_format, "f.cleaned.hdr:", f.cleaned?.hdr);
       const name     = buildOutputName(
         f.cleaned,
         tag,
@@ -130,6 +131,7 @@ function createFilesStore() {
           providerCase:    _provCase,
           keepJapaneseVer: _keepJapVer,
         },
+        f.hdr_format,
       );
       return { ...f, output_name: name };
     });
@@ -184,13 +186,24 @@ function createFilesStore() {
             raw: analysis.filename,
             audioLangs: analysis.audio_langs,
             subLangs: analysis.sub_langs,
+            
           });
+          console.log("analysis.hdr_format:", analysis.hdr_format);
+          console.log("cleaned.hdr:", (cleaned as any).hdr);
+          console.log("hdrTag final:", (cleaned as any).hdr || analysis.hdr_format || "");
+          
+
+          // Si cleaned.hdr est vide (nom de fichier sans tag HDR) mais analysis.hdr_format
+          // est rempli (vraies métadonnées ffprobe), on utilise la valeur ffprobe.
+          const hdrTag = analysis.hdr_format || (cleaned as any).hdr || "";
+          const cleanedWithHdr = { ...cleaned, hdr: hdrTag };
+          console.log("hdrTag réel:", hdrTag);
 
           const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, getSelAudio(), getSelSubs());
           const audioTag = computeAudioTag(analysis.streams, getSelAudio(), prefs.audioMode);
           const codecTag = computeVideoCodecTag(analysis.streams, prefs.videoMode, prefs.codecFormat);
           const outName  = buildOutputName(
-            cleaned,
+            cleanedWithHdr,
             tag,
             prefs.seasonEpisodeFormat,
             audioTag,
@@ -205,8 +218,12 @@ function createFilesStore() {
             status: "ready",
             output_name: outName,
             output_ext: ".mkv",
-            cleaned,
+            cleaned: cleanedWithHdr,
             sub_extract_status: "none",
+            hdr_format:      hdrTag,
+            color_primaries: analysis.color_primaries,
+            color_transfer:  analysis.color_transfer,
+            color_space:     analysis.color_space,
           };
           files = files.map((f, i) => (i === idx ? updated : f));
 
