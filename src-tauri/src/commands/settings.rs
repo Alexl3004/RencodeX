@@ -2,6 +2,7 @@
 
 use crate::models::{AppConfig, EncodingPrefs, Stats};
 use crate::utils::{config_path, resolve_config};
+use tauri::Emitter;
 
 fn encoding_prefs_path() -> std::path::PathBuf {
     config_path()
@@ -20,11 +21,13 @@ pub fn load_config() -> AppConfig {
 }
 
 #[tauri::command]
-pub fn save_config(config: AppConfig) -> Result<(), String> {
+pub fn save_config(config: AppConfig, app: tauri::AppHandle) -> Result<(), String> {
     let path = config_path();
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| e.to_string())
+    std::fs::write(path, json).map_err(|e| e.to_string())?;
+    let _ = app.emit("config-saved", ());
+    Ok(())
 }
 
 #[tauri::command]

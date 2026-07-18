@@ -92,7 +92,6 @@ impl EventHandler for Handler {
             "!queue"  => format_queue(),
             "!skip" => {
                 if skip_ffmpeg_process() {
-                    skip_ffmpeg_process();
                     "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
                 } else {
                     "ℹ️ Aucun encodage en cours.".to_string()

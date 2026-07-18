@@ -83,6 +83,7 @@
         {/if}
       </button>
       <!-- ⏭ Skip — nouveau bouton -->
+       {#if encoder.progress && encoder.progress.file_total > 1}
       <button
         onclick={() => encoder.skipEncoding()}
         class="cb-btn cb-btn--ghost"
@@ -92,6 +93,7 @@
         <SkipForward class="cb-icon" />
         <span>Suivant</span>
       </button>
+      {/if}
     {:else}
       <button
         onclick={() => encoder.startEncoding()}

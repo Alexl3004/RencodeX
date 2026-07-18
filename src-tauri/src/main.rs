@@ -11,6 +11,7 @@ mod entities;
 use crate::utils::resolve_config;
 use crate::commands::settings::load_config;
 use tauri::Manager;
+use tauri::Listener;
 
 // ── Supervision du bot Discord ────────────────────────────────────────────────
 
@@ -20,11 +21,15 @@ use tauri::Manager;
 async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHandle) {
     const MAX_BACKOFF_SECS: u64 = 300;
     let mut backoff_secs: u64 = 5;
+    let mut current_token = token;
+    let mut current_channel = channel_id;
 
     loop {
         eprintln!("[Discord bot] Démarrage…");
 
-        if let Some(fatal) = services::discord_bot::start(token.clone(), channel_id, app.clone()).await {
+        if let Some(fatal) = services::discord_bot::start(
+            current_token.clone(), current_channel, app.clone()
+        ).await {
             eprintln!("[Discord bot] Erreur fatale, supervision arrêtée : {fatal}");
             return;
         }
@@ -32,6 +37,15 @@ async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHa
         eprintln!("[Discord bot] Déconnecté. Nouvelle tentative dans {}s.", backoff_secs);
         tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
         backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
+
+        // Relire la config à chaque redémarrage — prend en compte les mises à jour
+        let cfg = resolve_config(load_config());
+        if !cfg.discord_bot_token.is_empty() {
+            current_token = cfg.discord_bot_token;
+        }
+        if let Ok(id) = cfg.discord_cmd_channel_id.parse::<u64>() {
+            current_channel = id;
+        }
     }
 }
 
@@ -39,9 +53,7 @@ async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHa
 
 fn main() {
     tauri::async_runtime::block_on(db::init());
-
     let cfg = resolve_config(load_config());
-
     if !std::path::Path::new(&cfg.ffmpeg_path).exists() {
         eprintln!(
             "[startup] AVERTISSEMENT : ffmpeg introuvable à « {} ».\n\
@@ -98,14 +110,32 @@ fn main() {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
                     let token = cfg.discord_bot_token.clone();
                     let app_handle = app.handle().clone();
-
                     tauri::async_runtime::spawn(supervise_discord_bot(
-                        token,
-                        cmd_channel_id,
-                        app_handle,
+                        token, cmd_channel_id, app_handle,
                     ));
                 }
             }
+
+            // Redémarrer le bot quand la config est sauvegardée
+            let app_handle = app.handle().clone();
+            app.listen("config-saved", move |_| {
+                let app2 = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let cfg = resolve_config(load_config());
+                    if cfg.discord_enabled
+                        && !cfg.discord_bot_token.is_empty()
+                        && !cfg.discord_cmd_channel_id.is_empty()
+                    {
+                        if let Ok(id) = cfg.discord_cmd_channel_id.parse::<u64>() {
+                            eprintln!("[Discord bot] Config mise à jour, redémarrage…");
+                            tauri::async_runtime::spawn(supervise_discord_bot(
+                                cfg.discord_bot_token, id, app2,
+                            ));
+                        }
+                    }
+                });
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
