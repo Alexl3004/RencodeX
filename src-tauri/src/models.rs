@@ -181,6 +181,9 @@ pub struct EncodingPrefs {
     pub video_mode: String,
     #[serde(default = "default_audio_mode")]
     pub audio_mode: String,
+    /// Map codec source → { action, targetCodec } — sérialisé depuis le frontend
+    #[serde(default)]
+    pub audio_codec_rules: std::collections::HashMap<String, StreamAudioRule>,
     #[serde(default = "default_audio_bitrate")]
     pub audio_bitrate: u32,
     #[serde(default)]
@@ -223,6 +226,12 @@ pub struct EncodingPrefs {
     pub web_source_format: String,
     #[serde(default)]
     pub keep_japanese_ver: bool,
+    #[serde(default)]
+    pub lang_order: Vec<String>,
+    #[serde(default = "default_audio_langs")]
+    pub default_audio_langs: Vec<String>,
+    #[serde(default = "default_sub_langs")]
+    pub default_sub_langs: Vec<String>,
 }
 
 fn default_nav_layout() -> String { "vertical".to_string() }
@@ -254,6 +263,8 @@ fn default_year_parentheses()  -> String { "parentheses".to_string() }
 fn default_web_source_format() -> String { "WEB-DL".to_string() }
 fn default_tag_separator()     -> String { " ".to_string() }
 fn default_provider_case()     -> String { "original".to_string() }
+fn default_audio_langs()       -> Vec<String> { vec!["fre".into(), "eng".into(), "jpn".into()] }
+fn default_sub_langs()         -> Vec<String> { vec!["fre".into()] }
 
 impl Default for EncodingPrefs {
     fn default() -> Self {
@@ -265,6 +276,7 @@ impl Default for EncodingPrefs {
             team: String::new(),
             video_mode: default_video_mode(),
             audio_mode: default_audio_mode(),
+            audio_codec_rules: std::collections::HashMap::new(),
             audio_bitrate: default_audio_bitrate(),
             spatial_aq: false,
             temporal_aq: false,
@@ -286,6 +298,9 @@ impl Default for EncodingPrefs {
             year_format: default_year_parentheses(),
             web_source_format: default_web_source_format(),
             keep_japanese_ver: false,
+            lang_order: Vec::new(),
+            default_audio_langs: default_audio_langs(),
+            default_sub_langs: default_sub_langs(),
         }
     }
 }
