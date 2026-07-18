@@ -252,11 +252,6 @@ pub async fn start_encoding(
             }
         }
         if audio_index == 0 {
-            eprintln!(
-                "[RenCodeX] Avertissement : aucune piste audio sélectionnée pour '{}'. \
-                 Toutes les pistes audio seront incluses en fallback.",
-                filename_of(&job.input_path)
-            );
             cmd_args.extend(["-map".into(), "0:a".into()]);
             if job.audio_mode == "copy" {
                 audio_codec_args.extend(["-c:a".into(), "copy".into()]);

@@ -214,13 +214,6 @@
         invoke<EffectiveConfig>("get_effective_config"),
         invoke<Record<string, FieldDef[]>>("get_discord_field_catalog"),
       ]);
-
-      console.log(
-        "[Settings] clés reçues de load_config :",
-        Object.keys(rawSaved),
-      );
-      console.log("[Settings] rawSaved :", JSON.stringify(rawSaved, null, 2));
-
       const g = (snake: string, camel: string) =>
         rawSaved[snake] ?? rawSaved[camel];
 
