@@ -190,16 +190,12 @@ pub fn clean_filename(
 
     // 2b. Contenu entre crochets/parenthèses (groupes, tags, CRC…)
     //     On boucle car plusieurs groupes peuvent être imbriqués ou adjacents.
-    let prev_len = base.len() + 1;
-    let mut iterations = 0usize;
-    while base.len() < prev_len && iterations < 10 {
+    for _ in 0..10 {
         let new = regex::BRACKETS.replace_all(&base, " ").to_string();
         if new == base { break; }
         base = new;
-        iterations += 1;
     }
-    // Remplacement simple (cas nominaux)
-    base = regex::BRACKETS.replace_all(&base, " ").to_string();
+    
 
     // 2c. Groupe de release en fin de titre (ex: " - SubsPlease")
     if let Some(cap) = regex::TRAIL_GROUP.captures(&base) {
