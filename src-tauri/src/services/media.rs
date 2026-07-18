@@ -634,12 +634,24 @@ pub async fn start_encoding(
             } else if !ok && !cancelled && cfg.discord_notify_error {
                 let fields_error = crate::services::discord_fields::default_fields("error");
                 let note_error = cfg.discord_custom_notes.get("error").cloned().unwrap_or_default();
+                // Extraire les dernières lignes utiles du stderr FFmpeg (max 800 chars
+                // pour rester dans les limites d'un embed Discord).
+                let err_msg = ffmpeg_stderr
+                    .as_deref()
+                    .unwrap_or("Échec de l'encodage")
+                    .chars()
+                    .rev()
+                    .take(800)
+                    .collect::<String>()
+                    .chars()
+                    .rev()
+                    .collect::<String>();
                 tokio::spawn(async move {
                     discord_notify_error(
                         &token,
                         &channel,
                         &file_name_clone,
-                        "Échec de l'encodage",
+                        &err_msg,
                         &fields_error,
                         &note_error,
                     ).await;
