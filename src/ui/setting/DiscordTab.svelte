@@ -101,9 +101,7 @@
 
   let showToken = $state(false);
 
-  let discordFromEnv = $derived(
-    effective?.discord_token_set && !form.discord_bot_token,
-  );
+  let discordFromEnv = $derived(false);
 </script>
 
 <section class="content-section">

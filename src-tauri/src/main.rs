@@ -18,23 +18,19 @@ use tauri::Manager;
 /// Chaque tentative attend `backoff` avant de redémarrer, avec un plafond
 /// de 5 minutes. Le bot tourne sur le runtime Tauri (pas de runtime dédié).
 async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHandle) {
-    const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+    const MAX_BACKOFF_SECS: u64 = 300;
     let mut backoff_secs: u64 = 5;
 
     loop {
         eprintln!("[Discord bot] Démarrage…");
 
-        services::discord_bot::start(token.clone(), channel_id, app.clone()).await;
+        if let Some(fatal) = services::discord_bot::start(token.clone(), channel_id, app.clone()).await {
+            eprintln!("[Discord bot] Erreur fatale, supervision arrêtée : {fatal}");
+            return;
+        }
 
-        // `start()` est revenu — soit erreur de connexion, soit déconnexion.
-        eprintln!(
-            "[Discord bot] Arrêté. Nouvelle tentative dans {}s.",
-            backoff_secs
-        );
-
+        eprintln!("[Discord bot] Déconnecté. Nouvelle tentative dans {}s.", backoff_secs);
         tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
-
-        // Backoff exponentiel plafonné
         backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
     }
 }
@@ -99,12 +95,9 @@ fn main() {
                 && !cfg.discord_cmd_channel_id.is_empty()
             {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
-                    let token = std::env::var("RENCODEX_DISCORD_TOKEN")
-                        .unwrap_or_else(|_| cfg.discord_bot_token.clone());
+                    let token = cfg.discord_bot_token.clone();
                     let app_handle = app.handle().clone();
 
-                    // tokio::spawn sur le runtime de Tauri — pas de thread ni de
-                    // runtime dédié. La supervision redémarre le bot automatiquement.
                     tauri::async_runtime::spawn(supervise_discord_bot(
                         token,
                         cmd_channel_id,

@@ -278,7 +278,9 @@ fn format_queue() -> String {
     lines
 }
 
-pub async fn start(token: String, channel_id: u64, app: AppHandle) {
+pub async fn start(token: String, channel_id: u64, app: AppHandle) -> Option<String> {
+    let token = token.trim().to_string();
+    let token = token.strip_prefix("Bot ").unwrap_or(&token).to_string();
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::MESSAGE_CONTENT;
@@ -294,11 +296,25 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("[Discord bot] Impossible de créer le client : {e}");
-            return;
+            // Erreur à la création = token invalide ou config erronée → fatale
+            return Some(e.to_string());
         }
     };
 
     if let Err(err) = client.start().await {
-        eprintln!("[Discord bot] Erreur de connexion : {err}");
+        let err_str = err.to_string();
+        eprintln!("[Discord bot] Erreur de connexion : {err_str}");
+
+        // "invalid authentication" et "401" sont des erreurs fatales
+        let is_fatal = err_str.contains("invalid authentication")
+            || err_str.contains("401")
+            || err_str.contains("Invalid token");
+
+        if is_fatal {
+            return Some(err_str);
+        }
     }
+
+    // Déconnexion propre ou erreur réseau → None = redémarrage autorisé
+    None
 }

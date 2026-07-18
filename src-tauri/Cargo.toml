@@ -27,12 +27,14 @@ lettre                    = { version = "0.11", features = ["smtp-transport", "n
 dirs                      = "5"
 reqwest                   = { version = "0.12", features = ["json"] }
 chrono                    = { version = "0.4", features = ["serde"] }
-serenity                  = { version = "0.12", default-features = false, features = [
+serenity = { version = "0.12", default-features = false, features = [
     "client",
     "gateway",
-    "rustls_backend",
+    "native_tls_backend",
     "model",
+    "cache",
 ] }
+native-tls = "0.2"
 sea-orm = { version = "1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
 sea-orm-migration = "1"
 windows = { version = "0.58", features = [
