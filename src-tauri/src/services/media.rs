@@ -218,7 +218,7 @@ pub async fn start_encoding(
         // Build FFmpeg args
         let mut cmd_args: Vec<String> = vec![
             "-i".into(), job.input_path.clone(),
-            "-ss".into(), "00:00:00".into(),
+            
             "-map".into(), "0:v:0".into(),
         ];
 
