@@ -1,8 +1,14 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import type { VideoMode } from "$lib/stores/types";
 
-  let videoMode = $derived(encoder.videoMode);
+  let videoMode  = $derived(encoder.videoMode);
+  let preserveDv = $derived(encoder.preserveDv);
+
+  let hasDvFiles = $derived(
+    encoder.files.some((f) =>
+      f.hdr_format?.includes("DV") || f.hdr_format?.includes("Dolby"),
+    ),
+  );
 </script>
 
 <section class="tab">
@@ -65,7 +71,7 @@
     </button>
   </div>
 
-  <!-- Callout contextuel -->
+  <!-- Callout mode -->
   {#if videoMode === "copy"}
     <div class="callout callout--info">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="callout-icon" aria-hidden="true">
@@ -89,6 +95,75 @@
       </div>
     </div>
   {/if}
+
+  <!-- ── Dolby Vision ──────────────────────────────────────────────────────── -->
+  <div class="dv-section">
+    <div class="dv-header">
+      <div class="dv-label">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1"/>
+          <path d="M3 4h3.5a2.5 2.5 0 0 1 0 5H3V4Z" fill="currentColor" opacity=".9"/>
+          <path d="M8.5 6.5 10 4.5V8.5L8.5 6.5Z" fill="currentColor" opacity=".6"/>
+        </svg>
+        <span class="dv-label-text">Préserver Dolby Vision</span>
+        {#if hasDvFiles}
+          <span class="dv-pill dv-pill--active">DV détecté</span>
+        {:else}
+          <span class="dv-pill">Aucun fichier DV</span>
+        {/if}
+      </div>
+
+      <button
+        type="button"
+        class="dv-toggle"
+        class:dv-toggle--on={preserveDv}
+        onclick={() => encoder.setPreserveDv(!preserveDv)}
+        title={preserveDv ? "Désactiver la préservation DV" : "Activer la préservation DV"}
+        aria-pressed={preserveDv}
+      >
+        <span class="dv-toggle-track">
+          <span class="dv-toggle-thumb"></span>
+        </span>
+        <span class="dv-toggle-label">{preserveDv ? "Activé" : "Désactivé"}</span>
+      </button>
+    </div>
+
+    {#if !hasDvFiles && !preserveDv}
+      <p class="dv-hint">
+        Chargez des fichiers contenant une couche Dolby Vision pour activer cette option.
+        FFmpeg ajoutera <code>-dolbyvision_profile 8 -strict experimental</code> lors du ré-encodage.
+      </p>
+    {:else if preserveDv && videoMode === "encode"}
+      <div class="callout callout--warn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="callout-icon" aria-hidden="true">
+          <path d="M7 1.5L12.5 11H1.5L7 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          <path d="M7 5.5V8M7 9.5V10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <strong>Compatibilité NVENC requise</strong> — Ajoute
+          <code>-dolbyvision_profile 8 -strict experimental</code> à la commande FFmpeg.
+          Certains pilotes ou versions FFmpeg peuvent ne pas supporter cette option.
+          En cas d'erreur, désactivez ou passez en mode <strong>Copie</strong>.
+        </div>
+      </div>
+    {:else if preserveDv && videoMode === "copy"}
+      <div class="callout callout--info">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="callout-icon" aria-hidden="true">
+          <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M5 7.5L6.5 9L9 5.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <strong>Mode copie + DV</strong> — Le flux est copié tel quel,
+          les métadonnées Dolby Vision sont préservées nativement.
+        </div>
+      </div>
+    {:else}
+      <p class="dv-hint">
+        Activez pour injecter les paramètres FFmpeg nécessaires à la préservation
+        de la couche Dolby Vision lors du ré-encodage NVENC.
+      </p>
+    {/if}
+  </div>
 </section>
 
 <style>
@@ -160,11 +235,7 @@
     background: color-mix(in srgb, var(--color-accent) 10%, var(--color-panel));
   }
 
-  .mode-body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
+  .mode-body { display: flex; flex-direction: column; gap: 6px; }
   .mode-name {
     font-size: 13px;
     font-weight: 600;
@@ -179,11 +250,7 @@
     line-height: 1.55;
     margin: 0;
   }
-  .mode-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
+  .mode-tags { display: flex; flex-wrap: wrap; gap: 4px; }
   .tag {
     font-family: "Geist Mono", monospace;
     font-size: 9px;
@@ -215,18 +282,145 @@
     animation: fade-in 0.14s ease;
   }
   .callout strong { color: var(--color-text); font-weight: 600; }
+  .callout code {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 0 4px;
+  }
   .callout--info {
     background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
     border-color: color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
     color: color-mix(in srgb, var(--color-accent) 60%, var(--color-subtext));
   }
   .callout--info strong { color: var(--color-accent); }
+  .callout--warn {
+    background: color-mix(in srgb, #e5a020 6%, var(--color-surface));
+    border-color: color-mix(in srgb, #e5a020 30%, var(--color-border));
+    color: color-mix(in srgb, #e5a020 70%, var(--color-subtext));
+  }
+  .callout--warn strong { color: #e5a020; }
+  .callout--warn code {
+    background: color-mix(in srgb, #e5a020 8%, var(--color-panel));
+    border-color: color-mix(in srgb, #e5a020 25%, var(--color-border));
+  }
   .callout-icon {
     flex-shrink: 0;
     margin-top: 1px;
     color: var(--color-subtext2);
   }
   .callout--info .callout-icon { color: var(--color-accent); }
+  .callout--warn .callout-icon { color: #e5a020; }
+
+  /* ── Dolby Vision ───────────────────────────────────────────────────────── */
+  .dv-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .dv-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .dv-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--color-subtext);
+  }
+
+  .dv-label-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .dv-pill {
+    font-size: 9px;
+    font-weight: 600;
+    font-family: "Geist Mono", monospace;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    color: var(--color-subtext2);
+    letter-spacing: 0.03em;
+  }
+  .dv-pill--active {
+    background: color-mix(in srgb, #e5a020 10%, var(--color-panel));
+    border-color: color-mix(in srgb, #e5a020 35%, var(--color-border));
+    color: #e5a020;
+  }
+
+  /* Toggle switch */
+  .dv-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-subtext2);
+    transition: color 0.12s;
+    cursor: pointer;
+  }
+  .dv-toggle--on { color: var(--color-accent); }
+
+  .dv-toggle-track {
+    position: relative;
+    width: 30px;
+    height: 17px;
+    border-radius: 9px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+    transition: background 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .dv-toggle--on .dv-toggle-track {
+    background: color-mix(in srgb, var(--color-accent) 25%, var(--color-surface));
+    border-color: var(--color-accent);
+  }
+
+  .dv-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--color-subtext2);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .dv-toggle--on .dv-toggle-thumb {
+    transform: translateX(13px);
+    background: var(--color-accent);
+  }
+
+  .dv-hint {
+    font-size: 11px;
+    color: var(--color-subtext2);
+    line-height: 1.55;
+    margin: 0;
+  }
+  .dv-hint code {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 0 4px;
+  }
 
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(3px); }

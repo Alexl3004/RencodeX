@@ -201,6 +201,7 @@ function createEncodingStore() {
         color_transfer:          f.color_transfer  ?? "",
         color_space:             f.color_space     ?? "",
         hdr_tag:                 f.hdr_format      ?? "",
+        preserve_dv:             prefs.preserveDv,
       };
     });
 

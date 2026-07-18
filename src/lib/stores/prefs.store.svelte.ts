@@ -210,6 +210,7 @@ function createPrefsStore() {
   let providerCase        = $state<ProviderCase>("upper");
   let team                = $state("");
   let keepJapaneseVer     = $state<boolean>(false);
+  let preserveDv          = $state<boolean>(false);
   let langOrder           = $state<string[]>([...LANG_ORDER]);
   let defaultAudioLangs   = $state<string[]>(["fre", "eng", "jpn"]);
   let defaultSubLangs     = $state<string[]>(["fre"]);
@@ -259,6 +260,7 @@ function createPrefsStore() {
       provider_case:           providerCase,
       team,
       keep_japanese_ver:       keepJapaneseVer,
+      preserve_dv:             preserveDv,
       lang_order:              langOrder,
       default_audio_langs:     defaultAudioLangs,
       default_sub_langs:       defaultSubLangs,
@@ -409,6 +411,7 @@ function createPrefsStore() {
         tag_separator?: string;
         provider_case?: string;
         keep_japanese_ver?: boolean;
+        preserve_dv?: boolean;
         lang_order?: string[];
         default_audio_langs?: string[];
         default_sub_langs?: string[];
@@ -452,6 +455,7 @@ function createPrefsStore() {
         providerCase = p.provider_case as ProviderCase;
       if (typeof p.team === "string") team = p.team;
       if (typeof p.keep_japanese_ver === "boolean") keepJapaneseVer = p.keep_japanese_ver;
+      if (typeof p.preserve_dv === "boolean") preserveDv = p.preserve_dv;
       if (
         Array.isArray(p.lang_order) &&
         (p.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0)
@@ -621,6 +625,7 @@ function createPrefsStore() {
   function setProviderCase(v: ProviderCase)      { providerCase = v;     _namingChanged(); }
   function setTeam(v: string)                    { team = v;             _namingChanged(); }
   function setKeepJapaneseVer(v: boolean)        { keepJapaneseVer = v;  _namingChanged(); }
+  function setPreserveDv(v: boolean)             { preserveDv = v;       schedule(); }
   function setDefaultAudioLangs(v: string[])     { defaultAudioLangs = v; _namingChanged(); }
   function setDefaultSubLangs(v: string[])       { defaultSubLangs = v;   _namingChanged(); }
 
@@ -661,6 +666,7 @@ function createPrefsStore() {
     disabledTags         = new Set<TagId>(["japver"]);
     team                 = "";
     keepJapaneseVer      = false;
+    preserveDv           = false;
     videoMode            = "encode";
     subExtractFormat     = "srt";
     subExtractNaming     = "source";
@@ -702,6 +708,7 @@ function createPrefsStore() {
     get providerCase()         { return providerCase; },
     get team()                 { return team; },
     get keepJapaneseVer()      { return keepJapaneseVer; },
+    get preserveDv()           { return preserveDv; },
     get langOrder()            { return langOrder; },
     get defaultAudioLangs()    { return defaultAudioLangs; },
     get defaultSubLangs()      { return defaultSubLangs; },
@@ -746,6 +753,7 @@ function createPrefsStore() {
     setProviderCase,
     setTeam,
     setKeepJapaneseVer,
+    setPreserveDv,
     setLangOrder,
     setDefaultAudioLangs,
     setDefaultSubLangs,

@@ -106,10 +106,8 @@
 
   <!-- ── Header ─────────────────────────────────────────────────────────────── -->
   <header class="tab-header">
-    <div class="header-text">
-      <h2 class="tab-title">Audio</h2>
-      <p class="tab-desc">Action par codec source — copie ou réencodage.</p>
-    </div>
+    <h2 class="tab-title">Audio</h2>
+    <p class="tab-desc">Action par codec source — copie ou réencodage.</p>
   </header>
 
   <!-- ── Préréglages ────────────────────────────────────────────────────────── -->
@@ -269,7 +267,7 @@
 <style>
   /* ── Layout ─────────────────────────────────────────────────────────────── */
   .tab {
-    padding: 22px 26px;
+    padding: 24px 28px;
     max-width: 600px;
     display: flex;
     flex-direction: column;
@@ -282,15 +280,15 @@
     border-bottom: 1px solid var(--color-border);
   }
   .tab-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--color-text);
-    letter-spacing: -0.01em;
-    margin: 0 0 3px;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
   }
   .tab-desc {
-    font-size: 11px;
-    color: var(--color-subtext2);
+    font-size: 12px;
+    color: var(--color-subtext);
     margin: 0;
   }
 
@@ -400,7 +398,7 @@
     width: 130px;
     transition: border-color 0.1s;
   }
-  .save-input:focus { border-color: var(--color-accent); }  
+  .save-input:focus { border-color: var(--color-accent); }
   .save-confirm {
     font-size: 10px;
     font-weight: 600;
@@ -480,7 +478,7 @@
     border: 1px solid transparent;
     transition: background 0.1s, border-color 0.1s;
   }
-  
+
   .rule-row--present {
     background: color-mix(in srgb, var(--color-accent) 4%, transparent);
     border-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
@@ -516,6 +514,7 @@
     flex-shrink: 0;
     opacity: 0.7;
   }
+
   /* Toggle Copier / Réencoder — via SegmentedControl */
   :global(.action-segment) {
     width: fit-content;
@@ -571,7 +570,6 @@
     color: var(--color-text);
   }
 
-  /* Cibles */
   .copy-label {
     font-size: 10px;
     color: var(--color-subtext2);
@@ -621,4 +619,4 @@
     margin-top: 1px;
   }
   .bitrate-btn--active .bitrate-hint { color: var(--color-accent); opacity: 0.8; }
-</style>
+</style>  

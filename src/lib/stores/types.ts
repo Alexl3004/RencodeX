@@ -74,6 +74,8 @@ export interface EncodeJob {
   aq_strength: number;
   multipass: MultipassMode;
   container: ContainerFormat;
+  /** Préserve les métadonnées Dolby Vision via -dolbyvision_profile / -strict experimental */
+  preserve_dv: boolean;
 }
 
 export interface ProgressEvent {

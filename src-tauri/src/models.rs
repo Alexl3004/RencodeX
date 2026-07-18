@@ -73,6 +73,9 @@ pub struct EncodeJob {
     pub color_space: String,
     #[serde(default)]
     pub hdr_tag: String,
+    /// Préserver les métadonnées Dolby Vision lors du ré-encodage
+    #[serde(default)]
+    pub preserve_dv: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -226,6 +229,9 @@ pub struct EncodingPrefs {
     pub web_source_format: String,
     #[serde(default)]
     pub keep_japanese_ver: bool,
+    /// Préserve les métadonnées Dolby Vision lors du ré-encodage
+    #[serde(default)]
+    pub preserve_dv: bool,
     #[serde(default)]
     pub lang_order: Vec<String>,
     #[serde(default = "default_audio_langs")]
@@ -298,6 +304,7 @@ impl Default for EncodingPrefs {
             year_format: default_year_parentheses(),
             web_source_format: default_web_source_format(),
             keep_japanese_ver: false,
+            preserve_dv: false,
             lang_order: Vec::new(),
             default_audio_langs: default_audio_langs(),
             default_sub_langs: default_sub_langs(),
