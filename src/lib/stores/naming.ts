@@ -172,13 +172,22 @@ export function computeTag(
   const audio = fileAudioLangs.filter((l) => selAudio.has(l));
   const subs  = fileSubLangs.filter((l) => selSubs.has(l));
   if (audio.length === 0 || audio.every((l) => l === "und")) return "";
-  if (audio.length > 1 || subs.length > 1) return "MULTI";
+
+  // Plusieurs pistes audio → MULTI (les subs n'ajoutent rien)
+  if (audio.length > 1) return "MULTI";
+
+  // Une seule piste audio + plusieurs subs → MULTI-Sub
+  if (subs.length > 1) return "MULTI-Sub";
+
+  // Piste audio unique + au plus un sub → tag précis
+  const hasFrSub = subs.includes("fre");
+  const hasEnSub = subs.includes("eng");
   switch (audio[0]) {
     case "fre": return "VF";
     case "eng": return "VO";
-    case "jpn": return "VOSTFR";
-    case "kor": return "VOSTKR";
-    case "chi": return "VOSTCH";
+    case "jpn": return hasFrSub ? "VOSTFR" : hasEnSub ? "VOSTA" : "VOSTFR";
+    case "kor": return hasFrSub ? "VOSTKR" : "VO-KR";
+    case "chi": return hasFrSub ? "VOSTCH" : "VO-ZH";
     case "ger": return "GER";
     case "spa": return "SPA";
     case "ita": return "ITA";
@@ -387,7 +396,7 @@ export function applySeFormat(
   if (file.cleaned) {
     const tag =
       file.output_name.match(
-        /\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI|GER|SPA|ITA|POR|RUS)\b/,
+        /\b(VF|VO|VOSTFR|VOSTA|VOSTKR|VOSTCH|MULTI-Sub|MULTI|GER|SPA|ITA|POR|RUS)\b/,
       )?.[1] ?? "";
     const AUDIO_CODECS = ["AAC", "AC3", "EAC3", "DTS", "FLAC", "OPUS", "MP3", "TrueHD"];
     const audioTag =

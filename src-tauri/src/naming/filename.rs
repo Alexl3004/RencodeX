@@ -78,12 +78,17 @@ fn compute_audio_tag(
     let has_french_subs = sub_langs.iter().any(|l| l == "fre");
     let has_multi_subs  = sub_langs.len() > 1;
 
-    // MULTI : plusieurs pistes audio OU tag MULTI dans le nom
-    if has_multi_audio || has_multi_subs {
+    // Plusieurs pistes audio → MULTI (avec ou sans subs)
+    if has_multi_audio {
         return "MULTI".to_string();
     }
 
-    // Piste unique
+    // Une seule piste audio + plusieurs subs → MULTI-Sub
+    if has_multi_subs {
+        return "MULTI-Sub".to_string();
+    }
+
+    // Piste audio unique + au plus un sub → tag précis
     match audio_langs.first().map(|s| s.as_str()) {
         Some("fre") => "VF".to_string(),
         Some("eng") => "VO".to_string(),
