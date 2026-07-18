@@ -1,11 +1,21 @@
 <script lang="ts">
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { X, Play, Pause, PlayCircle, FileDown, Loader2 } from "@lucide/svelte";
-  import { ring2, dotPulse } from 'ldrs';
-    ring2.register();
-    dotPulse.register();
+  import {
+    X,
+    Play,
+    Pause,
+    PlayCircle,
+    FileDown,
+    Loader2,
+    SkipForward,
+  } from "@lucide/svelte";
+  import { ring2, dotPulse } from "ldrs";
+  ring2.register();
+  dotPulse.register();
 
-  let readyCount = $derived(encoder.files.filter((f) => f.status === "ready").length);
+  let readyCount = $derived(
+    encoder.files.filter((f) => f.status === "ready").length,
+  );
 
   let encodeTargetCount = $derived(
     encoder.encodeSelectionMode && encoder.selectedForEncoding.size > 0
@@ -20,21 +30,25 @@
   let extractTargetCount = $derived(
     encoder.extractSelectionMode && encoder.selectedForExtraction.size > 0
       ? encoder.selectedForExtraction.size
-      : encoder.files.filter((f) => f.status === "ready" && f.sub_langs.length > 0).length,
+      : encoder.files.filter(
+          (f) => f.status === "ready" && f.sub_langs.length > 0,
+        ).length,
   );
 
   let extractLabel = $derived(`Extraire (${extractTargetCount})`);
 
   let showExtract = $derived(
     encoder.showExtractButton &&
-    !encoder.encoding &&
-    encoder.files.some((f) => f.status === "ready" && f.sub_langs.length > 0)
+      !encoder.encoding &&
+      encoder.files.some((f) => f.status === "ready" && f.sub_langs.length > 0),
   );
 
   let canExtract = $derived(
     !encoder.extractingSubs &&
-    encoder.selSubs.size > 0 &&
-    !(encoder.extractSelectionMode && encoder.selectedForExtraction.size === 0)
+      encoder.selSubs.size > 0 &&
+      !(
+        encoder.extractSelectionMode && encoder.selectedForExtraction.size === 0
+      ),
   );
 </script>
 
@@ -42,19 +56,21 @@
   <!-- Encode -->
   <div class="btn-group">
     {#if encoder.encoding}
-      <!-- Indicateur d'état (non cliquable) -->
+      <!-- Indicateur d'état -->
       <button class="cb-btn cb-btn--primary cb-btn--active" disabled>
         {#if encoder.paused}
           <Pause class="cb-icon" />
           <span>En pause…</span>
         {:else}
-          <l-ring-2 size="16" stroke="2" color="var(--color-accent)" speed="0.8"></l-ring-2>
+          <l-ring-2 size="16" stroke="2" color="var(--color-accent)" speed="0.8"
+          ></l-ring-2>
           <span>Encodage…</span>
         {/if}
       </button>
-      <!-- Bouton pause / reprise -->
+      <!-- Pause / Reprendre -->
       <button
-        onclick={() => encoder.paused ? encoder.resumeEncoding() : encoder.pauseEncoding()}
+        onclick={() =>
+          encoder.paused ? encoder.resumeEncoding() : encoder.pauseEncoding()}
         class="cb-btn cb-btn--ghost"
         title={encoder.paused ? "Reprendre l'encodage" : "Mettre en pause"}
       >
@@ -65,6 +81,16 @@
           <Pause class="cb-icon" />
           <span>Pause</span>
         {/if}
+      </button>
+      <!-- ⏭ Skip — nouveau bouton -->
+      <button
+        onclick={() => encoder.skipEncoding()}
+        class="cb-btn cb-btn--ghost"
+        title="Ignorer ce fichier et passer au suivant"
+        disabled={encoder.paused}
+      >
+        <SkipForward class="cb-icon" />
+        <span>Suivant</span>
       </button>
     {:else}
       <button
@@ -86,7 +112,8 @@
     <div class="btn-group">
       {#if encoder.extractingSubs}
         <button class="cb-btn cb-btn--ghost cb-btn--active" disabled>
-          <l-ring-2 size="16" stroke="2" color="var(--color-accent)" speed="0.8"></l-ring-2>
+          <l-ring-2 size="16" stroke="2" color="var(--color-accent)" speed="0.8"
+          ></l-ring-2>
           <span>Extraction…</span>
         </button>
       {:else}
@@ -107,7 +134,10 @@
   {#if encoder.encoding || encoder.extractingSubs}
     <div class="cancel-slot">
       <button
-        onclick={() => encoder.encoding ? encoder.cancelEncoding() : encoder.cancelSubtitleExtraction()}
+        onclick={() =>
+          encoder.encoding
+            ? encoder.cancelEncoding()
+            : encoder.cancelSubtitleExtraction()}
         class="cb-btn cb-btn--danger"
         title="Annuler"
       >
@@ -153,7 +183,11 @@
     letter-spacing: 0.02em;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+    transition:
+      background 0.12s,
+      border-color 0.12s,
+      color 0.12s,
+      opacity 0.12s;
     flex-shrink: 0;
   }
 
@@ -176,7 +210,11 @@
 
   .cb-btn--primary.cb-btn--active {
     background: color-mix(in srgb, var(--color-accent) 20%, var(--color-panel));
-    border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+    border-color: color-mix(
+      in srgb,
+      var(--color-accent) 40%,
+      var(--color-border)
+    );
     color: var(--color-accent);
   }
 
@@ -202,7 +240,11 @@
   /* ── Danger (cancel) ────────────────────────── */
   .cb-btn--danger {
     background: transparent;
-    border-color: color-mix(in srgb, var(--color-danger) 40%, var(--color-border));
+    border-color: color-mix(
+      in srgb,
+      var(--color-danger) 40%,
+      var(--color-border)
+    );
     color: var(--color-danger);
   }
 

@@ -324,6 +324,13 @@ function createEncodingStore() {
     }
   }
 
+  async function skipEncoding() {
+    if (!encoding || paused) return;
+    await invoke("skip_encoding");
+    log("Fichier actuel ignoré, passage au suivant…", "info");
+    toasts.warn("Fichier ignoré");
+  }
+
   // ─── Extraction sous-titres ───────────────────────────────────────────────
 
   function cancelSubtitleExtraction() {
@@ -481,6 +488,7 @@ function createEncodingStore() {
     cancelEncoding,
     pauseEncoding,
     resumeEncoding,
+    skipEncoding,
     startSubtitleExtraction,
     cancelSubtitleExtraction,
     clearSummary,

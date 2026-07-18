@@ -349,3 +349,36 @@ pub fn kill_ffmpeg_process() -> Option<String> {
 
     lock_meta().current_out.clone()
 }
+
+/// Interrompt uniquement le process FFmpeg du fichier courant
+/// Retourne `true` si un process a bien été tué.
+pub fn skip_ffmpeg_process() -> bool {
+    if !ENCODING.load(Ordering::Acquire) {
+        return false;
+    }
+    // On swap le PID pour éviter un double-kill concurrent.
+    let pid = CHILD_PID.swap(NO_PID, Ordering::AcqRel);
+    if pid == NO_PID {
+        return false;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+        use windows::Win32::Foundation::CloseHandle;
+        unsafe {
+            if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+                let _ = TerminateProcess(handle, 1);
+                let _ = CloseHandle(handle);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+
+    true
+    // Pas de CANCEL.store(true) → la boucle for continue vers le fichier suivant.
+}

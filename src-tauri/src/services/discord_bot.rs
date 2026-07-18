@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 use crate::state::{
     ENCODING, snapshot,
-    pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process,
+    pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process, skip_ffmpeg_process,
 };
 use serenity::async_trait;
 use serenity::builder::{CreateActionRow, CreateButton, CreateEmbed, CreateEmbedFooter, CreateMessage, CreateInteractionResponse, CreateInteractionResponseMessage};
@@ -91,9 +91,8 @@ impl EventHandler for Handler {
             "!status" => format_status(),
             "!queue"  => format_queue(),
             "!skip" => {
-                if ENCODING.load(Ordering::Acquire) {
-                    kill_ffmpeg_process();
-                    let _ = self.app.emit("encode-cancelled", ());
+                if skip_ffmpeg_process() {
+                    skip_ffmpeg_process();
                     "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
                 } else {
                     "ℹ️ Aucun encodage en cours.".to_string()

@@ -135,6 +135,11 @@ pub fn resume_encoding() -> bool {
 }
 
 #[tauri::command]
+pub fn skip_encoding() {
+    crate::state::skip_ffmpeg_process();
+}
+
+#[tauri::command]
 pub fn get_paused() -> bool {
     PAUSE.load(Ordering::Relaxed)
 }

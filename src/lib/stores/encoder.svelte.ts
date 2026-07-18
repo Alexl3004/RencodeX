@@ -273,6 +273,7 @@ function createEncoder() {
     cancelEncoding:           () => encodingStore.cancelEncoding(),
     pauseEncoding:            () => encodingStore.pauseEncoding(),
     resumeEncoding:           () => encodingStore.resumeEncoding(),
+    skipEncoding: () => encodingStore.skipEncoding(),
     startSubtitleExtraction:  () => encodingStore.startSubtitleExtraction(outputDir),
     cancelSubtitleExtraction: () => encodingStore.cancelSubtitleExtraction(),
     clearLogs:                () => encodingStore.clearLogs(),

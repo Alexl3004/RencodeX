@@ -75,6 +75,7 @@ fn main() {
             commands::encoding::pause_encoding,
             commands::encoding::resume_encoding,
             commands::encoding::get_paused,
+            commands::encoding::skip_encoding, 
             // files
             commands::files::get_default_output_dir,
             commands::files::list_subtitle_tracks,
