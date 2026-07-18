@@ -11,91 +11,189 @@ import type {
   WebSourceFormat,
   TagSeparator,
   ProviderCase,
-  AudioMode,
+  AudioCodec,
+  AudioCodecRules,
   MultipassMode,
   ContainerFormat,
   SubExtractFormat,
   SubExtractNaming,
   SubExtractPathMode,
   EncodePreset,
+  AudioPreset,
 } from "./types";
 import { DEFAULT_TAG_ORDER, LANG_ORDER, SEASON_EPISODE_FORMATS } from "./naming";
 
-// ─── Persistance localStorage (renommage) ─────────────────────────────────────
+// ─── Persistance localStorage ─────────────────────────────────────────────────
 
-const RENAMING_KEY      = "rencodeX:renaming";
-const ACTIVE_PRESET_KEY = "rencodeX:activePresetId";
+const RENAMING_KEY        = "rencodeX:renaming";
+const ACTIVE_PRESET_KEY   = "rencodeX:activePresetId";
+const AUDIO_PRESETS_KEY   = "rencodeX:audioPresets";
+
+// ─── Règles audio réutilisables ───────────────────────────────────────────────
+
+/**
+ * Tout copier sans réencodage — idéal pour une passe rapide ou une archive
+ * lorsque tous les codecs sources sont déjà compatibles avec le conteneur cible.
+ */
+export const AUDIO_RULES_COPY_ALL: AudioCodecRules = {
+  __default__: { action: "copy", targetCodec: "aac" },
+};
+
+/**
+ * Mode intelligent : copie les codecs natifs (AAC, AC3, E-AC3, OPUS) et
+ * réencode en AAC les formats lourds ou incompatibles (DTS, TrueHD, FLAC…).
+ * C'est le comportement recommandé pour la majorité des fichiers.
+ */
+export const AUDIO_RULES_SMART: AudioCodecRules = {
+  __default__: { action: "reencode", targetCodec: "aac" },
+  aac:         { action: "copy",     targetCodec: "aac" },
+  ac3:         { action: "copy",     targetCodec: "ac3" },
+  eac3:        { action: "copy",     targetCodec: "ac3" },
+  opus:        { action: "copy",     targetCodec: "opus" },
+  dts:         { action: "reencode", targetCodec: "aac" },
+  truehd:      { action: "reencode", targetCodec: "aac" },
+  flac:        { action: "reencode", targetCodec: "aac" },
+  mp3:         { action: "reencode", targetCodec: "aac" },
+  vorbis:      { action: "reencode", targetCodec: "aac" },
+  pcm_s16le:   { action: "reencode", targetCodec: "aac" },
+  pcm_s24le:   { action: "reencode", targetCodec: "aac" },
+};
+
+/**
+ * Tout réencoder en AAC — utile pour normaliser l'audio de fichiers hétérogènes
+ * ou forcer une compatibilité maximale avec les lecteurs.
+ */
+export const AUDIO_RULES_REENCODE_ALL: AudioCodecRules = {
+  __default__: { action: "reencode", targetCodec: "aac" },
+  aac:         { action: "reencode", targetCodec: "aac" },
+  ac3:         { action: "reencode", targetCodec: "aac" },
+  eac3:        { action: "reencode", targetCodec: "aac" },
+  opus:        { action: "reencode", targetCodec: "aac" },
+  dts:         { action: "reencode", targetCodec: "aac" },
+  truehd:      { action: "reencode", targetCodec: "aac" },
+  flac:        { action: "reencode", targetCodec: "aac" },
+  mp3:         { action: "reencode", targetCodec: "aac" },
+  vorbis:      { action: "reencode", targetCodec: "aac" },
+  pcm_s16le:   { action: "reencode", targetCodec: "aac" },
+  pcm_s24le:   { action: "reencode", targetCodec: "aac" },
+};
 
 // ─── Préréglages d'encodage intégrés ─────────────────────────────────────────
-// Extensible plus tard : ajouter des presets custom dans localStorage/Tauri.
 
 export const BUILTIN_PRESETS: EncodePreset[] = [
   {
-    id:           "fast",
-    label:        "Rapide",
-    crf:          30,
-    preset:       "p3",
-    videoMode:    "encode",
-    audioMode:    "copy",
-    audioBitrate: 192,
-    spatialAq:    false,
-    temporalAq:   false,
-    aqStrength:   8,
-    multipass:    "disabled",
+    id:              "fast",
+    label:           "Rapide",
+    crf:             30,
+    preset:          "p3",
+    videoMode:       "encode",
+    audioCodecRules: AUDIO_RULES_COPY_ALL,   // tout copier = passe rapide
+    audioBitrate:    192,
+    spatialAq:       false,
+    temporalAq:      false,
+    aqStrength:      8,
+    multipass:       "disabled",
   },
   {
-    id:           "balanced",
-    label:        "Équilibré",
-    crf:          28,
-    preset:       "p5",
-    videoMode:    "encode",
-    audioMode:    "reencode",
-    audioBitrate: 192,
-    spatialAq:    false,
-    temporalAq:   false,
-    aqStrength:   8,
-    multipass:    "disabled",
+    id:              "balanced",
+    label:           "Équilibré",
+    crf:             28,
+    preset:          "p5",
+    videoMode:       "encode",
+    audioCodecRules: AUDIO_RULES_SMART,      // copie AAC/AC3, réencode DTS/FLAC
+    audioBitrate:    192,
+    spatialAq:       false,
+    temporalAq:      false,
+    aqStrength:      8,
+    multipass:       "disabled",
   },
   {
-    id:           "quality",
-    label:        "Haute qualité",
-    crf:          24,
-    preset:       "p7",
-    videoMode:    "encode",
-    audioMode:    "reencode",
-    audioBitrate: 320,
-    spatialAq:    true,
-    temporalAq:   true,
-    aqStrength:   8,
-    multipass:    "qres",
+    id:              "quality",
+    label:           "Haute qualité",
+    crf:             24,
+    preset:          "p7",
+    videoMode:       "encode",
+    audioCodecRules: AUDIO_RULES_SMART,
+    audioBitrate:    320,
+    spatialAq:       true,
+    temporalAq:      true,
+    aqStrength:      8,
+    multipass:       "qres",
   },
   {
-    id:           "archive",
-    label:        "Archive",
-    crf:          20,
-    preset:       "p7",
-    videoMode:    "encode",
-    audioMode:    "copy",
-    audioBitrate: 192,
-    spatialAq:    true,
-    temporalAq:   true,
-    aqStrength:   8,
-    multipass:    "fullres",
+    id:              "archive",
+    label:           "Archive",
+    crf:             20,
+    preset:          "p7",
+    videoMode:       "encode",
+    audioCodecRules: AUDIO_RULES_COPY_ALL,   // archive = copie sans perte
+    audioBitrate:    192,
+    spatialAq:       true,
+    temporalAq:      true,
+    aqStrength:      8,
+    multipass:       "fullres",
   },
 ];
+
+// ─── Préréglages audio intégrés (AudioPreset) ─────────────────────────────────
+
+export const BUILTIN_AUDIO_PRESETS: AudioPreset[] = [
+  {
+    id:      "audio_copy_all",
+    label:   "Tout copier",
+    builtin: true,
+    rules:   AUDIO_RULES_COPY_ALL,
+  },
+  {
+    id:      "audio_smart",
+    label:   "Intelligent",
+    builtin: true,
+    rules:   AUDIO_RULES_SMART,
+  },
+  {
+    id:      "audio_reencode_all",
+    label:   "Tout réencoder",
+    builtin: true,
+    rules:   AUDIO_RULES_REENCODE_ALL,
+  },
+];
+
+// ─── Helpers de persistance préréglages audio ─────────────────────────────────
+
+function loadCustomAudioPresets(): AudioPreset[] {
+  try {
+    const raw = localStorage.getItem(AUDIO_PRESETS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is AudioPreset =>
+        p &&
+        typeof p.id === "string" &&
+        typeof p.label === "string" &&
+        typeof p.rules === "object",
+    );
+  } catch { return []; }
+}
+
+function saveCustomAudioPresets(presets: AudioPreset[]): void {
+  try {
+    localStorage.setItem(AUDIO_PRESETS_KEY, JSON.stringify(presets));
+  } catch { /* storage indisponible */ }
+}
 
 // ─── Store préférences ────────────────────────────────────────────────────────
 
 function createPrefsStore() {
   // Encodage
-  let crf     = $state(28);
-  let preset  = $state("p5");
+  let crf    = $state(28);
+  let preset = $state("p5");
 
   // Préréglage actif (null = paramètres personnalisés)
   let activePresetId = $state<string | null>(
     typeof localStorage !== "undefined"
       ? localStorage.getItem(ACTIVE_PRESET_KEY)
-      : null
+      : null,
   );
 
   // Nommage
@@ -117,14 +215,19 @@ function createPrefsStore() {
   let defaultSubLangs     = $state<string[]>(["fre"]);
 
   // Audio / vidéo
-  let videoMode    = $state<VideoMode>("encode");
-  let audioMode    = $state<AudioMode>("reencode");
-  let audioBitrate = $state(192);
-  let spatialAq    = $state(false);
-  let temporalAq   = $state(false);
-  let aqStrength   = $state(8);
-  let multipass    = $state<MultipassMode>("disabled");
-  let container    = $state<ContainerFormat>("mkv");
+  let videoMode       = $state<VideoMode>("encode");
+  let audioCodecRules = $state<AudioCodecRules>({ ...AUDIO_RULES_SMART });
+  let audioBitrate    = $state(192);
+  let spatialAq       = $state(false);
+  let temporalAq      = $state(false);
+  let aqStrength      = $state(8);
+  let multipass       = $state<MultipassMode>("disabled");
+  let container       = $state<ContainerFormat>("mkv");
+
+  // Préréglages audio custom (chargés depuis localStorage)
+  let customAudioPresets = $state<AudioPreset[]>(
+    typeof localStorage !== "undefined" ? loadCustomAudioPresets() : [],
+  );
 
   // Extraction sous-titres
   let subExtractFormat     = $state<SubExtractFormat>("srt");
@@ -160,7 +263,7 @@ function createPrefsStore() {
       default_audio_langs:     defaultAudioLangs,
       default_sub_langs:       defaultSubLangs,
       video_mode:              videoMode,
-      audio_mode:              audioMode,
+      audio_codec_rules:       audioCodecRules,
       audio_bitrate:           audioBitrate,
       spatial_aq:              spatialAq,
       temporal_aq:             temporalAq,
@@ -197,16 +300,16 @@ function createPrefsStore() {
   function saveRenamingPrefs(): void {
     try {
       localStorage.setItem(RENAMING_KEY, JSON.stringify({
-        tag_order:         tagOrder,
-        disabled_tags:     [...disabledTags],
-        resolution_case:   resolutionCase,
-        title_case:        titleCase,
-        codec_format:      codecFormat,
-        source_case:       sourceCase,
-        year_format:       yearFormat,
-        web_source_format: webSourceFormat,
-        tag_separator:     tagSeparator,
-        provider_case:     providerCase,
+        tag_order:           tagOrder,
+        disabled_tags:       [...disabledTags],
+        resolution_case:     resolutionCase,
+        title_case:          titleCase,
+        codec_format:        codecFormat,
+        source_case:         sourceCase,
+        year_format:         yearFormat,
+        web_source_format:   webSourceFormat,
+        tag_separator:       tagSeparator,
+        provider_case:       providerCase,
         team,
         keepJapaneseVer,
         lang_order:          langOrder,
@@ -224,10 +327,8 @@ function createPrefsStore() {
 
       if (Array.isArray(p.tag_order)) {
         const saved = (p.tag_order as string[]).filter((id) =>
-          DEFAULT_TAG_ORDER.includes(id as TagId)
+          DEFAULT_TAG_ORDER.includes(id as TagId),
         ) as TagId[];
-        // Ajouter en fin de liste les tags présents dans DEFAULT_TAG_ORDER
-        // mais absents du tag_order sauvegardé (ex: "year" ajouté après coup).
         const missing = DEFAULT_TAG_ORDER.filter((id) => !saved.includes(id));
         tagOrder = [...saved, ...missing];
       }
@@ -235,34 +336,39 @@ function createPrefsStore() {
       if (Array.isArray(p.disabled_tags))
         disabledTags = new Set(
           (p.disabled_tags as string[]).filter((id) =>
-            DEFAULT_TAG_ORDER.includes(id as TagId)
-          ) as TagId[]
+            DEFAULT_TAG_ORDER.includes(id as TagId),
+          ) as TagId[],
         );
 
       if (p.resolution_case === "upper" || p.resolution_case === "lower")
         resolutionCase = p.resolution_case;
-      if (["original","upper","lower","title"].includes(p.title_case as string))
+      if (["original", "upper", "lower", "title"].includes(p.title_case as string))
         titleCase = p.title_case as TitleCaseMode;
-      if (["H265","H.265","HEVC"].includes(p.codec_format as string))
+      if (["H265", "H.265", "HEVC"].includes(p.codec_format as string))
         codecFormat = p.codec_format as CodecFormat;
-      if (["original","upper","lower"].includes(p.source_case as string))
+      if (["original", "upper", "lower"].includes(p.source_case as string))
         sourceCase = p.source_case as SourceCase;
       if (p.year_format === "parentheses" || p.year_format === "plain")
         yearFormat = p.year_format;
       else if (typeof p.year_parentheses === "boolean")
         yearFormat = p.year_parentheses ? "parentheses" : "plain";
-      if (["WEB-DL","WEBDL","Web-DL"].includes(p.web_source_format as string))
+      if (["WEB-DL", "WEBDL", "Web-DL"].includes(p.web_source_format as string))
         webSourceFormat = p.web_source_format as WebSourceFormat;
-      if ([" ",".", "_"].includes(p.tag_separator as string))
+      if ([" ", ".", "_"].includes(p.tag_separator as string))
         tagSeparator = p.tag_separator as TagSeparator;
-      if (["upper","lower","hidden"].includes(p.provider_case as string))
+      if (["upper", "lower", "hidden"].includes(p.provider_case as string))
         providerCase = p.provider_case as ProviderCase;
       if (typeof p.team === "string") team = p.team;
-      if (typeof p.keepJapaneseVer === "boolean")
-        keepJapaneseVer = p.keepJapaneseVer;
-      if (Array.isArray(p.lang_order) && (p.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0))
+      if (typeof p.keepJapaneseVer === "boolean") keepJapaneseVer = p.keepJapaneseVer;
+      if (
+        Array.isArray(p.lang_order) &&
+        (p.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0)
+      )
         langOrder = p.lang_order as string[];
-      if (Array.isArray(p.default_audio_langs) && (p.default_audio_langs as string[]).length > 0)
+      if (
+        Array.isArray(p.default_audio_langs) &&
+        (p.default_audio_langs as string[]).length > 0
+      )
         defaultAudioLangs = p.default_audio_langs as string[];
       if (Array.isArray(p.default_sub_langs))
         defaultSubLangs = p.default_sub_langs as string[];
@@ -273,14 +379,14 @@ function createPrefsStore() {
 
   async function load() {
     try {
-      const prefs = await invoke<{
+      const p = await invoke<{
         crf: number;
         preset: string;
         se_format: string;
         tag_order: string[];
         team: string;
         video_mode?: string;
-        audio_mode: string;
+        audio_codec_rules?: Record<string, { action: string; targetCodec: string }>;
         audio_bitrate: number;
         spatial_aq: boolean;
         temporal_aq: boolean;
@@ -308,87 +414,96 @@ function createPrefsStore() {
         default_sub_langs?: string[];
       }>("load_encoding_prefs");
 
-      if (typeof prefs.crf === "number") crf = prefs.crf;
-      if (prefs.preset) preset = prefs.preset;
-      if (
-        prefs.se_format &&
-        SEASON_EPISODE_FORMATS.some((f) => f.value === prefs.se_format)
-      ) {
-        seasonEpisodeFormat = prefs.se_format as SeasonEpisodeFormat;
-      }
-      if (Array.isArray(prefs.tag_order)) {
-        const saved = (prefs.tag_order as string[]).filter((id) =>
-          DEFAULT_TAG_ORDER.includes(id as TagId)
+      if (typeof p.crf === "number") crf = p.crf;
+      if (p.preset) preset = p.preset;
+      if (p.se_format && SEASON_EPISODE_FORMATS.some((f) => f.value === p.se_format))
+        seasonEpisodeFormat = p.se_format as SeasonEpisodeFormat;
+
+      if (Array.isArray(p.tag_order)) {
+        const saved = (p.tag_order as string[]).filter((id) =>
+          DEFAULT_TAG_ORDER.includes(id as TagId),
         ) as TagId[];
-        // Ajouter en fin de liste les tags présents dans DEFAULT_TAG_ORDER
-        // mais absents du tag_order sauvegardé (ex: "year" ajouté après coup).
         const missing = DEFAULT_TAG_ORDER.filter((id) => !saved.includes(id));
         tagOrder = [...saved, ...missing];
       }
-
-      if (Array.isArray(prefs.disabled_tags)) {
-        const valid = (prefs.disabled_tags as string[]).filter((id) =>
-          DEFAULT_TAG_ORDER.includes(id as TagId)
+      if (Array.isArray(p.disabled_tags)) {
+        const valid = (p.disabled_tags as string[]).filter((id) =>
+          DEFAULT_TAG_ORDER.includes(id as TagId),
         );
         disabledTags = new Set(valid as TagId[]);
       }
-      if (prefs.resolution_case === "upper" || prefs.resolution_case === "lower")
-        resolutionCase = prefs.resolution_case;
-      if (["original","upper","lower","title"].includes(prefs.title_case ?? ""))
-        titleCase = prefs.title_case as TitleCaseMode;
-      if (["H265","H.265","HEVC"].includes(prefs.codec_format ?? ""))
-        codecFormat = prefs.codec_format as CodecFormat;
-      if (["original","upper","lower"].includes(prefs.source_case ?? ""))
-        sourceCase = prefs.source_case as SourceCase;
-      if (prefs.year_format === "parentheses" || prefs.year_format === "plain")
-        yearFormat = prefs.year_format;
-      else if (typeof prefs.year_parentheses === "boolean")
-        yearFormat = prefs.year_parentheses ? "parentheses" : "plain";
-      if (["WEB-DL","WEBDL","Web-DL"].includes(prefs.web_source_format ?? ""))
-        webSourceFormat = prefs.web_source_format as WebSourceFormat;
-      if ([" ", ".", "_"].includes(prefs.tag_separator ?? ""))
-        tagSeparator = prefs.tag_separator as TagSeparator;
-      if (["upper","lower","hidden"].includes(prefs.provider_case ?? ""))
-        providerCase = prefs.provider_case as ProviderCase;
-      if (typeof prefs.team === "string") team = prefs.team;
-      if (typeof prefs.keep_japanese_ver === "boolean")
-        keepJapaneseVer = prefs.keep_japanese_ver;
+      if (p.resolution_case === "upper" || p.resolution_case === "lower")
+        resolutionCase = p.resolution_case;
+      if (["original", "upper", "lower", "title"].includes(p.title_case ?? ""))
+        titleCase = p.title_case as TitleCaseMode;
+      if (["H265", "H.265", "HEVC"].includes(p.codec_format ?? ""))
+        codecFormat = p.codec_format as CodecFormat;
+      if (["original", "upper", "lower"].includes(p.source_case ?? ""))
+        sourceCase = p.source_case as SourceCase;
+      if (p.year_format === "parentheses" || p.year_format === "plain")
+        yearFormat = p.year_format;
+      else if (typeof p.year_parentheses === "boolean")
+        yearFormat = p.year_parentheses ? "parentheses" : "plain";
+      if (["WEB-DL", "WEBDL", "Web-DL"].includes(p.web_source_format ?? ""))
+        webSourceFormat = p.web_source_format as WebSourceFormat;
+      if ([" ", ".", "_"].includes(p.tag_separator ?? ""))
+        tagSeparator = p.tag_separator as TagSeparator;
+      if (["upper", "lower", "hidden"].includes(p.provider_case ?? ""))
+        providerCase = p.provider_case as ProviderCase;
+      if (typeof p.team === "string") team = p.team;
+      if (typeof p.keep_japanese_ver === "boolean") keepJapaneseVer = p.keep_japanese_ver;
       if (
-        Array.isArray(prefs.lang_order) &&
-        (prefs.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0)
-      ) langOrder = prefs.lang_order as string[];
-      if (Array.isArray(prefs.default_audio_langs) && (prefs.default_audio_langs as string[]).length > 0)
-        defaultAudioLangs = prefs.default_audio_langs as string[];
-      if (Array.isArray(prefs.default_sub_langs))
-        defaultSubLangs = prefs.default_sub_langs as string[];
-      if (prefs.video_mode === "encode" || prefs.video_mode === "copy")
-        videoMode = prefs.video_mode;
-      if (prefs.audio_mode === "reencode" || prefs.audio_mode === "copy")
-        audioMode = prefs.audio_mode;
-      if (typeof prefs.audio_bitrate === "number") audioBitrate = prefs.audio_bitrate;
-      if (typeof prefs.spatial_aq === "boolean") spatialAq = prefs.spatial_aq;
-      if (typeof prefs.temporal_aq === "boolean") temporalAq = prefs.temporal_aq;
-      if (typeof prefs.aq_strength === "number") aqStrength = prefs.aq_strength;
+        Array.isArray(p.lang_order) &&
+        (p.lang_order as string[]).every((c) => typeof c === "string" && c.length > 0)
+      )
+        langOrder = p.lang_order as string[];
+      if (Array.isArray(p.default_audio_langs) && (p.default_audio_langs as string[]).length > 0)
+        defaultAudioLangs = p.default_audio_langs as string[];
+      if (Array.isArray(p.default_sub_langs))
+        defaultSubLangs = p.default_sub_langs as string[];
+      if (p.video_mode === "encode" || p.video_mode === "copy")
+        videoMode = p.video_mode;
+
+      if (p.audio_codec_rules && typeof p.audio_codec_rules === "object") {
+        const validActions = new Set(["copy", "reencode"]);
+        const validCodecs  = new Set(["aac", "ac3", "opus"]);
+        const sanitized: AudioCodecRules = {};
+        for (const [k, v] of Object.entries(p.audio_codec_rules)) {
+          if (validActions.has(v.action) && validCodecs.has(v.targetCodec)) {
+            sanitized[k] = {
+              action:      v.action as "copy" | "reencode",
+              targetCodec: v.targetCodec as AudioCodec,
+            };
+          }
+        }
+        if (Object.keys(sanitized).length > 0) audioCodecRules = sanitized;
+      }
+
+      if (typeof p.audio_bitrate === "number") audioBitrate = p.audio_bitrate;
+      if (typeof p.spatial_aq === "boolean") spatialAq = p.spatial_aq;
+      if (typeof p.temporal_aq === "boolean") temporalAq = p.temporal_aq;
+      if (typeof p.aq_strength === "number") aqStrength = p.aq_strength;
       if (
-        prefs.multipass === "disabled" ||
-        prefs.multipass === "qres" ||
-        prefs.multipass === "fullres"
-      ) multipass = prefs.multipass;
-      if (prefs.container === "mkv" || prefs.container === "mp4")
-        container = prefs.container;
-      if (prefs.sub_extract_format === "srt" || prefs.sub_extract_format === "ass")
-        subExtractFormat = prefs.sub_extract_format;
-      if (prefs.sub_extract_naming === "source" || prefs.sub_extract_naming === "cleaned")
-        subExtractNaming = prefs.sub_extract_naming;
+        p.multipass === "disabled" ||
+        p.multipass === "qres" ||
+        p.multipass === "fullres"
+      )
+        multipass = p.multipass;
+      if (p.container === "mkv" || p.container === "mp4") container = p.container;
+      if (p.sub_extract_format === "srt" || p.sub_extract_format === "ass")
+        subExtractFormat = p.sub_extract_format;
+      if (p.sub_extract_naming === "source" || p.sub_extract_naming === "cleaned")
+        subExtractNaming = p.sub_extract_naming;
       if (
-        prefs.sub_extract_path_mode === "source" ||
-        prefs.sub_extract_path_mode === "downloads" ||
-        prefs.sub_extract_path_mode === "custom"
-      ) subExtractPathMode = prefs.sub_extract_path_mode;
-      if (typeof prefs.sub_extract_custom_path === "string")
-        subExtractCustomPath = prefs.sub_extract_custom_path;
-      if (typeof prefs.show_extract_button === "boolean")
-        showExtractButton = prefs.show_extract_button;
+        p.sub_extract_path_mode === "source" ||
+        p.sub_extract_path_mode === "downloads" ||
+        p.sub_extract_path_mode === "custom"
+      )
+        subExtractPathMode = p.sub_extract_path_mode;
+      if (typeof p.sub_extract_custom_path === "string")
+        subExtractCustomPath = p.sub_extract_custom_path;
+      if (typeof p.show_extract_button === "boolean")
+        showExtractButton = p.show_extract_button;
     } catch (e) {
       console.error(`Erreur chargement préférences : ${e}`);
     }
@@ -405,19 +520,66 @@ function createPrefsStore() {
     const p = BUILTIN_PRESETS.find((p) => p.id === id);
     if (!p) return;
 
-    // Appliquer tous les paramètres sans passer par _markCustom
-    crf          = p.crf;
-    preset       = p.preset;
-    audioMode    = p.audioMode;
-    audioBitrate = p.audioBitrate;
-    spatialAq    = p.spatialAq;
-    temporalAq   = p.temporalAq;
-    aqStrength   = p.aqStrength;
-    multipass    = p.multipass;
+    crf             = p.crf;
+    preset          = p.preset;
+    // Appliquer les règles audio du préréglage (copie profonde)
+    audioCodecRules = { ...p.audioCodecRules };
+    audioBitrate    = p.audioBitrate;
+    spatialAq       = p.spatialAq;
+    temporalAq      = p.temporalAq;
+    aqStrength      = p.aqStrength;
+    multipass       = p.multipass;
 
     activePresetId = id;
     try { localStorage.setItem(ACTIVE_PRESET_KEY, id); } catch { /* */ }
     schedule();
+  }
+
+  // ─── Préréglages audio custom ─────────────────────────────────────────────
+
+  /** Retourne tous les préréglages audio (intégrés + custom). */
+  function allAudioPresets(): import("./types").AudioPreset[] {
+    return [
+      ...BUILTIN_AUDIO_PRESETS,
+      ...customAudioPresets,
+    ];
+  }
+
+  /** Applique les règles d'un préréglage audio (intégré ou custom). */
+  function applyAudioPreset(id: string) {
+    const p = allAudioPresets().find((x) => x.id === id);
+    if (!p) return;
+    audioCodecRules = { ...p.rules };
+    _markCustom();
+    schedule();
+  }
+
+  /** Sauvegarde les règles actuelles sous un nouveau préréglage audio custom. */
+  function saveAudioPreset(label: string): AudioPreset {
+    const id = `audio_custom_${Date.now()}`;
+    const newPreset: AudioPreset = {
+      id,
+      label: label.trim(),
+      builtin: false,
+      rules: { ...audioCodecRules },
+    };
+    customAudioPresets = [...customAudioPresets, newPreset];
+    saveCustomAudioPresets(customAudioPresets);
+    return newPreset;
+  }
+
+  /** Renomme un préréglage audio custom. */
+  function renameAudioPreset(id: string, newLabel: string) {
+    customAudioPresets = customAudioPresets.map((p) =>
+      p.id === id ? { ...p, label: newLabel.trim() } : p,
+    );
+    saveCustomAudioPresets(customAudioPresets);
+  }
+
+  /** Supprime un préréglage audio custom (les intégrés sont protégés). */
+  function deleteAudioPreset(id: string) {
+    customAudioPresets = customAudioPresets.filter((p) => p.id !== id);
+    saveCustomAudioPresets(customAudioPresets);
   }
 
   // ─── Setters ──────────────────────────────────────────────────────────────
@@ -425,7 +587,10 @@ function createPrefsStore() {
   function setCrf(value: number)            { crf = value;          _markCustom(); schedule(); }
   function setPreset(value: string)         { preset = value;       _markCustom(); schedule(); }
   function setVideoMode(v: VideoMode)       { videoMode = v;        _markCustom(); schedule(); }
-  function setAudioMode(v: AudioMode)       { audioMode = v;        _markCustom(); schedule(); }
+  function setAudioCodecRule(sourceCodec: string, rule: AudioCodecRules[string]) {
+    audioCodecRules = { ...audioCodecRules, [sourceCodec]: rule };
+    _markCustom(); schedule();
+  }
   function setAudioBitrate(v: number)       { audioBitrate = v;     _markCustom(); schedule(); }
   function setSpatialAq(v: boolean)         { spatialAq = v;        _markCustom(); schedule(); }
   function setTemporalAq(v: boolean)        { temporalAq = v;       _markCustom(); schedule(); }
@@ -444,23 +609,22 @@ function createPrefsStore() {
   function setSeasonEpisodeFormat(v: SeasonEpisodeFormat) {
     seasonEpisodeFormat = v; _namingChanged();
   }
-  function setTagOrder(v: TagId[])              { tagOrder = v;         _namingChanged(); }
-  function setDisabledTags(v: Set<TagId>)       { disabledTags = v;     _namingChanged(); }
-  function setResolutionCase(v: ResolutionCase) { resolutionCase = v;   _namingChanged(); }
-  function setTitleCase(v: TitleCaseMode)       { titleCase = v;        _namingChanged(); }
-  function setCodecFormat(v: CodecFormat)       { codecFormat = v;      _namingChanged(); }
-  function setSourceCase(v: SourceCase)         { sourceCase = v;       _namingChanged(); }
+  function setTagOrder(v: TagId[])               { tagOrder = v;         _namingChanged(); }
+  function setDisabledTags(v: Set<TagId>)        { disabledTags = v;     _namingChanged(); }
+  function setResolutionCase(v: ResolutionCase)  { resolutionCase = v;   _namingChanged(); }
+  function setTitleCase(v: TitleCaseMode)        { titleCase = v;        _namingChanged(); }
+  function setCodecFormat(v: CodecFormat)        { codecFormat = v;      _namingChanged(); }
+  function setSourceCase(v: SourceCase)          { sourceCase = v;       _namingChanged(); }
   function setYearFormat(v: YearFormat)          { yearFormat = v;       _namingChanged(); }
-  function setWebSourceFormat(v: WebSourceFormat){ webSourceFormat = v; _namingChanged(); }
-  function setTagSeparator(v: TagSeparator)     { tagSeparator = v;     _namingChanged(); }
-  function setProviderCase(v: ProviderCase)     { providerCase = v;     _namingChanged(); }
-  function setTeam(v: string)                   { team = v;             _namingChanged(); }
-  function setKeepJapaneseVer(v: boolean)       { keepJapaneseVer = v;  _namingChanged(); }
-  function setDefaultAudioLangs(v: string[]) { defaultAudioLangs = v; _namingChanged(); }
-  function setDefaultSubLangs(v: string[])   { defaultSubLangs   = v; _namingChanged(); }
+  function setWebSourceFormat(v: WebSourceFormat){ webSourceFormat = v;  _namingChanged(); }
+  function setTagSeparator(v: TagSeparator)      { tagSeparator = v;     _namingChanged(); }
+  function setProviderCase(v: ProviderCase)      { providerCase = v;     _namingChanged(); }
+  function setTeam(v: string)                    { team = v;             _namingChanged(); }
+  function setKeepJapaneseVer(v: boolean)        { keepJapaneseVer = v;  _namingChanged(); }
+  function setDefaultAudioLangs(v: string[])     { defaultAudioLangs = v; _namingChanged(); }
+  function setDefaultSubLangs(v: string[])       { defaultSubLangs = v;   _namingChanged(); }
 
   function setLangOrder(v: string[]) {
-    // Validation : codes non vides et uniques
     const seen = new Set<string>();
     const cleaned = v.filter((c) => c && !seen.has(c) && seen.add(c));
     langOrder = cleaned.length > 0 ? cleaned : [...LANG_ORDER];
@@ -481,21 +645,23 @@ function createPrefsStore() {
   }
 
   function resetToDefault() {
-    crf                  = 28;
-    preset               = "p5";
+    // Applique le préréglage "Équilibré" comme point de départ
+    crf             = 28;
+    preset          = "p5";
+    audioCodecRules = { ...AUDIO_RULES_SMART };
+    audioBitrate    = 192;
+    spatialAq       = false;
+    temporalAq      = false;
+    aqStrength      = 8;
+    multipass       = "disabled";
+    container       = "mkv";
+
     seasonEpisodeFormat  = "S01E01";
     tagOrder             = [...DEFAULT_TAG_ORDER];
     disabledTags         = new Set<TagId>(["japver"]);
     team                 = "";
     keepJapaneseVer      = false;
     videoMode            = "encode";
-    audioMode            = "reencode";
-    audioBitrate         = 192;
-    spatialAq            = false;
-    temporalAq           = false;
-    aqStrength           = 8;
-    multipass            = "disabled";
-    container            = "mkv";
     subExtractFormat     = "srt";
     subExtractNaming     = "source";
     subExtractPathMode   = "source";
@@ -509,7 +675,7 @@ function createPrefsStore() {
     webSourceFormat      = "WEB-DL";
     tagSeparator         = " ";
     providerCase         = "upper";
-    activePresetId       = "balanced"; // reset → préréglage Équilibré
+    activePresetId       = "balanced";
     langOrder            = [...LANG_ORDER];
     defaultAudioLangs    = ["fre", "eng", "jpn"];
     defaultSubLangs      = ["fre"];
@@ -540,7 +706,7 @@ function createPrefsStore() {
     get defaultAudioLangs()    { return defaultAudioLangs; },
     get defaultSubLangs()      { return defaultSubLangs; },
     get videoMode()            { return videoMode; },
-    get audioMode()            { return audioMode; },
+    get audioCodecRules()      { return audioCodecRules; },
     get audioBitrate()         { return audioBitrate; },
     get spatialAq()            { return spatialAq; },
     get temporalAq()           { return temporalAq; },
@@ -552,12 +718,18 @@ function createPrefsStore() {
     get subExtractPathMode()   { return subExtractPathMode; },
     get subExtractCustomPath() { return subExtractCustomPath; },
     get showExtractButton()    { return showExtractButton; },
+    get customAudioPresets()   { return customAudioPresets; },
 
     load,
     loadRenamingPrefs,
     flush,
     saveRenamingPrefs,
     applyPreset,
+    allAudioPresets,
+    applyAudioPreset,
+    saveAudioPreset,
+    renameAudioPreset,
+    deleteAudioPreset,
 
     setCrf,
     setPreset,
@@ -578,7 +750,7 @@ function createPrefsStore() {
     setDefaultAudioLangs,
     setDefaultSubLangs,
     setVideoMode,
-    setAudioMode,
+    setAudioCodecRule,
     setAudioBitrate,
     setSpatialAq,
     setTemporalAq,

@@ -125,9 +125,20 @@
   let videoSummary = $derived(
     encoder.videoMode === "copy" ? "Copie" : `H.265 · CRF ${encoder.crf} · ${(encoder.preset ?? "p5").toUpperCase()}`
   );
-  let audioSummary = $derived(
-    encoder.audioMode === "copy" ? "Copie" : `AAC · ${encoder.audioBitrate}k`
-  );
+  let audioSummary = $derived.by(() => {
+    const rules = encoder.audioCodecRules;
+    const defaultRule = rules["__default__"];
+    const allCopy = Object.values(rules).every((r) => r.action === "copy");
+    if (allCopy || defaultRule?.action === "copy") return "Copie";
+    // Collecte les codecs cibles distincts pour les règles de réencodage
+    const targets = new Set(
+      Object.values(rules)
+        .filter((r) => r.action === "reencode")
+        .map((r) => r.targetCodec.toUpperCase()),
+    );
+    const targetStr = targets.size > 0 ? [...targets].sort().join("/") : "AAC";
+    return `${targetStr} · ${encoder.audioBitrate}k`;
+  });
   let containerSummary = $derived((encoder.container ?? "mkv").toUpperCase());
   let subtitleSummary = $derived(encoder.subExtractFormat);
 </script>

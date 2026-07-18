@@ -2,6 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct StreamAudioRule {
+    pub action:       String,  // "copy" | "reencode"
+    #[serde(rename = "targetCodec")]
+    pub target_codec: String,  // "aac" | "ac3" | "opus"
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct StreamInfo {
     pub index: u32,
     pub codec_type: String,
@@ -50,7 +57,8 @@ pub struct EncodeJob {
     pub crf:             u32,
     pub preset:          String,
     pub video_mode:      String,   // "encode" | "copy"
-    pub audio_mode:      String,
+    /// Map stream_index → { action: "copy"|"reencode", target_codec: "aac"|"ac3"|"opus" }
+    pub stream_audio_rules: HashMap<String, StreamAudioRule>,
     pub audio_bitrate:   u32,
     pub spatial_aq:      bool,
     pub temporal_aq:     bool,

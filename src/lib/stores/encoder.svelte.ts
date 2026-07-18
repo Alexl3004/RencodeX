@@ -18,9 +18,9 @@ type FfmpegCheckResult = {
 };
 
 function createEncoder() {
-  let outputDir      = $state("");
-  let navLayout      = $state<"vertical" | "horizontal">("vertical");
-  let innerNavLayout = $state<"vertical" | "horizontal">("vertical");
+  let outputDir        = $state("");
+  let navLayout        = $state<"vertical" | "horizontal">("vertical");
+  let innerNavLayout   = $state<"vertical" | "horizontal">("vertical");
   let outputDirPresets = $state<string[]>([]);
   let forceUpdateCounter = $state(0);
 
@@ -33,37 +33,32 @@ function createEncoder() {
     outputDir = await invoke<string>("get_default_output_dir");
     await loadDirConfig();
     await prefs.load();
-    prefs.loadRenamingPrefs(); // override Tauri avec localStorage si plus récent
+    prefs.loadRenamingPrefs();
     encodingStore.log(`Dossier de sortie : ${outputDir}`, "info");
     await encodingStore.listenEvents();
     stats.init();
 
-    // ── Vérification FFmpeg au démarrage ──────────────────────────────────
-    // On passe path="" pour que le backend utilise le chemin résolu depuis
-    // la config + les variables d'environnement (resolve_config).
     try {
       const ffCheck = await invoke<FfmpegCheckResult>("check_ffmpeg", { path: "" });
-
       if (!ffCheck.exists) {
         encodingStore.log(
           `⚠️ FFmpeg introuvable : « ${ffCheck.path} » — configurez le chemin dans Paramètres › FFmpeg`,
-          "warn"
+          "warn",
         );
       } else if (!ffCheck.executable) {
         encodingStore.log(
           `⚠️ FFmpeg présent mais non exécutable : « ${ffCheck.path} » — vérifiez les permissions`,
-          "warn"
+          "warn",
         );
       } else {
         encodingStore.log(
           `FFmpeg ${ffCheck.version ? ffCheck.version + "  " : ""}${ffCheck.path}`,
-          "info"
+          "info",
         );
       }
     } catch (e) {
       encodingStore.log(`Impossible de vérifier FFmpeg : ${e}`, "warn");
     }
-    // ──────────────────────────────────────────────────────────────────────
 
     window.addEventListener("beforeunload", () => {
       prefs.flush();
@@ -84,7 +79,7 @@ function createEncoder() {
     }
   }
 
-  // ─── Helpers nommage (délégués à prefs + files) ───────────────────────────
+  // ─── Helpers nommage ──────────────────────────────────────────────────────
 
   function getDisplayName(file: AppFile): string {
     const codecTag = computeVideoCodecTag(file.streams, prefs.videoMode, prefs.codecFormat);
@@ -129,7 +124,7 @@ function createEncoder() {
     filesStore.refreshOutputNames();
   }
 
-  // ─── Wrappers setters prefs qui déclenchent refreshOutputNames ────────────
+  // ─── Wrappers setters prefs ───────────────────────────────────────────────
 
   function setSeasonEpisodeFormat(v: import("./types").SeasonEpisodeFormat) {
     prefs.setSeasonEpisodeFormat(v);
@@ -179,10 +174,6 @@ function createEncoder() {
     prefs.setKeepJapaneseVer(v);
     filesStore.refreshOutputNames();
   }
-  function setAudioMode(v: import("./types").AudioMode) {
-    prefs.setAudioMode(v);
-    filesStore.refreshOutputNames();
-  }
   function resetFormatOptions() {
     prefs.resetFormatOptions();
     filesStore.refreshOutputNames();
@@ -215,7 +206,7 @@ function createEncoder() {
   // ─── Exports ──────────────────────────────────────────────────────────────
 
   return {
-    // État layout / répertoire
+    // Layout / répertoire
     get outputDir()        { return outputDir; },
     set outputDir(v)       { outputDir = v; },
     get outputDirPresets() { return outputDirPresets; },
@@ -226,7 +217,7 @@ function createEncoder() {
     get forceUpdateCounter() { return forceUpdateCounter; },
     loadDirConfig,
 
-    // Délégation fichiers
+    // Fichiers
     get files()      { return filesStore.files; },
     get audioLangs() { return filesStore.audioLangs; },
     get subLangs()   { return filesStore.subLangs; },
@@ -261,7 +252,7 @@ function createEncoder() {
     setEncodeSelection:        filesStore.setEncodeSelection,
     clearEncodeSelection:      filesStore.clearEncodeSelection,
 
-    // Délégation encodage
+    // Encodage
     get encoding()           { return encodingStore.encoding; },
     get paused()             { return encodingStore.paused; },
     get progress()           { return encodingStore.progress; },
@@ -273,14 +264,14 @@ function createEncoder() {
     cancelEncoding:           () => encodingStore.cancelEncoding(),
     pauseEncoding:            () => encodingStore.pauseEncoding(),
     resumeEncoding:           () => encodingStore.resumeEncoding(),
-    skipEncoding: () => encodingStore.skipEncoding(),
+    skipEncoding:             () => encodingStore.skipEncoding(),
     startSubtitleExtraction:  () => encodingStore.startSubtitleExtraction(outputDir),
     cancelSubtitleExtraction: () => encodingStore.cancelSubtitleExtraction(),
     clearLogs:                () => encodingStore.clearLogs(),
     log:                      (m: string, l?: "info"|"warn"|"error"|"success") =>
                                 encodingStore.log(m, l),
 
-    // Délégation prefs
+    // Prefs — lecture
     get crf()                  { return prefs.crf; },
     get preset()               { return prefs.preset; },
     get seasonEpisodeFormat()  { return prefs.seasonEpisodeFormat; },
@@ -297,7 +288,7 @@ function createEncoder() {
     get team()                 { return prefs.team; },
     get keepJapaneseVer()      { return prefs.keepJapaneseVer; },
     get videoMode()            { return prefs.videoMode; },
-    get audioMode()            { return prefs.audioMode; },
+    get audioCodecRules()      { return prefs.audioCodecRules; },
     get audioBitrate()         { return prefs.audioBitrate; },
     get spatialAq()            { return prefs.spatialAq; },
     get temporalAq()           { return prefs.temporalAq; },
@@ -309,10 +300,18 @@ function createEncoder() {
     get subExtractPathMode()   { return prefs.subExtractPathMode; },
     get subExtractCustomPath() { return prefs.subExtractCustomPath; },
     get showExtractButton()    { return prefs.showExtractButton; },
-    get activePresetId() { return prefs.activePresetId; },
-    applyPreset:           (id: string) => { prefs.applyPreset(id); filesStore.refreshOutputNames(); },
-    setCrf:                prefs.setCrf,
-    setPreset:             prefs.setPreset,
+    get activePresetId()       { return prefs.activePresetId; },
+    get customAudioPresets()   { return prefs.customAudioPresets; },
+
+    // Prefs — écriture
+    applyPreset:             (id: string) => { prefs.applyPreset(id); filesStore.refreshOutputNames(); },
+    allAudioPresets:         () => prefs.allAudioPresets(),
+    applyAudioPreset:        prefs.applyAudioPreset,
+    saveAudioPreset:         prefs.saveAudioPreset,
+    renameAudioPreset:       prefs.renameAudioPreset,
+    deleteAudioPreset:       prefs.deleteAudioPreset,
+    setCrf:                  prefs.setCrf,
+    setPreset:               prefs.setPreset,
     setSeasonEpisodeFormat,
     setTagOrder,
     moveTag,
@@ -328,19 +327,19 @@ function createEncoder() {
     setProviderCase,
     setTeam,
     setKeepJapaneseVer,
-    setVideoMode: prefs.setVideoMode,
-    setAudioMode,
-    setAudioBitrate:       prefs.setAudioBitrate,
-    setSpatialAq:          prefs.setSpatialAq,
-    setTemporalAq:         prefs.setTemporalAq,
-    setAqStrength:         prefs.setAqStrength,
-    setMultipass:          prefs.setMultipass,
-    setContainer:          prefs.setContainer,
-    setSubExtractFormat:   prefs.setSubExtractFormat,
-    setSubExtractNaming:   prefs.setSubExtractNaming,
-    setSubExtractPathMode: prefs.setSubExtractPathMode,
+    setVideoMode:            prefs.setVideoMode,
+    setAudioCodecRule:       prefs.setAudioCodecRule,
+    setAudioBitrate:         prefs.setAudioBitrate,
+    setSpatialAq:            prefs.setSpatialAq,
+    setTemporalAq:           prefs.setTemporalAq,
+    setAqStrength:           prefs.setAqStrength,
+    setMultipass:            prefs.setMultipass,
+    setContainer:            prefs.setContainer,
+    setSubExtractFormat:     prefs.setSubExtractFormat,
+    setSubExtractNaming:     prefs.setSubExtractNaming,
+    setSubExtractPathMode:   prefs.setSubExtractPathMode,
     setSubExtractCustomPath: prefs.setSubExtractCustomPath,
-    setShowExtractButton:  prefs.setShowExtractButton,
+    setShowExtractButton:    prefs.setShowExtractButton,
     resetFormatOptions,
 
     // Nommage

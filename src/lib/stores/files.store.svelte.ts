@@ -101,7 +101,7 @@ function createFilesStore() {
     const _fileSelAudio = fileSelAudio;
     const _fileSelSubs  = fileSelSubs;
     const _keepJapVer   = prefs.keepJapaneseVer;
-    const _audioMode    = prefs.audioMode;
+    const _audioCodecRules = prefs.audioCodecRules;
     const _videoMode    = prefs.videoMode;
 
     files = files.map((f) => {
@@ -109,7 +109,7 @@ function createFilesStore() {
       const effAudio = _fileSelAudio.get(f.path) ?? _selAudio;
       const effSubs  = _fileSelSubs.get(f.path)  ?? _selSubs;
       const tag      = computeTag(f.audio_langs, f.sub_langs, effAudio, effSubs);
-      const audioTag = computeAudioTag(f.streams, effAudio, _audioMode);
+      const audioTag = computeAudioTag(f.streams, effAudio, _audioCodecRules);
       const codecTag = computeVideoCodecTag(f.streams, _videoMode, _codecFmt);
       const name     = buildOutputName(
         f.cleaned,
@@ -195,7 +195,7 @@ function createFilesStore() {
           const cleanedWithHdr = { ...cleaned, hdr: hdrTag };
 
           const tag      = computeTag(analysis.audio_langs, analysis.sub_langs, getSelAudio(), getSelSubs());
-          const audioTag = computeAudioTag(analysis.streams, getSelAudio(), prefs.audioMode);
+          const audioTag = computeAudioTag(analysis.streams, getSelAudio(), prefs.audioCodecRules);
           const codecTag = computeVideoCodecTag(analysis.streams, prefs.videoMode, prefs.codecFormat);
           const outName  = buildOutputName(
             cleanedWithHdr,

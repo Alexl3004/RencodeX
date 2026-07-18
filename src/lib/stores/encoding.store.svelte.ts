@@ -9,9 +9,10 @@ import type {
   SubExtractProgress,
   EncodeJob,
 } from "./types";
-import { formatDuration, formatMb, codecDefault } from "./naming";
+import { formatDuration, formatMb } from "./naming";
 import { prefs } from "./prefs.store.svelte";
 import { filesStore } from "./files.store.svelte";
+import type { AudioCodec } from "./types";
 
 // ─── Génère un UUID v4 simple sans dépendance externe ────────────────────────
 
@@ -161,34 +162,35 @@ function createEncodingStore() {
       const id = uuid();
       jobIdToPath.set(id, f.path);          // enregistrement dans la map
 
-      const audioCodecOvr: Record<string, string> = {};
+      const outExt = prefs.container === "mp4" ? ".mp4" : ".mkv";
+      const dir    = outputDir.replace(/[\\\/]+$/, "");
+
+      // Résoudre la règle audio pour chaque stream selon son codec source
+      const rules = prefs.audioCodecRules;
+      const streamAudioRules: Record<string, { action: "copy" | "reencode"; targetCodec: AudioCodec }> = {};
       f.streams
         .filter((s) => s.codec_type === "audio")
         .forEach((s) => {
-          const target = filesStore.globalCodecOverride[s.codec_name.toLowerCase()];
-          if (target && target !== codecDefault(s.codec_name)) {
-            audioCodecOvr[s.index.toString()] = target;
-          }
+          const srcCodec = s.codec_name.toLowerCase();
+          const rule = rules[srcCodec] ?? rules["__default__"] ?? { action: "reencode", targetCodec: "aac" };
+          streamAudioRules[s.index.toString()] = rule;
         });
-      const outExt = prefs.container === "mp4" ? ".mp4" : ".mkv";
-      const dir    = outputDir.replace(/[\\\/]+$/, "");
+
       return {
-        job_id:                  id,         // ← transmis au backend
-        input_path:              f.path,
-        output_path:             `${dir}\\${f.output_name}${outExt}`,
-        audio_langs:             [...(filesStore.fileSelAudio.get(f.path) ?? filesStore.selAudio)],
-        sub_langs:               [...(filesStore.fileSelSubs.get(f.path)  ?? filesStore.selSubs)],
-        audio_overrides:         filesStore.audioOverrides[f.path] ?? {},
-        sub_overrides:           filesStore.subOverrides[f.path]   ?? {},
-        streams: f.streams,
-        audio_codec_overrides:   audioCodecOvr,
-        audio_bitrate_overrides: {},
-        duration_secs:           f.duration_secs,
+        job_id:             id,
+        input_path:         f.path,
+        output_path:        `${dir}\\${f.output_name}${outExt}`,
+        audio_langs:        [...(filesStore.fileSelAudio.get(f.path) ?? filesStore.selAudio)],
+        sub_langs:          [...(filesStore.fileSelSubs.get(f.path)  ?? filesStore.selSubs)],
+        audio_overrides:    filesStore.audioOverrides[f.path] ?? {},
+        sub_overrides:      filesStore.subOverrides[f.path]   ?? {},
+        streams:            f.streams,
+        stream_audio_rules: streamAudioRules,
+        duration_secs:      f.duration_secs,
         fps:                     f.fps ?? 25,
         crf:                     prefs.crf,
         preset:                  prefs.preset,
         video_mode:              prefs.videoMode,
-        audio_mode:              prefs.audioMode,
         audio_bitrate:           prefs.audioBitrate,
         spatial_aq:              prefs.spatialAq,
         temporal_aq:             prefs.temporalAq,

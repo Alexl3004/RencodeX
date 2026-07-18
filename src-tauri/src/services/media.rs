@@ -236,14 +236,29 @@ pub async fn start_encoding(
             if include {
                 cmd_args.push("-map".into());
                 cmd_args.push(format!("0:{}", stream.index));
-                if job.audio_mode == "copy" {
+
+                // Résoudre la règle pour ce stream
+                let default_rule = crate::models::StreamAudioRule {
+                    action: "reencode".to_string(),
+                    target_codec: "aac".to_string(),
+                };
+                let rule = job.stream_audio_rules
+                    .get(&stream.index.to_string())
+                    .unwrap_or(&default_rule);
+
+                if rule.action == "copy" {
                     audio_codec_args.extend([
                         format!("-c:a:{}", audio_index), "copy".into(),
                         format!("-metadata:s:a:{}", audio_index), format!("language={}", eff_lang),
                     ]);
                 } else {
+                    let codec = match rule.target_codec.as_str() {
+                        "ac3"  => "ac3",
+                        "opus" => "libopus",
+                        _      => "aac",
+                    };
                     audio_codec_args.extend([
-                        format!("-c:a:{}", audio_index), "aac".into(),
+                        format!("-c:a:{}", audio_index), codec.into(),
                         format!("-b:a:{}", audio_index), format!("{}k", job.audio_bitrate),
                         format!("-metadata:s:a:{}", audio_index), format!("language={}", eff_lang),
                     ]);
@@ -252,11 +267,22 @@ pub async fn start_encoding(
             }
         }
         if audio_index == 0 {
+            // Fallback : aucune piste ne correspond aux langues — on mappe tout et on applique la règle __default__
             cmd_args.extend(["-map".into(), "0:a".into()]);
-            if job.audio_mode == "copy" {
+            let default_rule = crate::models::StreamAudioRule {
+                action: "reencode".to_string(),
+                target_codec: "aac".to_string(),
+            };
+            let rule = job.stream_audio_rules.get("__default__").unwrap_or(&default_rule);
+            if rule.action == "copy" {
                 audio_codec_args.extend(["-c:a".into(), "copy".into()]);
             } else {
-                audio_codec_args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), format!("{}k", job.audio_bitrate)]);
+                let codec = match rule.target_codec.as_str() {
+                    "ac3"  => "ac3",
+                    "opus" => "libopus",
+                    _      => "aac",
+                };
+                audio_codec_args.extend(["-c:a".into(), codec.into(), "-b:a".into(), format!("{}k", job.audio_bitrate)]);
             }
         }
 

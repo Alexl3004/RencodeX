@@ -24,8 +24,24 @@ export interface FileAnalysis {
   color_space: string;
 }
 
+export type AudioCodec = "aac" | "ac3" | "opus";
 export type AudioMode = "reencode" | "copy";
 export type VideoMode = "encode" | "copy";
+
+// ─── Règles audio par codec source ───────────────────────────────────────────
+
+/** Action appliquée à une piste audio selon son codec source */
+export interface AudioCodecRule {
+  action: "copy" | "reencode";
+  targetCodec: AudioCodec; // ignoré si action === "copy"
+}
+
+/**
+ * Map codec source (ffprobe codec_name, lowercase) → règle.
+ * Ex : { aac: { action:"copy" }, dts: { action:"reencode", targetCodec:"aac" } }
+ * La clé "__default__" sert de fallback pour tout codec non listé.
+ */
+export type AudioCodecRules = Record<string, AudioCodecRule>;
 export type MultipassMode = "disabled" | "qres" | "fullres";
 export type ContainerFormat = "mkv" | "mp4";
 
@@ -42,13 +58,15 @@ export interface EncodeJob {
   audio_overrides: Record<string, string>;
   sub_overrides: Record<string, string>;
   streams: StreamInfo[];
-  audio_codec_overrides: Record<string, string>;
-  audio_bitrate_overrides: Record<string, string>;
+  /**
+   * Map stream_index (string) → { action, targetCodec }
+   * Résolu dans encoding.store avant envoi au backend.
+   */
+  stream_audio_rules: Record<string, { action: "copy" | "reencode"; targetCodec: AudioCodec }>;
   duration_secs: number;
   fps: number;
   crf: number;
   preset: string;
-  audio_mode: AudioMode;
   video_mode: VideoMode;
   audio_bitrate: number;
   spatial_aq: boolean;
@@ -177,16 +195,29 @@ export interface NamingOptions {
   keepJapaneseVer?: boolean;
 }
 
+// ─── Préréglage d'encodage ────────────────────────────────────────────────────
+
 export interface EncodePreset {
-  id:           string;
-  label:        string;
-  crf:          number;
-  preset:       string;
-  audioMode:    AudioMode;
-  videoMode:    VideoMode;
-  audioBitrate: number;
-  spatialAq:    boolean;
-  temporalAq:   boolean;
-  aqStrength:   number;
-  multipass:    MultipassMode;
+  id:              string;
+  label:           string;
+  crf:             number;
+  preset:          string;
+  videoMode:       VideoMode;
+  /** Règles audio par codec source embarquées dans le préréglage. */
+  audioCodecRules: AudioCodecRules;
+  audioBitrate:    number;
+  spatialAq:       boolean;
+  temporalAq:      boolean;
+  aqStrength:      number;
+  multipass:       MultipassMode;
+}
+
+// ─── Préréglage audio custom (persisté en localStorage) ──────────────────────
+
+export interface AudioPreset {
+  id:    string;
+  label: string;
+  /** true = preset intégré (non supprimable), false/absent = custom */
+  builtin?: boolean;
+  rules: AudioCodecRules;
 }

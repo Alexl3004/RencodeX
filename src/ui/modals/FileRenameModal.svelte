@@ -45,20 +45,22 @@
       encoder.tagOrder,
       encoder.team,
       {
-        disabledTags: encoder.disabledTags,
-        resolutionCase: encoder.resolutionCase,
-        titleCase: encoder.titleCase,
-        codecFormat: codecTag as import("$lib/stores/types").CodecFormat,
-        sourceCase: encoder.sourceCase,
+        disabledTags:    encoder.disabledTags,
+        resolutionCase:  encoder.resolutionCase,
+        titleCase:       encoder.titleCase,
+        codecFormat:     codecTag as import("$lib/stores/types").CodecFormat,
+        sourceCase:      encoder.sourceCase,
+        yearFormat:      encoder.yearFormat,
+        webSourceFormat: encoder.webSourceFormat,
+        tagSeparator:    encoder.tagSeparator,
+        providerCase:    encoder.providerCase,
+        keepJapaneseVer: encoder.keepJapaneseVer,
       },
     );
   });
 
   $effect(() => {
     editValue = file.output_name;
-  });
-
-  $effect(() => {
     loading = true;
     invoke<CleanedName>("clean_filename", {
       raw: initFilename,
@@ -67,32 +69,7 @@
     })
       .then((r) => {
         const hdrTag = file.hdr_format || (r as any).hdr || "";
-        const rWithHdr = { ...r, hdr: hdrTag };
-        cleaned = rWithHdr;
-        const tag = computeTag(
-          audio_langs,
-          sub_langs,
-          encoder.selAudio,
-          encoder.selSubs,
-        );
-        if (rWithHdr) {
-          const codecTag = computeVideoCodecTag(file.streams, encoder.videoMode, encoder.codecFormat);
-          editValue = buildOutputName(
-            rWithHdr,
-            tag,
-            encoder.seasonEpisodeFormat,
-            "AAC",
-            encoder.tagOrder,
-            encoder.team,
-            {
-              disabledTags: encoder.disabledTags,
-              resolutionCase: encoder.resolutionCase,
-              titleCase: encoder.titleCase,
-              codecFormat: codecTag as import("$lib/stores/types").CodecFormat,
-              sourceCase: encoder.sourceCase,
-            },
-          );
-        }
+        cleaned = { ...r, hdr: hdrTag };
       })
       .catch(() => {})
       .finally(() => {

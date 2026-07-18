@@ -7,6 +7,7 @@ import type {
   AudioMode,
   VideoMode,
   TagId,
+  AudioCodecRules,
 } from "./types";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -190,16 +191,56 @@ export function computeTag(
 export function computeAudioTag(
   streams: StreamInfo[],
   selAudio: Set<string>,
-  audioMode: AudioMode,
+  audioCodecRules: AudioCodecRules,
 ): string {
-  if (audioMode === "reencode") return "AAC";
-  const codecs = new Set(
-    streams
-      .filter((s) => s.codec_type === "audio" && selAudio.has(s.language))
-      .map((s) => s.codec_name.toUpperCase()),
+  const defaultRule = audioCodecRules["__default__"] ?? { action: "reencode", targetCodec: "aac" };
+
+  const resultCodecs = new Set<string>();
+
+  const audioStreams = streams.filter(
+    (s) => s.codec_type === "audio" && selAudio.has(s.language),
   );
-  if (codecs.size === 0) return "AAC";
-  return [...codecs].sort().join("-");
+
+  // Fallback : si aucun stream ne correspond aux langues sélectionnées,
+  // on prend tous les streams audio (même comportement que le backend).
+  const targets = audioStreams.length > 0
+    ? audioStreams
+    : streams.filter((s) => s.codec_type === "audio");
+
+  for (const s of targets) {
+    const srcCodec = s.codec_name.toLowerCase();
+    const rule = audioCodecRules[srcCodec] ?? defaultRule;
+
+    if (rule.action === "copy") {
+      // On affiche le codec source tel quel (normalisé en majuscules)
+      const displayName: Record<string, string> = {
+        aac:       "AAC",
+        ac3:       "AC3",
+        eac3:      "EAC3",
+        dts:       "DTS",
+        truehd:    "TrueHD",
+        flac:      "FLAC",
+        mp3:       "MP3",
+        opus:      "OPUS",
+        vorbis:    "Vorbis",
+        pcm_s16le: "PCM",
+        pcm_s24le: "PCM",
+      };
+      resultCodecs.add(displayName[srcCodec] ?? s.codec_name.toUpperCase());
+    } else {
+      // Réencodage → on affiche le codec cible
+      const targetMap: Record<string, string> = {
+        aac:  "AAC",
+        ac3:  "AC3",
+        opus: "OPUS",
+      };
+      resultCodecs.add(targetMap[rule.targetCodec] ?? rule.targetCodec.toUpperCase());
+    }
+  }
+
+  if (resultCodecs.size === 0) return "AAC";
+  // Si tous les codecs résultants sont identiques, on n'affiche qu'une fois
+  return [...resultCodecs].sort().join("-");
 }
 
 export function computeVideoCodecTag(
