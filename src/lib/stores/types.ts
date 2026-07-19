@@ -92,7 +92,7 @@ export interface FileResult {
   job_id: string;
   path: string;
   name: string;
-  status: "ok" | "error" | "cancelled";
+  status: "ok" | "error" | "cancelled" | "skipped";
   original_mb: number;
   encoded_mb: number;
   duration_secs: number;
@@ -134,6 +134,7 @@ export interface AppFile {
     | "queued"
     | "encoding"
     | "done"
+    | "skipped"
     | "error";
   output_name: string;
   output_ext: string;

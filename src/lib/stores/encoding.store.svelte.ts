@@ -87,7 +87,11 @@ function createEncodingStore() {
 
       filesStore.files = filesStore.files.map((f) => {
         if (f.path !== targetPath) return f;
-        const updated = { ...f, status: p.status === "ok" ? "done" : "error" } as typeof f;
+        const newStatus =
+          p.status === "ok"      ? "done" :
+          p.status === "skipped" ? "skipped" :
+                                   "error";
+        const updated = { ...f, status: newStatus } as typeof f;
         if (p.status === "ok") updated.result = p;
         return updated;
       });
@@ -106,6 +110,8 @@ function createEncodingStore() {
             `)`,
           "success",
         );
+      } else if (p.status === "skipped") {
+        log(`⏭ ${p.name} — ignoré`, "warn");
       } else {
         log(
           `✗ ${p.name} — échec${p.error_msg ? ` : ${p.error_msg}` : ""}`,

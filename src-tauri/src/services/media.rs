@@ -12,7 +12,7 @@ use crate::naming::regex::{FFMPEG_FRAME, FFMPEG_SPEED, FFMPEG_OUT_TIME, normaliz
 use crate::models::{StreamInfo, EncodeJob, ProgressEvent, FileResult, EncodeSummary};
 use std::sync::atomic::Ordering;
 use crate::state::{
-    CANCEL, PAUSE, ENCODING, CHILD_PID,
+    CANCEL, SKIP, PAUSE, ENCODING, CHILD_PID,
     PERCENT, SPEED, REMAINING, FILE_INDEX, FILE_TOTAL,
     store_f64, lock_meta,
 };
@@ -141,6 +141,7 @@ pub async fn start_encoding(
     // pour qu'un snapshot concurrent voie un état déjà cohérent.
     {
         CANCEL.store(false, Ordering::Relaxed);
+        SKIP.store(false, Ordering::Relaxed);
         // PAUSE n'a pas besoin d'être réinitialisé ici : kill_ffmpeg_process
         // et resume_ffmpeg_process le gèrent, mais on le remet par sécurité.
         PAUSE.store(false, Ordering::Relaxed);
@@ -208,6 +209,10 @@ pub async fn start_encoding(
             });
             continue;
         }
+
+        // Reset du flag skip pour ce fichier — skip_ffmpeg_process() le remettra
+        // à true si l'utilisateur demande à passer ce fichier spécifiquement.
+        SKIP.store(false, Ordering::Relaxed);
 
         let file_start = Instant::now();
         let original_mb = std::fs::metadata(&job.input_path)
@@ -628,9 +633,10 @@ pub async fn start_encoding(
         });
         let elapsed = file_start.elapsed().as_secs_f64();
         let cancelled = CANCEL.load(Ordering::Relaxed);
-        let ok = status.map(|s| s.success()).unwrap_or(false) && !cancelled;
+        let skipped   = SKIP.load(Ordering::Relaxed);
+        let ok = status.map(|s| s.success()).unwrap_or(false) && !cancelled && !skipped;
 
-        if !ok && !cancelled {
+        if !ok && !cancelled && !skipped {
             let deleted = delete_partial_output(&job.output_path);
             let out_name = filename_of(&job.output_path);
             if deleted {
@@ -671,7 +677,7 @@ pub async fn start_encoding(
                         &note_file_done,
                     ).await;
                 });
-            } else if !ok && !cancelled && cfg.discord_notify_error {
+            } else if !ok && !cancelled && !skipped && cfg.discord_notify_error {
                 let fields_error = crate::services::discord_fields::default_fields("error");
                 let note_error = cfg.discord_custom_notes.get("error").cloned().unwrap_or_default();
                 // Extraire les dernières lignes utiles du stderr FFmpeg (max 800 chars
@@ -717,6 +723,12 @@ pub async fn start_encoding(
                 .title("⏹ Fichier annulé")
                 .body(&format!("{} — fichier partiel supprimé", file_name))
                 .show();
+        } else if skipped {
+            let _ = app.notification()
+                .builder()
+                .title("⏭ Fichier ignoré")
+                .body(&format!("{} — passé au suivant", file_name))
+                .show();
         } else {
             let _ = app.notification()
                 .builder()
@@ -729,11 +741,12 @@ pub async fn start_encoding(
             job_id: job.job_id.clone(), 
             path: job.input_path.clone(),
             name: file_name.clone(),
-            status: if cancelled { "cancelled".to_string() }
-                    else if ok { "ok".to_string() }
-                    else { "error".to_string() },
+            status: if cancelled     { "cancelled".to_string() }
+                    else if skipped { "skipped".to_string() }
+                    else if ok      { "ok".to_string() }
+                    else            { "error".to_string() },
             original_mb, encoded_mb, duration_secs: elapsed,
-            error_msg: if ok || cancelled { None } else { ffmpeg_stderr.clone() },
+            error_msg: if ok || cancelled || skipped { None } else { ffmpeg_stderr.clone() },
         });
 
         let _ = app.emit("encode-file-done", serde_json::json!({
@@ -741,10 +754,12 @@ pub async fn start_encoding(
             "index":       idx,
             "path":        job.input_path,                
             "name":        filename_of(&job.input_path),
-            "status":      if ok { "ok" } else { "error" },
+            "status":      if ok      { "ok" }
+                           else if skipped { "skipped" }
+                           else       { "error" },
             "original_mb": original_mb,
             "encoded_mb":  encoded_mb,
-            "error_msg":   if ok || cancelled { serde_json::Value::Null }
+            "error_msg":   if ok || cancelled || skipped { serde_json::Value::Null }
                            else { serde_json::Value::String(
                                ffmpeg_stderr.clone().unwrap_or_default()
                            )},

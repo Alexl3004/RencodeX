@@ -11,6 +11,7 @@
 //! | Atomique         | Type         | Auteur           | Lecteurs            |
 //! |------------------|--------------|------------------|---------------------|
 //! | `CANCEL`         | `AtomicBool` | commande Tauri   | boucle stdout       |
+//! | `SKIP`           | `AtomicBool` | commande Tauri   | boucle stdout       |
 //! | `PAUSE`          | `AtomicBool` | commande Tauri   | boucle stdout       |
 //! | `ENCODING`       | `AtomicBool` | thread encodage  | commandes, UI       |
 //! | `CHILD_PID`      | `AtomicU32`  | thread encodage  | pause / kill        |
@@ -108,6 +109,14 @@ const NO_PID: u32 = u32::MAX;
 /// supplémentaire — acceptable ; on évite un `SeqCst` inutile sur le chemin
 /// chaud.
 pub static CANCEL: AtomicBool = AtomicBool::new(false);
+
+/// `true` quand le fichier courant a été volontairement ignoré via `!skip`.
+/// Distinct de `CANCEL` : la boucle `for` continue vers le fichier suivant,
+/// le statut émis est `"skipped"` (ni erreur, ni annulation globale), et
+/// aucune notification d'erreur Discord n'est envoyée.
+/// Reset à `false` au début de chaque fichier par `media.rs`.
+/// Ordering : `Release` à l'écriture, `Relaxed` en lecture (même raisonnement que `CANCEL`).
+pub static SKIP: AtomicBool = AtomicBool::new(false);
 
 /// `true` quand l'encodage est suspendu.
 /// Même politique d'ordering que `CANCEL`.
@@ -207,6 +216,7 @@ pub fn lock_meta() -> std::sync::MutexGuard<'static, EncoderMeta> {
 pub struct EncoderSnapshot {
     pub encoding: bool,
     pub cancel: bool,
+    pub skip: bool,
     pub pause: bool,
     pub child_pid: Option<u32>,
     pub percent: f64,
@@ -228,6 +238,7 @@ pub fn snapshot() -> EncoderSnapshot {
     // Lectures atomiques — aucun lock.
     let encoding   = ENCODING.load(Ordering::Acquire);
     let cancel     = CANCEL.load(Ordering::Relaxed);
+    let skip       = SKIP.load(Ordering::Relaxed);
     let pause      = PAUSE.load(Ordering::Relaxed);
     let raw_pid    = CHILD_PID.load(Ordering::Acquire);
     let child_pid  = if raw_pid == NO_PID { None } else { Some(raw_pid) };
@@ -243,7 +254,7 @@ pub fn snapshot() -> EncoderSnapshot {
         .map(|t: std::time::Instant| t.elapsed().as_secs())
         .unwrap_or(0);
     EncoderSnapshot {
-        encoding, cancel, pause, child_pid,
+        encoding, cancel, skip, pause, child_pid,
         percent, speed, remaining, file_index, file_total,
         current_file: meta.current_file.clone(),
         current_out:  meta.current_out.clone(),
@@ -262,6 +273,7 @@ pub fn reset_encoder_state() {
     // lectures de snapshot voient un état cohérent (pas de ENCODING=true
     // avec des métriques à zéro partiellement écrites).
     CANCEL.store(false, Ordering::Relaxed);
+    SKIP.store(false, Ordering::Relaxed);
     PAUSE.store(false, Ordering::Relaxed);
     CHILD_PID.store(NO_PID, Ordering::Relaxed);
     store_f64(&PERCENT, 0.0);
@@ -389,6 +401,10 @@ pub fn skip_ffmpeg_process() -> bool {
         libc::kill(pid as i32, libc::SIGKILL);
     }
 
-    true
+    // Marque le fichier courant comme "ignoré volontairement".
     // Pas de CANCEL.store(true) → la boucle for continue vers le fichier suivant.
+    // `media.rs` remet SKIP à false en tête de chaque nouveau fichier.
+    SKIP.store(true, Ordering::Release);
+
+    true
 }

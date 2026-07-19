@@ -31,7 +31,7 @@
 
   let filterText = $state("");
   let filterStatus = $state<
-    "all" | "ready" | "queued" | "encoding" | "done" | "error"
+    "all" | "ready" | "queued" | "encoding" | "done" | "skipped" | "error"
   >("all");
 
   // ── Drag & drop natif Tauri ────────────────────────────────────────────────
@@ -160,7 +160,7 @@
   }
 
   const STATUS_ORDER: Record<string, number> = {
-    encoding: 0, analysing: 1, queued: 2, ready: 3, done: 4, error: 5,
+    encoding: 0, analysing: 1, queued: 2, ready: 3, done: 4, skipped: 5, error: 6,
   };
 
   function openInfoModal(f: AppFile) { 
@@ -198,6 +198,7 @@
       queued: 0,
       encoding: 0,
       done: 0,
+      skipped: 0,
       error: 0,
     };
     for (const f of encoder.files) {
@@ -206,6 +207,7 @@
       else if (f.status === "encoding" && !pendingPaths.has(f.path)) counts.encoding++;
       else if (f.status === "ready") counts.ready++;
       else if (f.status === "done") counts.done++;
+      else if (f.status === "skipped") counts.skipped++;
       else if (f.status === "error") counts.error++;
     }
     return counts;
@@ -261,6 +263,7 @@
     if (file.status === "queued") return encoder.paused ? "En pause" : "En file";
     if (file.status === "ready") return pendingPaths.has(file.path) ? "En file" : "Prêt";
     if (file.status === "done") return "Terminé";
+    if (file.status === "skipped") return "Ignoré";
     if (file.status === "error") {
       // Distinguer annulé vs erreur réelle
       if ((file.result as any)?.status === "cancelled") return "Annulé";
@@ -277,6 +280,7 @@
     ready: "text-[var(--color-success)]",
     pending: "text-[var(--color-subtext)]",
     done: "text-[var(--color-success)]",
+    skipped: "text-[var(--color-subtext)]",
     error: "text-[var(--color-danger)]",
     cancelled: "text-[var(--color-warning)]",
   };
@@ -625,7 +629,7 @@
         >
       </button>
 
-      {#each [{ key: "queued", label: "En file", count: statusCounts.queued }, { key: "encoding", label: "En cours", count: statusCounts.encoding }, { key: "done", label: "Terminé", count: statusCounts.done }, { key: "error", label: "Erreur", count: statusCounts.error }] as btn}
+      {#each [{ key: "queued", label: "En file", count: statusCounts.queued }, { key: "encoding", label: "En cours", count: statusCounts.encoding }, { key: "done", label: "Terminé", count: statusCounts.done }, { key: "skipped", label: "Ignoré", count: statusCounts.skipped }, { key: "error", label: "Erreur", count: statusCounts.error }] as btn}
         {#if btn.count > 0}
           <button
             onclick={() => (filterStatus = btn.key as typeof filterStatus)}
