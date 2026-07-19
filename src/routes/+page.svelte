@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { encoder } from "$lib/stores/encoder.svelte";
-  import { listen } from "@tauri-apps/api/event";
-  import type { UnlistenFn } from "@tauri-apps/api/event";
 
   import ToastNotif from "$components/ToastNotif.svelte";
   import TopBar from "$components/TopBar.svelte";
@@ -23,14 +21,9 @@
 
   onMount(async () => { await encoder.init(); });
 
-  onMount(() => {
-    stats.init();
-    let unlisten: UnlistenFn | undefined;
-    listen<string[]>("tauri://file-drop", async (e) => {
-      await encoder.addFiles(e.payload);
-    }).then((fn) => { unlisten = fn; });
-    return () => unlisten?.();
-  });
+  onMount(() => { stats.init(); });
+  // Le listener drag & drop tauri://file-drop est géré exclusivement dans
+  // FileTable.svelte (qui pilote aussi l'overlay visuel) — pas de double écoute.
 </script>
 
 <svelte:window ondragover={(e) => e.preventDefault()} />

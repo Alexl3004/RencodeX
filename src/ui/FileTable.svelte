@@ -35,6 +35,10 @@
   >("all");
 
   // ── Drag & drop natif Tauri ────────────────────────────────────────────────
+  // Point d'entrée UNIQUE pour le drag & drop fichiers — +page.svelte n'écoute pas
+  // ces events pour éviter un double appel à addFiles().
+  // On écoute deux noms d'event pour couvrir Tauri v1 (tauri://file-drop) et
+  // v2 (tauri://drag-drop) sans avoir à détecter la version au runtime.
   let isDragOver = $state(false);
   let dragEnterCount = 0; // compteur pour ignorer les events des enfants
   let tableContainer = $state<HTMLDivElement | null>(null);
@@ -45,9 +49,9 @@
     async function setup() {
 
       const eventNames = [
-        "tauri://drag-drop",   // Tauri v2 probable
+        "tauri://drag-drop",   // Tauri v2 (nom canonique)
         "tauri://file-drop",   // Tauri v1 / compat
-        "tauri://drop",        // Alias possible
+        // "tauri://drop" supprimé — alias non documenté, évite un 3e appel addFiles()
       ];
 
       for (const name of eventNames) {
@@ -73,6 +77,7 @@
           );
           unlisteners.push(u);
         } catch (err) {
+          // Event non supporté sur cette version Tauri — ignoré silencieusement
         }
       }
 
