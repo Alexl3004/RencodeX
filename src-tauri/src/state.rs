@@ -135,6 +135,16 @@ pub static FILE_INDEX: AtomicUsize = AtomicUsize::new(0);
 /// Nombre total de fichiers dans la file.
 pub static FILE_TOTAL: AtomicUsize = AtomicUsize::new(0);
 
+// ─── État du bot Discord ──────────────────────────────────────────────────────
+
+/// `true` quand le bot Discord est authentifié et prêt.
+/// Écrit depuis le handler `ready` du bot, lu par la commande `get_bot_status`.
+pub static BOT_CONNECTED: AtomicBool = AtomicBool::new(false);
+
+/// Nom d'utilisateur Discord du bot (ex: "RenCodeX#1234").
+/// Protégé par Mutex car écrit rarement (connexion/déconnexion).
+pub static BOT_NAME: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
 // ─── Helpers f64 ↔ AtomicU64 ─────────────────────────────────────────────────
 //
 // Les métriques de progression sont des valeurs d'affichage : un seul thread

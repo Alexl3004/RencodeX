@@ -194,6 +194,11 @@ impl EventHandler for Handler {
 
     async fn ready(&self, _ctx: Context, ready: Ready) {
         println!("[Discord bot] Connecté en tant que {}", ready.user.name);
+        // Mettre à jour l'état global avant d'émettre l'événement Tauri,
+        // pour que get_bot_status() soit déjà correct si le frontend interroge
+        // juste après avoir reçu l'événement.
+        crate::state::BOT_CONNECTED.store(true, std::sync::atomic::Ordering::Release);
+        *crate::state::BOT_NAME.lock().unwrap_or_else(|e| e.into_inner()) = ready.user.name.clone();
         let _ = self.app.emit("discord-bot-connected", serde_json::json!({ "name": ready.user.name }));
     }
 }
@@ -326,12 +331,16 @@ pub async fn start(
             || err_str.contains("Invalid token");
 
         if is_fatal {
+            crate::state::BOT_CONNECTED.store(false, std::sync::atomic::Ordering::Release);
+            *crate::state::BOT_NAME.lock().unwrap_or_else(|e| e.into_inner()) = String::new();
             let _ = app.emit("discord-bot-error", serde_json::json!({ "message": err_str.clone() }));
             return Some(err_str);
         }
     }
 
     // Déconnexion propre (ou arrêt via shutdown_all) → None = redémarrage autorisé
+    crate::state::BOT_CONNECTED.store(false, std::sync::atomic::Ordering::Release);
+    *crate::state::BOT_NAME.lock().unwrap_or_else(|e| e.into_inner()) = String::new();
     let _ = app.emit("discord-bot-disconnected", ());
     None
 }

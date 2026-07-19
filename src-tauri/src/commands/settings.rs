@@ -99,3 +99,16 @@ pub fn get_effective_config() -> serde_json::Value {
 pub fn get_discord_field_catalog() -> serde_json::Value {
     serde_json::to_value(crate::services::discord_fields::full_catalog()).unwrap_or_default()
 }
+
+/// Retourne l'état courant du bot Discord : connecté ou non, et son nom.
+/// Utilisé par le frontend au montage pour éviter le statut « Connexion… »
+/// bloqué quand l'événement `discord-bot-connected` a déjà été émis.
+#[tauri::command]
+pub fn get_bot_status() -> serde_json::Value {
+    let connected = crate::state::BOT_CONNECTED.load(std::sync::atomic::Ordering::Acquire);
+    let name = crate::state::BOT_NAME
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    serde_json::json!({ "connected": connected, "name": name })
+}

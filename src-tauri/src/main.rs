@@ -146,6 +146,7 @@ fn main() {
             commands::settings::save_encoding_prefs,
             commands::settings::get_effective_config,
             commands::settings::get_discord_field_catalog,
+            commands::settings::get_bot_status,
             commands::settings::load_stats,
             commands::settings::save_stats,
             // encoding
