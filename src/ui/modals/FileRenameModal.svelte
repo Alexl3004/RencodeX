@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { encoder } from "$lib/stores/encoder.svelte";
+  import { prefs } from "$lib/stores/prefs.store.svelte";
   import { buildOutputName, computeTag, computeVideoCodecTag } from "$lib/stores/naming";
   import type { AppFile, CleanedName } from "$lib/stores/types";
   import { Loader2, RefreshCw, CircleCheck, X, Pencil } from "@lucide/svelte";
@@ -37,11 +38,16 @@
       encoder.selSubs,
     );
     const codecTag = computeVideoCodecTag(file.streams, encoder.videoMode, encoder.codecFormat);
+    // Codec audio effectif depuis la règle __default__ des prefs — évite le hardcode "AAC"
+    const defaultAudioRule = prefs.audioCodecRules["__default__"];
+    const audioCodecTag = defaultAudioRule?.action === "copy"
+      ? `${defaultAudioRule.targetCodec.toUpperCase()} copy`
+      : (defaultAudioRule?.targetCodec?.toUpperCase() ?? "AAC");
     return buildOutputName(
       cleaned,
       tag,
       encoder.seasonEpisodeFormat,
-      "AAC",
+      audioCodecTag,
       encoder.tagOrder,
       encoder.team,
       {

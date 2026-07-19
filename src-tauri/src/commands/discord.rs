@@ -56,10 +56,11 @@ pub async fn send_discord_start_notification(
     total_size_mb: f64,
     crf: u32,
     preset: String,
+    audio_label: String,
 ) -> Result<(), String> {
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     let cfg = load_config();
-    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &fields_for(&cfg, "start"), &note_for(&cfg, "start")).await;
+    discord_notify_start(&token, &chan, total_files, total_size_mb, crf, &preset, &audio_label, &fields_for(&cfg, "start"), &note_for(&cfg, "start")).await;
     Ok(())
 }
 

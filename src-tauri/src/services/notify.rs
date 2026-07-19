@@ -223,7 +223,9 @@ pub async fn discord_notify(token: &str, channel_id: &str, summary: &EncodeSumma
 /// Notification de démarrage d'encodage.
 ///
 /// `enabled_fields` : `files`, `size`, `crf`, `preset`, `codec`, `audio`.
-pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str, enabled_fields: &[String], custom_note: &str) {
+/// `audio_label` : description de la config audio réelle, ex. `"AAC 192k"`, `"EAC3 copy"`.
+///   Construit par l'appelant depuis la config effective — notify.rs n'a pas accès aux prefs.
+pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: usize, total_size_mb: f64, crf: u32, preset: &str, audio_label: &str, enabled_fields: &[String], custom_note: &str) {
     if token.is_empty() || channel_id.is_empty() { return; }
 
     let total_size_str = if total_size_mb >= 1024.0 {
@@ -249,7 +251,7 @@ pub async fn discord_notify_start(token: &str, channel_id: &str, total_files: us
     if has("crf")    { fields.push(serde_json::json!({ "name": "🎚️ CRF",           "value": format!("`{}`", crf),                             "inline": true })); }
     if has("preset") { fields.push(serde_json::json!({ "name": "⚡ Preset",         "value": format!("`{}`", preset.to_uppercase()),           "inline": true })); }
     if has("codec")  { fields.push(serde_json::json!({ "name": "🎨 Codec",          "value": "`H.265 NVENC`",                                  "inline": true })); }
-    if has("audio")  { fields.push(serde_json::json!({ "name": "🔊 Audio",          "value": "`AAC 192k`",                                     "inline": true })); }
+    if has("audio")  { fields.push(serde_json::json!({ "name": "🔊 Audio",          "value": format!("`{}`", audio_label),                     "inline": true })); }
     if !resolved_note.is_empty() {
         fields.push(serde_json::json!({ "name": "📝 Note", "value": resolved_note, "inline": false }));
     }
@@ -574,4 +576,3 @@ pub async fn send_email_report(
     mailer.send(&email).map_err(|e| e.to_string())?;
     Ok(())
 }
-

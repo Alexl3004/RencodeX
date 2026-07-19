@@ -184,6 +184,23 @@ pub async fn start_encoding(
         
         let fields_start = crate::services::discord_fields::default_fields("start");
         let note_start = cfg.discord_custom_notes.get("start").cloned().unwrap_or_default();
+        // Construire le label audio depuis la règle __default__ du premier job.
+        // notify.rs ne connaît pas les prefs — c'est ici qu'on résout la valeur réelle.
+        let audio_label = {
+            let default_rule = crate::models::StreamAudioRule {
+                action: "reencode".to_string(),
+                target_codec: "aac".to_string(),
+            };
+            let rule = jobs.first()
+                .and_then(|j| j.stream_audio_rules.get("__default__"))
+                .unwrap_or(&default_rule);
+            if rule.action == "copy" {
+                format!("{} copy", rule.target_codec.to_uppercase())
+            } else {
+                let bitrate = jobs.first().map(|j| j.audio_bitrate).unwrap_or(192);
+                format!("{} {}k", rule.target_codec.to_uppercase(), bitrate)
+            }
+        };
         tokio::spawn(async move {
             discord_notify_start(
                 &token,
@@ -192,6 +209,7 @@ pub async fn start_encoding(
                 total_size_mb,
                 crf_value,
                 &preset_value,
+                &audio_label,
                 &fields_start,
                 &note_start,
             ).await;
