@@ -12,7 +12,8 @@
 
 #[cfg(test)]
 mod tests_regex {
-    use crate::regex::*;
+    use rencodex::naming::regex::*;
+    use rencodex::naming::regex::normalize_hdr_tags;
 
     // ══════════════════════════════════════════════════════════════════════
     // SAISON / ÉPISODE
@@ -501,7 +502,7 @@ mod tests_regex {
         let input = "Show FRENCH VOSTFR x265 HEVC 10bit AAC REPACK";
         let mut result = input.to_string();
         for re in TECH_TAGS.iter() {
-            result = re.replace_all(&result, "").to_string();
+            result = (*re).replace_all(result.as_str(), "").into_owned();
         }
         let result = result.trim().to_string();
         assert!(!result.contains("FRENCH"));
@@ -517,7 +518,7 @@ mod tests_regex {
         let input = "Film VF2HD 1080p";
         let mut result = input.to_string();
         for re in TECH_TAGS.iter() {
-            result = re.replace_all(&result, "").to_string();
+            result = (*re).replace_all(result.as_str(), "").into_owned();
         }
         // "VF2HD" reste intact (pas dans TECH_TAGS) et "VF" seul est dans TECH_TAGS mais
         // ici il est accolé à "2HD" → word-boundary protège "VF2HD"
@@ -540,7 +541,7 @@ mod tests_regex {
         let input = "Anime Title - SubsPlease";
         let mut result = input.to_string();
         for re in KNOWN_GROUPS.iter() {
-            result = re.replace_all(&result, "").to_string();
+            result = (*re).replace_all(result.as_str(), "").into_owned();
         }
         assert!(!result.contains("SubsPlease"), "SubsPlease should be removed");
     }
@@ -550,9 +551,158 @@ mod tests_regex {
         let input = "Film Title 1080p BluRay -YIFY";
         let mut result = input.to_string();
         for re in KNOWN_GROUPS.iter() {
-            result = re.replace_all(&result, "").to_string();
+            result = (*re).replace_all(result.as_str(), "").into_owned();
         }
         assert!(!result.contains("YIFY"));
+    }
+
+
+    // ── TRAIL_GROUP_STUCK ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_trail_group_stuck_no_false_positive_hyphenated_title() {
+        assert!(!TRAIL_GROUP_STUCK.is_match("The Amazing Spider-Man"),
+            "Spider-Man ne doit pas matcher comme groupe release collé");
+        assert!(!TRAIL_GROUP_STUCK.is_match("Man-Thing 2023"));
+        assert!(!TRAIL_GROUP_STUCK.is_match("Demon-Slayer 1080p"));
+    }
+
+    #[test]
+    fn test_trail_group_stuck_matches_known_codecs() {
+        assert!(TRAIL_GROUP_STUCK.is_match("Anime.x264-Tsundere-Raws"));
+        assert!(TRAIL_GROUP_STUCK.is_match("Film.x265-SubsPlease"));
+        assert!(TRAIL_GROUP_STUCK.is_match("Show.HEVC-Judas"));
+        assert!(TRAIL_GROUP_STUCK.is_match("Film.AVC-YIFY"));
+    }
+
+    #[test]
+    fn test_trail_group_stuck_captures_group_name() {
+        let caps = TRAIL_GROUP_STUCK.captures("Anime.x264-Tsundere-Raws").unwrap();
+        assert_eq!(&caps[1], "Tsundere-Raws");
+    }
+
+    // ── OVA_SPECIAL — Special seul sans numéro ───────────────────────────
+
+    #[test]
+    fn test_ova_special_alone_no_match() {
+        assert!(!OVA_SPECIAL.is_match("Special Ops Lioness S01E01"),
+            "Special Ops sans numéro ne doit pas matcher OVA_SPECIAL");
+        assert!(!OVA_SPECIAL.is_match("The End Special Edition"));
+    }
+
+    #[test]
+    fn test_ova_special_with_number_still_matches() {
+        assert!(OVA_SPECIAL.is_match("Anime Special 3"));
+        assert!(OVA_SPECIAL.is_match("Show Special.2"));
+    }
+
+    // ── normalize_hdr_tags ────────────────────────────────────────────────
+
+    #[test]
+    fn test_normalize_hdr_single_tags() {
+        assert_eq!(normalize_hdr_tags("Film HDR10 BluRay"), "HDR10");
+        assert_eq!(normalize_hdr_tags("Film HDR10+ x265"), "HDR10+");
+        assert_eq!(normalize_hdr_tags("Film HLG HDTV"), "HLG");
+        assert_eq!(normalize_hdr_tags("Film HDR WEB"), "HDR");
+    }
+
+    #[test]
+    fn test_normalize_hdr_dv_aliases() {
+        assert_eq!(normalize_hdr_tags("Film DV BluRay"), "DV");
+        assert_eq!(normalize_hdr_tags("Film DoVi 4K"), "DV");
+        assert_eq!(normalize_hdr_tags("Film Dolby Vision UHD"), "DV");
+    }
+
+    #[test]
+    fn test_normalize_hdr_combinations_order_independent() {
+        assert_eq!(normalize_hdr_tags("Film DV HDR10 BluRay"), "DV HDR10");
+        assert_eq!(normalize_hdr_tags("Film HDR10 DV BluRay"), "DV HDR10",
+            "l'ordre dans le nom ne doit pas affecter la normalisation");
+        assert_eq!(normalize_hdr_tags("Film DoVi HDR10+ x265"), "DV HDR10+");
+        assert_eq!(normalize_hdr_tags("Film DV HLG"), "DV HLG");
+        assert_eq!(normalize_hdr_tags("Film DV HDR x265"), "DV HDR");
+    }
+
+    #[test]
+    fn test_normalize_hdr_sdr_ignored() {
+        assert_eq!(normalize_hdr_tags("Film SDR 1080p"), "");
+    }
+
+    #[test]
+    fn test_normalize_hdr_no_token() {
+        assert_eq!(normalize_hdr_tags("Film 1080p BluRay x264"), "");
+    }
+
+    #[test]
+    fn test_normalize_hdr_no_false_positive_hdrip() {
+        assert_eq!(normalize_hdr_tags("Film HDRip 720p"), "");
+    }
+
+    // ── TECH_TAGS — régressions END / Special ────────────────────────────
+
+    #[test]
+    fn test_tech_tags_end_not_removed() {
+        let input = "The End 2024 1080p BluRay";
+        let mut result = input.to_string();
+        for re in TECH_TAGS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(result.contains("End"),
+            "\"End\" ne doit pas être supprimé par TECH_TAGS, reçu: {}", result);
+    }
+
+    #[test]
+    fn test_tech_tags_special_not_removed() {
+        let input = "Special Ops Lioness S01E01 1080p WEB-DL";
+        let mut result = input.to_string();
+        for re in TECH_TAGS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(result.contains("Special"),
+            "\"Special\" ne doit pas être supprimé par TECH_TAGS, reçu: {}", result);
+    }
+
+    #[test]
+    fn test_tech_tags_repack_still_removed() {
+        let input = "Film 2023 1080p BluRay REPACK";
+        let mut result = input.to_string();
+        for re in TECH_TAGS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(!result.contains("REPACK"), "REPACK doit toujours être supprimé");
+    }
+
+    // ── KNOWN_GROUPS — compléments ────────────────────────────────────────
+
+    #[test]
+    fn test_known_groups_removes_erai_raws() {
+        let input = "Anime Title - Erai-raws";
+        let mut result = input.to_string();
+        for re in KNOWN_GROUPS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(!result.contains("Erai-raws"));
+    }
+
+    #[test]
+    fn test_known_groups_removes_rarbg_dash() {
+        let input = "Film.Title.2022.1080p.BluRay-RARBG";
+        let mut result = input.to_string();
+        for re in KNOWN_GROUPS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(!result.contains("RARBG"));
+    }
+
+    #[test]
+    fn test_known_groups_does_not_touch_spectre_title() {
+        let input = "Spectre.2015.1080p.BluRay";
+        let mut result = input.to_string();
+        for re in KNOWN_GROUPS.iter() {
+            result = (*re).replace_all(result.as_str(), "").into_owned();
+        }
+        assert!(result.contains("Spectre"),
+            "\"Spectre\" titre ne doit pas être altéré, reçu: {}", result);
     }
 
     #[test]
@@ -561,7 +711,7 @@ mod tests_regex {
         let input = "Anime.x264-Tsundere-Raws";
         let mut result = input.to_string();
         for re in KNOWN_GROUPS.iter() {
-            result = re.replace_all(&result, "").to_string();
+            result = (*re).replace_all(result.as_str(), "").into_owned();
         }
         assert!(!result.contains("Tsundere-Raws"));
     }
@@ -573,7 +723,7 @@ mod tests_regex {
 
 #[cfg(test)]
 mod tests_media_logic {
-    use crate::utils::normalize_lang;
+    use rencodex::utils::normalize_lang;
 
     // ── parse_fps depuis r_frame_rate ─────────────────────────────────────
 

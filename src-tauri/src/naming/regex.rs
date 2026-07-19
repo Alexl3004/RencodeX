@@ -115,7 +115,7 @@ pub static HDR: Lazy<InnerRegex> = Lazy::new(||
 /// canonique normalisé.
 ///
 /// Exemples :
-/// ```
+/// ```text
 /// "DV HDR10"        → "DV HDR10"
 /// "HDR10 DV"        → "DV HDR10"   (ordre normalisé : DV toujours en premier)
 /// "Dolby Vision"    → "DV"
@@ -246,10 +246,17 @@ pub static BRACKETS: Lazy<InnerRegex> = Lazy::new(||
 pub static TRAIL_GROUP: Lazy<InnerRegex> = Lazy::new(||
     InnerRegex::new(r"(?i)\s*-\s*([A-Za-z0-9][A-Za-z0-9_.]{2,})\s*$").unwrap()
 );
-/// Groupe de release collé à un tag technique en fin de nom : "x264-Tsundere-Raws$"
-/// Capture : [A-Za-z0-9]+ tiret groupe en fin de chaîne.
+/// Groupe de release collé à un tag codec connu en fin de nom.
+/// Exemples : "x264-Tsundere-Raws", "x265-SubsPlease", "HEVC-Judas"
+///
+/// Ancré sur une liste de codecs explicites pour éviter de matcher des
+/// titres composés légitimes comme "Spider-Man" ou "Man-Thing".
+/// Le pattern antérieur `[A-Za-z0-9]+-…` était trop large : tout token
+/// alphanumérique suivi d'un tiret pouvait consommer la fin d'un titre.
 pub static TRAIL_GROUP_STUCK: Lazy<InnerRegex> = Lazy::new(||
-    InnerRegex::new(r"(?i)[A-Za-z0-9]+-([A-Za-z][A-Za-z0-9_.-]{2,})\s*$").unwrap()
+    InnerRegex::new(
+        r"(?i)\b(?:x264|x265|H264|H265|HEVC|AVC|AV1|XviD|DivX|VP9|VC-1)-([A-Za-z][A-Za-z0-9_.-]{2,})\s*$"
+    ).unwrap()
 );
 /// Tirets/tirets cadratins résiduels en fin de chaîne
 pub static TRAIL_DASH: Lazy<InnerRegex> = Lazy::new(||
@@ -314,7 +321,12 @@ pub static TECH_TAGS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
         "5 1", "7 1", "2 0",
         // Méta release
         "REPACK", "PROPER", "RERIP", "REMUX", "INTERNAL",
-        "FANSUB", "END", "Special",
+        "FANSUB",
+        // NOTE : "END" et "Special" intentionnellement absents —
+        // ce sont des mots communs présents dans des titres légitimes
+        // ("The End", "Special Ops", etc.). "Special" est géré par
+        // OVA_SPECIAL (avec numéro) et OVA_CONTEXT. "END" était un
+        // artefact d'une ancienne liste de groupes release.
         // SDR (HDR géré séparément)
         "SDR",
     ];
@@ -379,7 +391,7 @@ pub static KNOWN_GROUPS: Lazy<Vec<InnerRegex>> = Lazy::new(|| {
             let p1 = InnerRegex::new(&format!(r"(?i)\s*[-–_]?\s*{}\s*[-–]?\s*$", escaped)).unwrap();
             // Pattern 2 : collé après un token alphanumérique (ex: "x264-Tsundere-Raws")
             // Sans lookbehind : on matche [alnum]-groupe en fin de chaîne
-            let p2 = InnerRegex::new(&format!(r"(?i)[A-Za-z0-9]+-{}\s*$", escaped)).unwrap();
+            let p2 = InnerRegex::new(&format!(r"(?i)\b(?:x264|x265|H264|H265|HEVC|AVC|AV1|XviD|DivX|VP9|VC-1)-{}\s*$", escaped)).unwrap();
             vec![p1, p2]
         })
         .collect()

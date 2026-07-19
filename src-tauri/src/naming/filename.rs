@@ -202,14 +202,18 @@ pub fn clean_filename(
     }
     
 
-    // 2c. Groupe de release en fin de titre (ex: " - SubsPlease")
     if let Some(cap) = regex::TRAIL_GROUP.captures(&base) {
         let matched = &cap[1];
-        // Ne pas supprimer si c'est en fait un identifiant saison/épisode
         let is_se = regex::S_E.is_match(matched)
             || regex::S_E_MULTI.is_match(matched)
             || regex::E_LONG.is_match(matched);
-        if !is_se {
+        let is_common_word = {
+            let m = matched;
+            m.len() <= 8
+                && m.chars().next().map_or(false, |c| c.is_uppercase())
+                && m.chars().skip(1).all(|c| c.is_lowercase())
+        };
+        if !is_se && !is_common_word {
             base = regex::TRAIL_GROUP.replace(&base, "").to_string();
         }
     }
@@ -260,7 +264,7 @@ pub fn clean_filename(
                 up.contains("SUBFRENCH") || up.contains("VOSTFR")
                 || up.contains("FRENCH") || up.contains("MULTI")
             };
-        if year_in_paren || !looks_technical {
+        if year_in_paren || looks_technical {
             base = regex::YEAR_CTX.replace_all(&base, "$1 $3").to_string();
             base = regex::YEAR.replace_all(&base, " ").to_string();
         }
@@ -386,12 +390,19 @@ pub fn clean_filename(
         base = re.replace_all(&base, " ").to_string();
     }
     // TRAIL_GROUP second passage : cas résiduels après nettoyage technique
+// TRAIL_GROUP second passage : cas résiduels après nettoyage technique
     if let Some(cap) = regex::TRAIL_GROUP.captures(&base) {
         let matched = &cap[1];
         let is_se = regex::S_E.is_match(matched)
             || regex::S_E_MULTI.is_match(matched)
             || regex::E_LONG.is_match(matched);
-        if !is_se {
+        let is_common_word = {
+            let m = matched;
+            m.len() <= 8
+                && m.chars().next().map_or(false, |c| c.is_uppercase())
+                && m.chars().skip(1).all(|c| c.is_lowercase())
+        };
+        if !is_se && !is_common_word {
             base = regex::TRAIL_GROUP.replace(&base, "").to_string();
         }
     }
@@ -434,7 +445,7 @@ pub fn clean_filename(
                 || after_year.to_uppercase().contains("VOSTFR")
                 || after_year.to_uppercase().contains("FRENCH")
                 || after_year.to_uppercase().contains("MULTI");
-            !looks_technical
+            looks_technical
         }
     };
 

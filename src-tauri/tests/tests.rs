@@ -2,8 +2,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::filename::clean_filename;
-    use crate::utils::{normalize_lang, format_title_case, sanitize_filename, is_windows_reserved};
+    use rencodex::naming::clean_filename;
+    use rencodex::utils::{normalize_lang, format_title_case, sanitize_filename, is_windows_reserved};
 
     // ── normalize_lang ────────────────────────────────────────────────────
 
@@ -309,5 +309,62 @@ mod tests {
             vec!["fre".to_string()],
         );
         assert!(r.season_episode.contains("OVA"));
+    }
+    // ── Régressions bugs regex ────────────────────────────────────────────
+
+    #[test]
+    fn test_trail_group_stuck_preserves_hyphenated_title() {
+        let r = clean_filename(
+            "The.Amazing.Spider-Man.2012.1080p.BluRay.x264.mkv".to_string(),
+            vec!["eng".to_string()],
+            vec![],
+        );
+        assert!(r.title.contains("Spider-Man"),
+            "Spider-Man ne doit pas être supprimé du titre, reçu: {}", r.title);
+    }
+
+    #[test]
+    fn test_trail_group_stuck_matches_real_codec_group() {
+        let r = clean_filename(
+            "Film.Title.2020.1080p.BluRay.x264-YIFY.mkv".to_string(),
+            vec!["eng".to_string()],
+            vec![],
+        );
+        assert!(!r.title.contains("YIFY"));
+        assert_eq!(r.title, "Film Title");
+    }
+
+    #[test]
+    fn test_tech_tags_end_preserved_in_title() {
+        let r = clean_filename(
+            "The.End.2024.1080p.BluRay.mkv".to_string(),
+            vec!["eng".to_string()],
+            vec![],
+        );
+        assert_eq!(r.title, "The End");
+    }
+
+    #[test]
+    fn test_tech_tags_special_preserved_in_series_title() {
+        let r = clean_filename(
+            "Special.Ops.Lioness.S01E01.1080p.WEB-DL.mkv".to_string(),
+            vec!["eng".to_string()],
+            vec![],
+        );
+        assert!(r.title.starts_with("Special"),
+            "reçu: {}", r.title);
+    }
+
+    #[test]
+    fn test_ova_special_with_number_still_detected() {
+        let r = clean_filename(
+            "My Anime Special 2 [1080p].mkv".to_string(),
+            vec!["jpn".to_string()],
+            vec!["fre".to_string()],
+        );
+        assert!(
+            r.season_episode.to_lowercase().contains("special") || r.season_episode.contains("SP"),
+            "reçu: {}", r.season_episode
+        );
     }
 }
