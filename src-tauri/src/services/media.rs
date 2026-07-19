@@ -347,6 +347,25 @@ pub async fn start_encoding(
             if job.spatial_aq || job.temporal_aq {
                 cmd_args.extend(["-aq-strength".into(), job.aq_strength.to_string()]);
             }
+            // Dolby Vision — transmission du RPU à travers l'encodeur NVENC.
+            //
+            // `-strict experimental` est nécessaire parce que le support des
+            // side-data Dolby Vision (RPU) dans les encodeurs n'est pas encore
+            // stabilisé dans l'API publique de FFmpeg. Sans ce flag, FFmpeg
+            // silencieusement supprime les side-data DV et le fichier de sortie
+            // ne contiendra que la couche HDR10 de base.
+            //
+            // Pré-requis :
+            //   • FFmpeg ≥ 5.1 compilé avec le support Dolby Vision (libdovi ou
+            //     le patch interne, selon la build).
+            //   • Source contenant un flux DV valide (profil 5, 7 ou 8).
+            //   • Container MKV recommandé — MP4 ne supporte pas le DV RPU natif.
+            //
+            // Si la source ne contient pas de DV, le flag est inoffensif.
+            if job.preserve_dv {
+                cmd_args.extend(["-strict".into(), "experimental".into()]);
+            }
+
             let multipass_val = match job.multipass.as_str() {
                 "qres" => "qres",
                 "fullres" => "fullres",
