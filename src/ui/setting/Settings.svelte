@@ -10,6 +10,7 @@
     FolderOpen,
     MessageSquare,
     Terminal,
+    Bot,
   } from "@lucide/svelte";
 
   import InterfaceTab from "./InterfaceTab.svelte";
@@ -17,10 +18,11 @@
   import PresetsTab from "./PresetsTab.svelte";
   import DiscordTab from "./DiscordTab.svelte";
   import EnvTab from "./EnvTab.svelte";
+  import BotTab from "./BotTab.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
-  type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "env";
+  type TabId = "interface" | "ffmpeg" | "presets" | "discord" | "bot" | "env";
 
   type FieldDef = { id: string; label: string };
 
@@ -93,6 +95,7 @@
       desc: "Bot · notifications",
     },
     { id: "env", label: "Env", icon: Terminal, desc: "Variables système" },
+    { id: "bot", label: "Bot", icon: Bot, desc: "Statut · commandes" },
   ];
 
   const NOTIF_ROWS: Array<{
@@ -533,6 +536,12 @@
         />
       {:else if activeTab === "env"}
         <EnvTab {effective} {form} />
+      {:else if activeTab === "bot"}
+        <BotTab
+          discordEnabled={form.discord_enabled}
+          discordBotToken={form.discord_bot_token}
+          discordCmdChannelId={form.discord_cmd_channel_id}
+        />
       {/if}
     </div>
   </div>

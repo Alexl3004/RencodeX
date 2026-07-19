@@ -101,7 +101,11 @@
 
   let showToken = $state(false);
 
-  let discordFromEnv = $derived(false);
+  // Vrai si le token actif vient de la variable d'environnement
+  // (token défini en env mais champ du formulaire vide).
+  let discordFromEnv = $derived(
+    !!effective?.discord_token_set && !form.discord_bot_token.trim()
+  );
 </script>
 
 <section class="content-section">

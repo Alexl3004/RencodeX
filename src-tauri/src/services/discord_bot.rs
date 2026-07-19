@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 use std::collections::HashMap;
 use std::time::Instant;
+use tokio_util::sync::CancellationToken;
 use crate::state::{
     ENCODING, snapshot,
     pause_ffmpeg_process, resume_ffmpeg_process, kill_ffmpeg_process, skip_ffmpeg_process,
@@ -191,8 +192,9 @@ impl EventHandler for Handler {
         }
     }
 
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, _ctx: Context, ready: Ready) {
         println!("[Discord bot] Connecté en tant que {}", ready.user.name);
+        let _ = self.app.emit("discord-bot-connected", serde_json::json!({ "name": ready.user.name }));
     }
 }
 
@@ -276,7 +278,12 @@ fn format_queue() -> String {
     lines
 }
 
-pub async fn start(token: String, channel_id: u64, app: AppHandle) -> Option<String> {
+pub async fn start(
+    token: String,
+    channel_id: u64,
+    app: AppHandle,
+    cancel: CancellationToken,
+) -> Option<String> {
     let token = token.trim().to_string();
     let token = token.strip_prefix("Bot ").unwrap_or(&token).to_string();
     let intents = GatewayIntents::GUILD_MESSAGES
@@ -286,7 +293,7 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) -> Option<Str
     let mut client = match Client::builder(&token, intents)
         .event_handler(Handler {
             channel_id,
-            app,
+            app: app.clone(),
             rate_limits: Mutex::new(HashMap::new()),
         })
         .await
@@ -299,6 +306,16 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) -> Option<Str
         }
     };
 
+    // Surveillance du token d'annulation : déclenche shutdown_all() sur le
+    // shard manager dès que cancel.cancelled() se résout. La tâche se termine
+    // d'elle-même une fois client.start() retourné.
+    let shard_manager = client.shard_manager.clone();
+    tauri::async_runtime::spawn(async move {
+        cancel.cancelled().await;
+        eprintln!("[Discord bot] Arrêt gracieux : fermeture des shards…");
+        shard_manager.shutdown_all().await;
+    });
+
     if let Err(err) = client.start().await {
         let err_str = err.to_string();
         eprintln!("[Discord bot] Erreur de connexion : {err_str}");
@@ -309,10 +326,12 @@ pub async fn start(token: String, channel_id: u64, app: AppHandle) -> Option<Str
             || err_str.contains("Invalid token");
 
         if is_fatal {
+            let _ = app.emit("discord-bot-error", serde_json::json!({ "message": err_str.clone() }));
             return Some(err_str);
         }
     }
 
-    // Déconnexion propre ou erreur réseau → None = redémarrage autorisé
+    // Déconnexion propre (ou arrêt via shutdown_all) → None = redémarrage autorisé
+    let _ = app.emit("discord-bot-disconnected", ());
     None
 }

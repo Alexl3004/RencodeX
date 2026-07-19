@@ -26,6 +26,15 @@ pub fn save_config(config: AppConfig, app: tauri::AppHandle) -> Result<(), Strin
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())?;
+
+    // Synchronise la variable d'environnement avec le token sauvegardé,
+    // pour que resolve_config() relise toujours la valeur la plus récente.
+    if !config.discord_bot_token.is_empty() {
+        std::env::set_var("RENCODEX_DISCORD_TOKEN", &config.discord_bot_token);
+    } else {
+        std::env::remove_var("RENCODEX_DISCORD_TOKEN");
+    }
+
     let _ = app.emit("config-saved", ());
     Ok(())
 }

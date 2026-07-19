@@ -12,13 +12,48 @@ use crate::utils::resolve_config;
 use crate::commands::settings::load_config;
 use tauri::Manager;
 use tauri::Listener;
+use std::sync::{Mutex, OnceLock};
+use tokio_util::sync::CancellationToken;
+
+// ── Singleton de supervision du bot Discord ───────────────────────────────────
+
+/// Token d'annulation de la tâche de supervision en cours.
+/// `cancel()` déclenche un shutdown gracieux ; `None` si aucune tâche active.
+static BOT_TOKEN: OnceLock<Mutex<Option<CancellationToken>>> = OnceLock::new();
+
+fn bot_token_slot() -> &'static Mutex<Option<CancellationToken>> {
+    BOT_TOKEN.get_or_init(|| Mutex::new(None))
+}
+
+/// Annule la tâche de supervision précédente (shutdown gracieux) puis en lance
+/// une nouvelle avec un token frais.
+fn spawn_bot_supervisor(token: String, channel_id: u64, app: tauri::AppHandle) {
+    let cancel = CancellationToken::new();
+    let mut guard = bot_token_slot().lock().unwrap();
+    // Signale l'arrêt gracieux à l'instance précédente, si elle existe.
+    if let Some(old) = guard.take() {
+        old.cancel();
+    }
+    *guard = Some(cancel.clone());
+    drop(guard); // libère le mutex avant de spawner
+
+    tauri::async_runtime::spawn(supervise_discord_bot(token, channel_id, app, cancel));
+}
 
 // ── Supervision du bot Discord ────────────────────────────────────────────────
 
 /// Lance le bot Discord avec redémarrage automatique sur erreur.
 /// Chaque tentative attend `backoff` avant de redémarrer, avec un plafond
 /// de 5 minutes. Le bot tourne sur le runtime Tauri (pas de runtime dédié).
-async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHandle) {
+///
+/// `cancel` permet un arrêt gracieux : dès qu'il est déclenché, la boucle
+/// attend la fin propre de `discord_bot::start` puis retourne sans redémarrer.
+async fn supervise_discord_bot(
+    token: String,
+    channel_id: u64,
+    app: tauri::AppHandle,
+    cancel: CancellationToken,
+) {
     const MAX_BACKOFF_SECS: u64 = 300;
     let mut backoff_secs: u64 = 5;
     let mut current_token = token;
@@ -27,18 +62,53 @@ async fn supervise_discord_bot(token: String, channel_id: u64, app: tauri::AppHa
     loop {
         eprintln!("[Discord bot] Démarrage…");
 
-        if let Some(fatal) = services::discord_bot::start(
-            current_token.clone(), current_channel, app.clone()
-        ).await {
+        // Token de session indépendant : annulé par le watcher ci-dessous
+        // quand le parent est cancelled, mais jamais déjà-annulé à la
+        // construction (contrairement à child_token() sur un token cancelled).
+        let session_cancel = CancellationToken::new();
+        {
+            let parent = cancel.clone();
+            let child  = session_cancel.clone();
+            tauri::async_runtime::spawn(async move {
+                parent.cancelled().await;
+                child.cancel();
+            });
+        }
+
+        let result = tokio::select! {
+            // Annulation demandée — on attend que `start` revienne proprement.
+            _ = cancel.cancelled() => {
+                eprintln!("[Discord bot] Arrêt gracieux demandé, attente fermeture gateway…");
+                services::discord_bot::start(
+                    current_token.clone(), current_channel, app.clone(),
+                    session_cancel,
+                ).await;
+                eprintln!("[Discord bot] Gateway fermée, supervision arrêtée.");
+                return;
+            }
+            r = services::discord_bot::start(
+                current_token.clone(), current_channel, app.clone(),
+                session_cancel.clone(),
+            ) => r,
+        };
+
+        if let Some(fatal) = result {
             eprintln!("[Discord bot] Erreur fatale, supervision arrêtée : {fatal}");
             return;
         }
 
+        // Arrêt demandé pendant le délai de backoff → sortie immédiate.
         eprintln!("[Discord bot] Déconnecté. Nouvelle tentative dans {}s.", backoff_secs);
-        tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)).await;
+        tokio::select! {
+            _ = cancel.cancelled() => {
+                eprintln!("[Discord bot] Arrêt gracieux pendant backoff, supervision arrêtée.");
+                return;
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff_secs)) => {}
+        }
         backoff_secs = (backoff_secs * 2).min(MAX_BACKOFF_SECS);
 
-        // Relire la config à chaque redémarrage — prend en compte les mises à jour
+        // Relire la config à chaque redémarrage — prend en compte les mises à jour.
         let cfg = resolve_config(load_config());
         if !cfg.discord_bot_token.is_empty() {
             current_token = cfg.discord_bot_token;
@@ -110,9 +180,7 @@ fn main() {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
                     let token = cfg.discord_bot_token.clone();
                     let app_handle = app.handle().clone();
-                    tauri::async_runtime::spawn(supervise_discord_bot(
-                        token, cmd_channel_id, app_handle,
-                    ));
+                    spawn_bot_supervisor(token, cmd_channel_id, app_handle);
                 }
             }
 
@@ -128,9 +196,7 @@ fn main() {
                     {
                         if let Ok(id) = cfg.discord_cmd_channel_id.parse::<u64>() {
                             eprintln!("[Discord bot] Config mise à jour, redémarrage…");
-                            tauri::async_runtime::spawn(supervise_discord_bot(
-                                cfg.discord_bot_token, id, app2,
-                            ));
+                            spawn_bot_supervisor(cfg.discord_bot_token, id, app2);
                         }
                     }
                 });
