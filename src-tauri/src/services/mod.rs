@@ -1,4 +1,4 @@
-//! Services métier : media, notifications Discord, bot Discord, email.
+//! Services métier : media, notifications Discord, bot Discord.
 
 pub mod media;
 pub mod notify;

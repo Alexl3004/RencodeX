@@ -80,8 +80,6 @@ pub fn get_effective_config() -> serde_json::Value {
     serde_json::json!({
         "ffmpeg_path": cfg.ffmpeg_path,
         "dark_mode": cfg.dark_mode,
-        "send_email": cfg.send_email,
-        "email_to": cfg.email_to,
         "discord_token_set": !cfg.discord_bot_token.is_empty(),
         "discord_log_channel_id": cfg.discord_log_channel_id,
         "discord_cmd_channel_id": cfg.discord_cmd_channel_id,

@@ -29,8 +29,6 @@
   type EffectiveConfig = {
     ffmpeg_path: string;
     dark_mode: boolean;
-    send_email: boolean;
-    email_to: string;
     discord_token_set: boolean;
     discord_log_channel_id: string;
     discord_cmd_channel_id: string;
@@ -46,8 +44,6 @@
   type SavedConfig = {
     ffmpeg_path: string;
     dark_mode: boolean;
-    send_email: boolean;
-    email_to: string;
     discord_bot_token: string;
     discord_log_channel_id: string;
     discord_cmd_channel_id: string;
@@ -163,8 +159,6 @@
   let form = $state<SavedConfig>({
     ffmpeg_path: "",
     dark_mode: true,
-    send_email: false,
-    email_to: "",
     discord_bot_token: "",
     discord_log_channel_id: "",
     discord_cmd_channel_id: "",
@@ -224,8 +218,6 @@
         ...form,
         ffmpeg_path: g("ffmpeg_path", "ffmpegPath") ?? form.ffmpeg_path,
         dark_mode: g("dark_mode", "darkMode") ?? form.dark_mode,
-        send_email: g("send_email", "sendEmail") ?? form.send_email,
-        email_to: g("email_to", "emailTo") ?? form.email_to,
         discord_bot_token:
           g("discord_bot_token", "discordBotToken") ?? form.discord_bot_token,
         discord_log_channel_id:
@@ -299,8 +291,6 @@
     return {
       ffmpeg_path: form.ffmpeg_path,
       dark_mode: form.dark_mode,
-      send_email: form.send_email,
-      email_to: form.email_to,
       discord_bot_token: form.discord_bot_token,
       discord_log_channel_id: form.discord_log_channel_id,
       discord_cmd_channel_id: form.discord_cmd_channel_id,

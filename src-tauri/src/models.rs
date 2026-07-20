@@ -113,8 +113,6 @@ pub struct EncodeSummary {
 pub struct AppConfig {
     pub ffmpeg_path: String,
     pub dark_mode: bool,
-    pub send_email: bool,
-    pub email_to: String,
     pub discord_bot_token: String,
     pub discord_log_channel_id: String,
     pub discord_cmd_channel_id: String,
@@ -146,8 +144,6 @@ impl Default for AppConfig {
         Self {
             ffmpeg_path: r"C:\Outil\ffmpeg\bin\ffmpeg.exe".to_string(),
             dark_mode: true,
-            send_email: false,
-            email_to: String::new(),
             discord_bot_token: String::new(),
             discord_log_channel_id: String::new(),
             discord_cmd_channel_id: String::new(),
@@ -324,15 +320,6 @@ pub struct CleanedName {
     pub edition: String,
     pub audio_tags: String,
     pub suggested: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EmailConfig {
-    pub smtp_host: String,
-    pub smtp_port: u16,
-    pub username: String,
-    pub password: String,
-    pub to: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

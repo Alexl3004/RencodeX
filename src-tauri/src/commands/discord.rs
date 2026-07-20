@@ -1,10 +1,9 @@
-//! Commandes liées aux notifications Discord et email
+//! Commandes liées aux notifications Discord
 
-use crate::models::{AppConfig, EmailConfig, EncodeSummary};
+use crate::models::{AppConfig, EncodeSummary};
 use crate::services::notify::{
     discord_notify, discord_notify_start, discord_notify_file_done,
     discord_notify_error, discord_notify_stats, discord_notify_progress,
-    send_email_report as send_email_report_impl,
 };
 use super::settings::load_config;
 
@@ -133,12 +132,4 @@ pub async fn send_discord_stats_notification(
     let (token, chan) = resolve_discord_creds(bot_token, log_channel_id)?;
     discord_notify_stats(&token, &chan, total_files, total_original_mb, total_encoded_mb, total_duration_secs).await;
     Ok(())
-}
-
-#[tauri::command]
-pub async fn send_email_report(
-    summary: EncodeSummary,
-    email_cfg: EmailConfig,
-) -> Result<(), String> {
-    send_email_report_impl(summary, email_cfg).await
 }

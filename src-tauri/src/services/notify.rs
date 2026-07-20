@@ -1,4 +1,4 @@
-use crate::models::{EncodeSummary, EmailConfig};
+use crate::models::EncodeSummary;
 use once_cell::sync::Lazy;
 use std::time::Duration;
 
@@ -523,56 +523,4 @@ pub async fn discord_notify_progress(
     });
 
     send_discord_message(token, channel_id, &payload).await;
-}
-
-pub async fn send_email_report(
-    summary: EncodeSummary,
-    email_cfg: EmailConfig,
-) -> Result<(), String> {
-    use lettre::transport::smtp::authentication::Credentials;
-    use lettre::{Message, SmtpTransport, Transport};
-
-    let total = summary.files.len();
-    let success = summary.files.iter().filter(|f| f.status == "ok").count();
-    let gain_pct = if summary.total_original_mb > 0.0 {
-        100.0 * (summary.total_original_mb - summary.total_encoded_mb)
-            / summary.total_original_mb
-    } else { 0.0 };
-
-    let mut body = format!(
-        "Encodage terminé ✅\n\nRÉSUMÉ:\n\
-         - Fichiers traités : {total}\n\
-         - Réussis          : {success}\n\
-         - Taille avant     : {:.2} MB\n\
-         - Taille après     : {:.2} MB\n\
-         - Gain             : {gain_pct:.1}%\n\n",
-        summary.total_original_mb, summary.total_encoded_mb,
-    );
-    for f in &summary.files {
-        body.push_str(&format!(
-            "{} - {} ({:.1}% gain)\n", f.name, f.status,
-            if f.original_mb > 0.0 {
-                100.0 * (f.original_mb - f.encoded_mb) / f.original_mb
-            } else { 0.0 }
-        ));
-    }
-
-    let email = Message::builder()
-        .from(email_cfg.username.parse()
-            .map_err(|e: lettre::address::AddressError| e.to_string())?)
-        .to(email_cfg.to.parse()
-            .map_err(|e: lettre::address::AddressError| e.to_string())?)
-        .subject("📦 RenCodeX - Encodage terminé")
-        .body(body)
-        .map_err(|e| e.to_string())?;
-
-    let creds = Credentials::new(email_cfg.username, email_cfg.password);
-    let mailer = SmtpTransport::relay(&email_cfg.smtp_host)
-        .map_err(|e| e.to_string())?
-        .credentials(creds)
-        .port(email_cfg.smtp_port)
-        .build();
-
-    mailer.send(&email).map_err(|e| e.to_string())?;
-    Ok(())
 }

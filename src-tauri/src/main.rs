@@ -204,7 +204,6 @@ fn main() {
             commands::discord::send_discord_error_notification,
             commands::discord::send_discord_stats_notification,
             commands::discord::send_discord_progress_notification,
-            commands::discord::send_email_report,
         ])
         .setup(move |app| {
             if !cfg.discord_bot_token.is_empty()
