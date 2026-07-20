@@ -124,20 +124,30 @@ pub fn ffprobe_path() -> PathBuf {
 
 #[allow(dead_code)]
 pub fn resolve_config(mut cfg: crate::models::AppConfig) -> crate::models::AppConfig {
+    // FFmpeg : l'env var reste prioritaire (utile en CI/CD ou conteneur).
     if let Ok(v) = std::env::var("RENCODEX_FFMPEG_PATH") {
         if !v.is_empty() { cfg.ffmpeg_path = v; }
     }
-    if let Ok(v) = std::env::var("RENCODEX_DISCORD_TOKEN") {
-        if !v.is_empty() {
-            cfg.discord_bot_token = v;
-            cfg.discord_enabled = true;
+    // Discord : le fichier config est prioritaire.
+    // L'env var ne sert que de fallback si le champ est vide dans le config,
+    // afin d'éviter qu'une variable système obsolète écrase le bon token.
+    if cfg.discord_bot_token.is_empty() {
+        if let Ok(v) = std::env::var("RENCODEX_DISCORD_TOKEN") {
+            if !v.is_empty() {
+                cfg.discord_bot_token = v;
+                cfg.discord_enabled = true;
+            }
         }
     }
-    if let Ok(v) = std::env::var("RENCODEX_DISCORD_LOG_CHANNEL") {
-        if !v.is_empty() { cfg.discord_log_channel_id = v; }
+    if cfg.discord_log_channel_id.is_empty() {
+        if let Ok(v) = std::env::var("RENCODEX_DISCORD_LOG_CHANNEL") {
+            if !v.is_empty() { cfg.discord_log_channel_id = v; }
+        }
     }
-    if let Ok(v) = std::env::var("RENCODEX_DISCORD_CMD_CHANNEL") {
-        if !v.is_empty() { cfg.discord_cmd_channel_id = v; }
+    if cfg.discord_cmd_channel_id.is_empty() {
+        if let Ok(v) = std::env::var("RENCODEX_DISCORD_CMD_CHANNEL") {
+            if !v.is_empty() { cfg.discord_cmd_channel_id = v; }
+        }
     }
     cfg
 }

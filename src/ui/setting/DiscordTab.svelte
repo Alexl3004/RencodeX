@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Eye, EyeOff, Check, X } from "@lucide/svelte";
+  import { Check, X } from "@lucide/svelte";
   import NotifRow from "./NotifRow.svelte";
 
   type FieldDef = { id: string; label: string };
@@ -99,8 +99,6 @@
     textareaRefs: Record<string, HTMLTextAreaElement>;
   } = $props();
 
-  let showToken = $state(false);
-
   // Vrai si le token actif vient de la variable d'environnement
   // (token défini en env mais champ du formulaire vide).
   let discordFromEnv = $derived(
@@ -145,34 +143,7 @@
       </div>
     {/if}
 
-    <!-- Bot token -->
-    <div>
-      <label for="discord-token" class="field-label">Token du bot</label>
-      <div class="relative">
-        <input
-          id="discord-token"
-          type={showToken ? "text" : "password"}
-          bind:value={form.discord_bot_token}
-          disabled={discordFromEnv}
-          placeholder="MTEx…"
-          class="field-input w-full px-3 py-2 pr-9"
-        />
-        <button
-          onclick={() => (showToken = !showToken)}
-          type="button"
-          class="absolute right-2 top-1/2 -translate-y-1/2 icon-btn-inline"
-          aria-label={showToken ? "Masquer le token" : "Afficher le token"}
-        >
-          {#if showToken}
-            <EyeOff class="w-3.5 h-3.5" aria-hidden="true" />
-          {:else}
-            <Eye class="w-3.5 h-3.5" aria-hidden="true" />
-          {/if}
-        </button>
-      </div>
-    </div>
-
-    <!-- Channels -->
+    <!-- Salon de logs uniquement (token + salon de commandes gérés dans l'onglet Bot) -->
     <div>
       <label for="discord-log-channel" class="field-label">Salon de logs</label>
       <input
@@ -182,18 +153,9 @@
         placeholder="ID du salon"
         class="field-input w-full px-3 py-2"
       />
-    </div>
-    <div>
-      <label for="discord-cmd-channel" class="field-label"
-        >Salon de commandes</label
-      >
-      <input
-        id="discord-cmd-channel"
-        type="text"
-        bind:value={form.discord_cmd_channel_id}
-        placeholder="ID du salon"
-        class="field-input w-full px-3 py-2"
-      />
+      <p class="field-hint">
+        Le token du bot et le salon de commandes se configurent dans l'onglet <strong>Bot</strong>.
+      </p>
     </div>
 
     <!-- Notifications -->
@@ -316,6 +278,14 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .field-hint {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    margin-top: 5px;
+    line-height: 1.5;
+  }
+  .field-hint strong { font-weight: 600; color: var(--color-text); }
 
   .toggle-row {
     display: flex;
@@ -324,19 +294,6 @@
     cursor: pointer;
   }
 
-  .icon-btn-inline {
-    color: var(--color-subtext);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.1s;
-  }
-  .icon-btn-inline:hover {
-    color: var(--color-text);
-  }
 
   .notif-grid {
     display: grid;

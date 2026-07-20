@@ -6,6 +6,7 @@
     RefreshCw, Wifi, WifiOff, Bot, Hash, Key, Activity,
     Pause, Play, Square, SkipForward, Terminal, Clock,
     ChevronDown, ChevronRight, Zap, AlertTriangle,
+    Eye, EyeOff, Save,
   } from "@lucide/svelte";
 
   // ── Types ────────────────────────────────────────────────────────────────────
@@ -26,9 +27,16 @@
     discordEnabled: boolean;
     discordBotToken: string;
     discordCmdChannelId: string;
+    onConfigChange?: (token: string, channelId: string, enabled: boolean) => void;
   };
 
-  let { discordEnabled, discordBotToken, discordCmdChannelId }: Props = $props();
+  let { discordEnabled, discordBotToken, discordCmdChannelId, onConfigChange }: Props = $props();
+
+  // Champs locaux éditables — initialisés depuis les props dans onMount
+  let localToken     = $state("");
+  let localChannelId = $state("");
+  let showToken      = $state(false);
+  let savingCreds    = $state(false);
 
   // ── Constantes de persistance (cache UI seulement) ───────────────────────
   // La source de vérité est get_bot_status() côté Rust.
@@ -128,6 +136,10 @@
   }
 
   onMount(async () => {
+    // Initialisation des champs locaux depuis les props
+    localToken     = discordBotToken;
+    localChannelId = discordCmdChannelId;
+
     // ── Source de vérité : interroger Rust directement ──────────────────────
     // get_bot_status() retourne l'état courant des globaux BOT_CONNECTED /
     // BOT_NAME mis à jour par le handler `ready` du bot.
@@ -158,7 +170,7 @@
         connectedSince = null;
         localStorage.removeItem(LS_SINCE_KEY);
 
-        if (!discordEnabled || !discordBotToken) {
+        if (!discordEnabled || !localToken) {
           addLog("Bot désactivé ou token manquant.", "info");
         } else {
           // Activé + token présent mais pas encore connecté → en cours de connexion.
@@ -243,6 +255,28 @@
 
   // ── Redémarrage ─────────────────────────────────────────────────────────────
 
+  async function saveCredentials() {
+    if (savingCreds) return;
+    savingCreds = true;
+    try {
+      const currentCfg = await invoke<Record<string, unknown>>("load_config");
+      await invoke("save_config", {
+        config: {
+          ...currentCfg,
+          discord_bot_token: localToken,
+          discord_cmd_channel_id: localChannelId,
+          discord_enabled: discordEnabled,
+        },
+      });
+      onConfigChange?.(localToken, localChannelId, discordEnabled);
+      addLog("Identifiants sauvegardés.", "success");
+    } catch (e) {
+      addLog(`Erreur sauvegarde : ${e}`, "error");
+    } finally {
+      savingCreds = false;
+    }
+  }
+
   async function restartBot() {
     if (restarting) return;
     restarting = true;
@@ -253,11 +287,12 @@
       await invoke("save_config", {
         config: {
           ...currentCfg,
-          discord_bot_token: discordBotToken,
-          discord_cmd_channel_id: discordCmdChannelId,
+          discord_bot_token: localToken,
+          discord_cmd_channel_id: localChannelId,
           discord_enabled: discordEnabled,
         },
       });
+      onConfigChange?.(localToken, localChannelId, discordEnabled);
       addLog("Signal de redémarrage envoyé", "info");
     } catch (e) {
       addLog(`Erreur redémarrage : ${e}`, "error");
@@ -293,11 +328,16 @@
   );
 
   let maskedToken = $derived(
-    discordBotToken.length > 12
-      ? discordBotToken.slice(0, 6) + "•".repeat(20) + discordBotToken.slice(-4)
-      : discordBotToken
-        ? "•".repeat(discordBotToken.length)
+    localToken.length > 12
+      ? localToken.slice(0, 6) + "•".repeat(20) + localToken.slice(-4)
+      : localToken
+        ? "•".repeat(localToken.length)
         : "—"
+  );
+
+  // Détecter si les champs ont changé par rapport aux props reçues
+  let credsDirty = $derived(
+    localToken !== discordBotToken || localChannelId !== discordCmdChannelId
   );
 
   let progressFilled = $derived(
@@ -349,45 +389,92 @@
 
     <button
       onclick={restartBot}
-      disabled={restarting || !discordEnabled || !discordBotToken}
+      disabled={restarting || !discordEnabled || !localToken}
       class="restart-btn"
       aria-label="Redémarrer le bot"
-      title={!discordEnabled || !discordBotToken ? "Bot désactivé ou token manquant" : "Redémarrer le bot"}
+      title={!discordEnabled || !localToken ? "Bot désactivé ou token manquant" : "Redémarrer le bot"}
     >
       <RefreshCw class="w-3.5 h-3.5 {restarting ? 'animate-spin' : ''}" />
       {restarting ? "…" : "Redémarrer"}
     </button>
   </div>
 
-  <!-- ── Infos de connexion ─────────────────────────────────────────────────── -->
-  <div class="info-grid">
-    <div class="info-row">
-      <div class="info-icon"><Key class="w-3.5 h-3.5" /></div>
-      <div class="info-content">
-        <span class="info-label">Token</span>
-        <span class="info-value font-mono">{maskedToken}</span>
-      </div>
-      <div class="info-badge" class:badge-ok={!!discordBotToken} class:badge-missing={!discordBotToken}>
-        {discordBotToken ? "Défini" : "Manquant"}
-      </div>
+  <!-- ── Identifiants du bot ────────────────────────────────────────────────── -->
+  <div class="creds-section">
+    <div class="creds-header">
+      <Key class="w-3.5 h-3.5" style="color: var(--color-accent)" />
+      <span class="creds-title">Identifiants du bot</span>
     </div>
 
-    <div class="info-row">
-      <div class="info-icon"><Hash class="w-3.5 h-3.5" /></div>
-      <div class="info-content">
-        <span class="info-label">Salon de commandes</span>
-        <span class="info-value font-mono">{discordCmdChannelId || "—"}</span>
+    <div class="creds-body">
+      <!-- Token -->
+      <div class="cred-field">
+        <label for="bot-token" class="cred-label">Token du bot</label>
+        <div class="cred-input-wrap">
+          <input
+            id="bot-token"
+            type={showToken ? "text" : "password"}
+            bind:value={localToken}
+            placeholder="MTEx…"
+            class="cred-input"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button
+            type="button"
+            onclick={() => (showToken = !showToken)}
+            class="cred-eye"
+            aria-label={showToken ? "Masquer le token" : "Afficher le token"}
+          >
+            {#if showToken}
+              <EyeOff class="w-3.5 h-3.5" />
+            {:else}
+              <Eye class="w-3.5 h-3.5" />
+            {/if}
+          </button>
+        </div>
+        <div class="cred-badge-row">
+          <span class="info-badge" class:badge-ok={!!localToken} class:badge-missing={!localToken}>
+            {localToken ? "Défini" : "Manquant"}
+          </span>
+        </div>
       </div>
-      <div class="info-badge" class:badge-ok={!!discordCmdChannelId} class:badge-missing={!discordCmdChannelId}>
-        {discordCmdChannelId ? "Configuré" : "Manquant"}
-      </div>
-    </div>
 
-    <div class="info-row">
-      <div class="info-icon"><Activity class="w-3.5 h-3.5" /></div>
-      <div class="info-content">
-        <span class="info-label">Supervision</span>
-        <span class="info-value">Redémarrage automatique · backoff 5s → 5min</span>
+      <!-- Salon de commandes -->
+      <div class="cred-field">
+        <label for="bot-cmd-channel" class="cred-label">Salon de commandes</label>
+        <input
+          id="bot-cmd-channel"
+          type="text"
+          bind:value={localChannelId}
+          placeholder="ID du salon (ex : 1234567890)"
+          class="cred-input"
+          autocomplete="off"
+          inputmode="numeric"
+        />
+        <div class="cred-badge-row">
+          <span class="info-badge" class:badge-ok={!!localChannelId} class:badge-missing={!localChannelId}>
+            {localChannelId ? "Configuré" : "Manquant"}
+          </span>
+        </div>
+      </div>
+
+      <!-- Supervision info + bouton save -->
+      <div class="creds-footer">
+        <div class="info-row-inline">
+          <Activity class="w-3 h-3" style="color: var(--color-subtext)" />
+          <span class="cred-note">Redémarrage automatique · backoff 5s → 5min</span>
+        </div>
+        <button
+          type="button"
+          onclick={saveCredentials}
+          disabled={savingCreds || !credsDirty}
+          class="save-creds-btn"
+          title={credsDirty ? "Sauvegarder les identifiants" : "Aucune modification"}
+        >
+          <Save class="w-3.5 h-3.5" />
+          {savingCreds ? "…" : "Sauvegarder"}
+        </button>
       </div>
     </div>
   </div>
@@ -674,6 +761,145 @@
     background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel));
   }
   .restart-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Credentials section ─────────────────────────────────────────────────── */
+
+  .creds-section {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .creds-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--color-panel);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .creds-title {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-subtext);
+  }
+
+  .creds-body {
+    background: var(--color-surface);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .cred-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .cred-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-subtext);
+  }
+
+  .cred-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .cred-input {
+    width: 100%;
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    border-radius: var(--radius-sm);
+    padding: 7px 36px 7px 10px;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .cred-input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .cred-eye {
+    position: absolute;
+    right: 8px;
+    color: var(--color-subtext);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.1s;
+    padding: 0;
+  }
+  .cred-eye:hover { color: var(--color-text); }
+
+  /* Input sans bouton œil */
+  .cred-field > .cred-input {
+    padding: 7px 10px;
+  }
+
+  .cred-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .creds-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .info-row-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .cred-note {
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .save-creds-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    color: var(--color-accent);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.12s, opacity 0.12s;
+  }
+  .save-creds-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  }
+  .save-creds-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
   /* ── Info grid ───────────────────────────────────────────────────────────── */
 

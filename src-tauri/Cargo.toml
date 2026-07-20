@@ -24,25 +24,32 @@ log                       = "0.4"
 env_logger                = "0.11"
 once_cell                 = "1"
 anyhow                    = "1"
-lettre                    = { version = "0.11", features = ["smtp-transport", "native-tls"] }
+lettre                    = { version = "0.11", features = ["smtp-transport", "rustls-tls"] }
 dirs                      = "5"
-reqwest                   = { version = "0.12", features = ["json"] }
+reqwest                   = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 chrono                    = { version = "0.4", features = ["serde"] }
-serenity = { version = "0.12", default-features = false, features = [
-    "client",
-    "gateway",
-    "native_tls_backend",
-    "model",
-    "cache",
-] }
-native-tls = "0.2"
-sea-orm = { version = "1", features = ["sqlx-sqlite", "runtime-tokio-native-tls", "macros"] }
-sea-orm-migration = "1"
-windows = { version = "0.58", features = [
+sea-orm                   = { version = "1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration         = "1"
+windows                   = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_Threading",
     "Win32_System_LibraryLoader",
 ] }
+
+# ── Discord — twilight (remplace serenity) ────────────────────────────────────
+# rustls-native-roots utilise le magasin de certificats Windows (SChannel) :
+# pas besoin d'OpenSSL ni de vcpkg. Fonctionne out-of-the-box sur Windows MSVC.
+twilight-gateway          = { version = "0.16", default-features = false, features = ["rustls-native-roots"] }
+twilight-http             = { version = "0.16", default-features = false, features = ["rustls-native-roots"] }
+twilight-model            = "0.16"
+twilight-util             = { version = "0.16", features = ["builder"] }
+
+# tokio-websockets est tiré par twilight-gateway ; on force rustls pour éviter openssl-sys
+tokio-websockets          = { version = "0.11", default-features = false, features = ["client", "rustls-webpki-roots", "sha1_smol"] }
+
+# Crypto provider pour rustls — doit être installé avant toute connexion TLS.
+# ring est léger et ne nécessite pas de dépendance système (pas d'OpenSSL, pas d'aws-lc-rs).
+rustls                    = { version = "0.23", features = ["ring"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -30,12 +30,11 @@ fn bot_token_slot() -> &'static Mutex<Option<CancellationToken>> {
 fn spawn_bot_supervisor(token: String, channel_id: u64, app: tauri::AppHandle) {
     let cancel = CancellationToken::new();
     let mut guard = bot_token_slot().lock().unwrap();
-    // Signale l'arrêt gracieux à l'instance précédente, si elle existe.
     if let Some(old) = guard.take() {
         old.cancel();
     }
     *guard = Some(cancel.clone());
-    drop(guard); // libère le mutex avant de spawner
+    drop(guard);
 
     tauri::async_runtime::spawn(supervise_discord_bot(token, channel_id, app, cancel));
 }
@@ -43,11 +42,13 @@ fn spawn_bot_supervisor(token: String, channel_id: u64, app: tauri::AppHandle) {
 // ── Supervision du bot Discord ────────────────────────────────────────────────
 
 /// Lance le bot Discord avec redémarrage automatique sur erreur.
-/// Chaque tentative attend `backoff` avant de redémarrer, avec un plafond
-/// de 5 minutes. Le bot tourne sur le runtime Tauri (pas de runtime dédié).
 ///
-/// `cancel` permet un arrêt gracieux : dès qu'il est déclenché, la boucle
-/// attend la fin propre de `discord_bot::start` puis retourne sans redémarrer.
+/// Avec twilight, `start()` gère lui-même l'annulation via `session_cancel` :
+/// dès que `cancel` est déclenché, `session_cancel` l'est aussi (via le watcher
+/// ci-dessous), ce qui provoque la fermeture propre du shard dans `start()`.
+/// On attend simplement que `start()` revienne, puis on sort sans redémarrer.
+///
+/// Backoff exponentiel plafonné à 5 min entre chaque tentative ratée.
 async fn supervise_discord_bot(
     token: String,
     channel_id: u64,
@@ -58,13 +59,22 @@ async fn supervise_discord_bot(
     let mut backoff_secs: u64 = 5;
     let mut current_token = token;
     let mut current_channel = channel_id;
+    let mut consecutive_auth_failures: u32 = 0;
+
+    // Délai initial court : laisse le réseau s'initialiser.
+    // Twilight établit la connexion TLS + WebSocket lui-même ; 3s suffisent
+    // dans la grande majorité des cas (vs 10s nécessaires avec Serenity).
+    tokio::select! {
+        _ = cancel.cancelled() => return,
+        _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {}
+    }
 
     loop {
         eprintln!("[Discord bot] Démarrage…");
 
-        // Token de session indépendant : annulé par le watcher ci-dessous
-        // quand le parent est cancelled, mais jamais déjà-annulé à la
-        // construction (contrairement à child_token() sur un token cancelled).
+        // session_cancel est un token indépendant propagé à start().
+        // Un watcher le déclenche dès que le parent (cancel) est annulé,
+        // ce qui provoque la fermeture propre du shard dans start().
         let session_cancel = CancellationToken::new();
         {
             let parent = cancel.clone();
@@ -75,29 +85,40 @@ async fn supervise_discord_bot(
             });
         }
 
-        let result = tokio::select! {
-            // Annulation demandée — on attend que `start` revienne proprement.
-            _ = cancel.cancelled() => {
-                eprintln!("[Discord bot] Arrêt gracieux demandé, attente fermeture gateway…");
-                services::discord_bot::start(
-                    current_token.clone(), current_channel, app.clone(),
-                    session_cancel,
-                ).await;
-                eprintln!("[Discord bot] Gateway fermée, supervision arrêtée.");
-                return;
-            }
-            r = services::discord_bot::start(
-                current_token.clone(), current_channel, app.clone(),
-                session_cancel.clone(),
-            ) => r,
-        };
+        // Appel unique à start() — pas de select! double.
+        // start() revient dès que le shard se déconnecte (proprement ou sur erreur).
+        let result = services::discord_bot::start(
+            current_token.clone(),
+            current_channel,
+            app.clone(),
+            session_cancel,
+        ).await;
 
-        if let Some(fatal) = result {
-            eprintln!("[Discord bot] Erreur fatale, supervision arrêtée : {fatal}");
+        // Si cancel a été déclenché pendant start(), on sort sans redémarrer.
+        if cancel.is_cancelled() {
+            eprintln!("[Discord bot] Supervision arrêtée (arrêt gracieux).");
             return;
         }
 
-        // Arrêt demandé pendant le délai de backoff → sortie immédiate.
+        if let Some(fatal_msg) = result {
+            consecutive_auth_failures += 1;
+            eprintln!(
+                "[Discord bot] Échec connexion ({}) : {}",
+                consecutive_auth_failures, fatal_msg
+            );
+            // Fatale après 5 échecs consécutifs (token invalide, config erronée…)
+            if consecutive_auth_failures >= 5 {
+                eprintln!(
+                    "[Discord bot] Supervision arrêtée après {} échecs consécutifs.",
+                    consecutive_auth_failures
+                );
+                return;
+            }
+        } else {
+            // Connexion réussie puis perdue → réinitialiser le compteur
+            consecutive_auth_failures = 0;
+        }
+
         eprintln!("[Discord bot] Déconnecté. Nouvelle tentative dans {}s.", backoff_secs);
         tokio::select! {
             _ = cancel.cancelled() => {
@@ -122,8 +143,20 @@ async fn supervise_discord_bot(
 // ── Point d'entrée ────────────────────────────────────────────────────────────
 
 fn main() {
+    // Installer le crypto provider rustls (ring) avant toute connexion TLS.
+    // Sans ça, rustls panic avec "No default crypto provider installed".
+    // Doit être fait une seule fois, avant db::init() et avant le runtime Tauri.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Impossible d'installer le crypto provider rustls");
+
     tauri::async_runtime::block_on(db::init());
     let cfg = resolve_config(load_config());
+
+
+
+    // Plus de set_var pour RENCODEX_DISCORD_TOKEN : le fichier config est
+    // désormais prioritaire sur l'env var (voir resolve_config dans utils.rs).
     if !std::path::Path::new(&cfg.ffmpeg_path).exists() {
         eprintln!(
             "[startup] AVERTISSEMENT : ffmpeg introuvable à « {} ».\n\
@@ -158,7 +191,7 @@ fn main() {
             commands::encoding::pause_encoding,
             commands::encoding::resume_encoding,
             commands::encoding::get_paused,
-            commands::encoding::skip_encoding, 
+            commands::encoding::skip_encoding,
             // files
             commands::files::get_default_output_dir,
             commands::files::list_subtitle_tracks,
@@ -174,8 +207,7 @@ fn main() {
             commands::discord::send_email_report,
         ])
         .setup(move |app| {
-            if cfg.discord_enabled
-                && !cfg.discord_bot_token.is_empty()
+            if !cfg.discord_bot_token.is_empty()
                 && !cfg.discord_cmd_channel_id.is_empty()
             {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
@@ -185,19 +217,24 @@ fn main() {
                 }
             }
 
-            // Redémarrer le bot quand la config est sauvegardée
+            // Redémarrer (ou arrêter) le bot quand la config est sauvegardée
             let app_handle = app.handle().clone();
             app.listen("config-saved", move |_| {
                 let app2 = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let cfg = resolve_config(load_config());
-                    if cfg.discord_enabled
-                        && !cfg.discord_bot_token.is_empty()
+                    if !cfg.discord_bot_token.is_empty()
                         && !cfg.discord_cmd_channel_id.is_empty()
                     {
                         if let Ok(id) = cfg.discord_cmd_channel_id.parse::<u64>() {
                             eprintln!("[Discord bot] Config mise à jour, redémarrage…");
                             spawn_bot_supervisor(cfg.discord_bot_token, id, app2);
+                        }
+                    } else {
+                        let mut guard = bot_token_slot().lock().unwrap();
+                        if let Some(old) = guard.take() {
+                            eprintln!("[Discord bot] Config mise à jour, arrêt du bot…");
+                            old.cancel();
                         }
                     }
                 });

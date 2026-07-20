@@ -541,6 +541,11 @@
           discordEnabled={form.discord_enabled}
           discordBotToken={form.discord_bot_token}
           discordCmdChannelId={form.discord_cmd_channel_id}
+          onConfigChange={(token, channelId, enabled) => {
+            form.discord_bot_token = token;
+            form.discord_cmd_channel_id = channelId;
+            form.discord_enabled = enabled;
+          }}
         />
       {/if}
     </div>
