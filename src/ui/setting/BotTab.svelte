@@ -27,16 +27,19 @@
     discordEnabled: boolean;
     discordBotToken: string;
     discordCmdChannelId: string;
-    onConfigChange?: (token: string, channelId: string, enabled: boolean) => void;
+    discordLogChannelId: string;
+    discordBotStopped: boolean;
+    onConfigChange?: (token: string, cmdChannelId: string, logChannelId: string, enabled: boolean, botStopped: boolean) => void;
   };
 
-  let { discordEnabled, discordBotToken, discordCmdChannelId, onConfigChange }: Props = $props();
+  let { discordEnabled, discordBotToken, discordCmdChannelId, discordLogChannelId, discordBotStopped, onConfigChange }: Props = $props();
 
   // Champs locaux éditables — initialisés depuis les props dans onMount
-  let localToken     = $state("");
-  let localChannelId = $state("");
-  let showToken      = $state(false);
-  let savingCreds    = $state(false);
+  let localToken      = $state("");
+  let localChannelId  = $state("");
+  let localLogChannel = $state("");
+  let showToken       = $state(false);
+  let savingCreds     = $state(false);
 
   // ── Constantes de persistance (cache UI seulement) ───────────────────────
   // La source de vérité est get_bot_status() côté Rust.
@@ -52,10 +55,15 @@
   // puis écrasée immédiatement par get_bot_status() dans onMount.
   const storedStatus = (localStorage.getItem(LS_STATUS_KEY) ?? "disconnected") as BotStatus;
 
-  let status    = $state<BotStatus>(storedStatus);
-  let botName   = $state<string | null>(localStorage.getItem(LS_BOTNAME_KEY));
-  let lastError = $state<string | null>(null);
-  let restarting = $state(false);
+  let status       = $state<BotStatus>(storedStatus);
+  let botName      = $state<string | null>(localStorage.getItem(LS_BOTNAME_KEY));
+  let lastError    = $state<string | null>(null);
+  let restarting   = $state(false);
+  let stopping     = $state(false);
+  let starting     = $state(false);
+  /** true = l'utilisateur a arrêté le bot manuellement depuis l'UI */
+  let botStopped   = $state(false);
+  let reconnectCount = $state(0);
   let logs      = $state<{ time: string; msg: string; type: "info" | "error" | "success" }[]>([]);
 
   // Uptime
@@ -137,23 +145,24 @@
 
   onMount(async () => {
     // Initialisation des champs locaux depuis les props
-    localToken     = discordBotToken;
-    localChannelId = discordCmdChannelId;
+    localToken      = discordBotToken;
+    localChannelId  = discordCmdChannelId;
+    localLogChannel = discordLogChannelId;
+
+    // Restaurer l'état "arrêté manuellement" depuis la config persistée
+    if (discordBotStopped) {
+      botStopped = true;
+    }
 
     // ── Source de vérité : interroger Rust directement ──────────────────────
-    // get_bot_status() retourne l'état courant des globaux BOT_CONNECTED /
-    // BOT_NAME mis à jour par le handler `ready` du bot.
-    // C'est la seule façon fiable de connaître l'état réel au montage du
-    // composant, que ce soit la première ouverture ou un retour sur l'onglet.
     try {
       const s = await invoke<{ connected: boolean; name: string }>("get_bot_status");
       if (s.connected) {
-        status  = "connected";
-        botName = s.name || botName;
+        status    = "connected";
+        botName   = s.name || botName;
         lastError = null;
+        botStopped = false;
         if (!connectedSince) {
-          // On ne connaît pas l'heure exacte de connexion ; on la marque
-          // maintenant pour avoir un uptime relatif (sous-estimé mais exact).
           connectedSince = Date.now();
           localStorage.setItem(LS_SINCE_KEY, String(connectedSince));
         }
@@ -161,8 +170,6 @@
         startUptimeTimer();
         addLog(`Bot connecté en tant que ${botName ?? s.name}`, "success");
       } else {
-        // Le bot n'est pas connecté : corriger un éventuel cache localStorage
-        // périmé (ex: crash de la session précédente).
         if (status === "connected") {
           status = "disconnected";
           persistStatus("disconnected");
@@ -170,16 +177,16 @@
         connectedSince = null;
         localStorage.removeItem(LS_SINCE_KEY);
 
-        if (!discordEnabled || !localToken) {
-          addLog("Bot désactivé ou token manquant.", "info");
+        if (discordBotStopped) {
+          addLog("Bot arrêté (état restauré depuis la config).", "info");
+        } else if (!localToken) {
+          addLog("Token manquant.", "info");
         } else {
-          // Activé + token présent mais pas encore connecté → en cours de connexion.
           status = "connecting";
           addLog("Connexion en cours…", "info");
         }
       }
     } catch (e) {
-      // Commande indisponible (version Rust non mise à jour) → fallback gracieux.
       addLog("Impossible de vérifier le statut du bot.", "info");
     }
 
@@ -190,14 +197,19 @@
 
     unlisten.push(
       await listen<{ name: string }>("discord-bot-connected", (e) => {
+        const wasConnected = status === "connected";
         status = "connected";
         botName = e.payload.name;
         lastError = null;
+        botStopped = false;
         connectedSince = Date.now();
         localStorage.setItem(LS_SINCE_KEY, String(connectedSince));
         persistStatus("connected", botName);
         startUptimeTimer();
-        addLog(`Connecté en tant que ${e.payload.name}`, "success");
+        if (wasConnected) reconnectCount++;
+        addLog(reconnectCount > 0
+          ? `Reconnecté en tant que ${e.payload.name} (×${reconnectCount})`
+          : `Connecté en tant que ${e.payload.name}`, "success");
       }),
 
       await listen("discord-bot-disconnected", () => {
@@ -265,10 +277,12 @@
           ...currentCfg,
           discord_bot_token: localToken,
           discord_cmd_channel_id: localChannelId,
+          discord_log_channel_id: localLogChannel,
           discord_enabled: discordEnabled,
+          discord_bot_stopped: botStopped,
         },
       });
-      onConfigChange?.(localToken, localChannelId, discordEnabled);
+      onConfigChange?.(localToken, localChannelId, localLogChannel, discordEnabled, botStopped);
       addLog("Identifiants sauvegardés.", "success");
     } catch (e) {
       addLog(`Erreur sauvegarde : ${e}`, "error");
@@ -280,6 +294,7 @@
   async function restartBot() {
     if (restarting) return;
     restarting = true;
+    botStopped = false;
     status = "connecting";
     addLog("Redémarrage du bot…", "info");
     try {
@@ -289,16 +304,75 @@
           ...currentCfg,
           discord_bot_token: localToken,
           discord_cmd_channel_id: localChannelId,
+          discord_log_channel_id: localLogChannel,
           discord_enabled: discordEnabled,
+          discord_bot_stopped: false,
         },
       });
-      onConfigChange?.(localToken, localChannelId, discordEnabled);
+      onConfigChange?.(localToken, localChannelId, localLogChannel, discordEnabled, false);
       addLog("Signal de redémarrage envoyé", "info");
     } catch (e) {
       addLog(`Erreur redémarrage : ${e}`, "error");
       status = "disconnected";
     } finally {
       restarting = false;
+    }
+  }
+
+  async function stopBot() {
+    if (stopping) return;
+    stopping = true;
+    addLog("Arrêt du bot demandé…", "info");
+    try {
+      await invoke("stop_bot");
+      botStopped = true;
+      status = "disconnected";
+      botName = null;
+      connectedSince = null;
+      stopUptimeTimer();
+      uptimeStr = "—";
+      persistStatus("disconnected");
+      localStorage.removeItem(LS_SINCE_KEY);
+      // Persister discord_bot_stopped: true dans la config
+      const currentCfg = await invoke<Record<string, unknown>>("load_config");
+      await invoke("save_config", {
+        config: { ...currentCfg, discord_bot_stopped: true },
+      });
+      onConfigChange?.(localToken, localChannelId, localLogChannel, discordEnabled, true);
+      addLog("Bot arrêté manuellement.", "info");
+    } catch (e) {
+      addLog(`Erreur arrêt : ${e}`, "error");
+    } finally {
+      stopping = false;
+    }
+  }
+
+  async function startBot() {
+    if (starting || !localToken || !localChannelId) return;
+    starting = true;
+    botStopped = false;
+    status = "connecting";
+    addLog("Démarrage du bot…", "info");
+    try {
+      const currentCfg = await invoke<Record<string, unknown>>("load_config");
+      await invoke("start_bot", {
+        config: {
+          ...currentCfg,
+          discord_bot_token: localToken,
+          discord_cmd_channel_id: localChannelId,
+          discord_log_channel_id: localLogChannel,
+          discord_enabled: true,
+          discord_bot_stopped: false,
+        },
+      });
+      onConfigChange?.(localToken, localChannelId, localLogChannel, true, false);
+      addLog("Signal de démarrage envoyé.", "info");
+    } catch (e) {
+      addLog(`Erreur démarrage : ${e}`, "error");
+      status = "disconnected";
+      botStopped = true;
+    } finally {
+      starting = false;
     }
   }
 
@@ -337,13 +411,21 @@
 
   // Détecter si les champs ont changé par rapport aux props reçues
   let credsDirty = $derived(
-    localToken !== discordBotToken || localChannelId !== discordCmdChannelId
+    localToken !== discordBotToken ||
+    localChannelId !== discordCmdChannelId ||
+    localLogChannel !== discordLogChannelId
   );
 
   let progressFilled = $derived(
     progress ? Math.round((progress.percent / 100) * 20) : 0
   );
 </script>
+
+<svelte:head>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/ldrs/dist/auto/ring.js"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/ldrs/dist/auto/dot-pulse.js"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/ldrs/dist/auto/bouncy.js"></script>
+</svelte:head>
 
 <section class="content-section">
   <header class="section-header">
@@ -359,7 +441,7 @@
       {#if status === "connected"}
         <Wifi class="w-5 h-5" />
       {:else if status === "connecting"}
-        <Activity class="w-5 h-5 animate-pulse" />
+        <l-dot-pulse size="28" speed="1.3" color="var(--color-accent)"></l-dot-pulse>
       {:else if status === "error"}
         <AlertTriangle class="w-5 h-5" />
       {:else}
@@ -368,7 +450,12 @@
     </div>
 
     <div class="status-body">
-      <div class="status-label">{statusLabel}</div>
+      <div class="status-label">
+        {statusLabel}
+        {#if botStopped && status !== "connected"}
+          <span class="stopped-badge">Arrêté</span>
+        {/if}
+      </div>
       {#if botName}
         <div class="status-name">
           <Bot class="w-3 h-3" aria-hidden="true" />
@@ -377,6 +464,12 @@
       {/if}
       {#if lastError}
         <div class="status-error" title={lastError}>{lastError}</div>
+      {/if}
+      {#if reconnectCount > 0}
+        <div class="reconnect-count">
+          <RefreshCw class="w-2.5 h-2.5" />
+          {reconnectCount} reconnexion{reconnectCount > 1 ? "s" : ""}
+        </div>
       {/if}
     </div>
 
@@ -387,16 +480,57 @@
       </div>
     {/if}
 
-    <button
-      onclick={restartBot}
-      disabled={restarting || !discordEnabled || !localToken}
-      class="restart-btn"
-      aria-label="Redémarrer le bot"
-      title={!discordEnabled || !localToken ? "Bot désactivé ou token manquant" : "Redémarrer le bot"}
-    >
-      <RefreshCw class="w-3.5 h-3.5 {restarting ? 'animate-spin' : ''}" />
-      {restarting ? "…" : "Redémarrer"}
-    </button>
+    <!-- Actions bot -->
+    <div class="bot-actions">
+      {#if status === "connected" || status === "connecting"}
+        <!-- Arrêter -->
+        <button
+          onclick={stopBot}
+          disabled={stopping}
+          class="restart-btn restart-btn--danger"
+          aria-label="Arrêter le bot"
+          title="Arrêter le bot (supervision + connexion)"
+        >
+          <Square class="w-3.5 h-3.5" />
+          {#if stopping}
+            <l-ring size="10" stroke="1.5" color="currentColor"></l-ring>
+          {:else}
+            Arrêter
+          {/if}
+        </button>
+        <!-- Redémarrer -->
+        <button
+          onclick={restartBot}
+          disabled={restarting || !localToken}
+          class="restart-btn"
+          aria-label="Redémarrer le bot"
+          title="Redémarrer le bot"
+        >
+          <RefreshCw class="w-3.5 h-3.5 {restarting ? 'animate-spin' : ''}" />
+          {#if restarting}
+            <l-ring size="10" stroke="1.5" color="currentColor"></l-ring>
+          {:else}
+            Redémarrer
+          {/if}
+        </button>
+      {:else}
+        <!-- Démarrer -->
+        <button
+          onclick={startBot}
+          disabled={starting || !localToken || !localChannelId}
+          class="restart-btn restart-btn--start"
+          aria-label="Démarrer le bot"
+          title={!localToken || !localChannelId ? "Token ou salon manquant" : "Démarrer le bot"}
+        >
+          <Play class="w-3.5 h-3.5 {starting ? 'animate-pulse' : ''}" />
+          {#if starting}
+            <l-ring size="10" stroke="1.5" color="currentColor"></l-ring>
+          {:else}
+            Démarrer
+          {/if}
+        </button>
+      {/if}
+    </div>
   </div>
 
   <!-- ── Identifiants du bot ────────────────────────────────────────────────── -->
@@ -459,6 +593,25 @@
         </div>
       </div>
 
+      <!-- Salon de logs -->
+      <div class="cred-field">
+        <label for="bot-log-channel" class="cred-label">Salon de logs</label>
+        <input
+          id="bot-log-channel"
+          type="text"
+          bind:value={localLogChannel}
+          placeholder="ID du salon (ex : 1234567890)"
+          class="cred-input"
+          autocomplete="off"
+          inputmode="numeric"
+        />
+        <div class="cred-badge-row">
+          <span class="info-badge" class:badge-ok={!!localLogChannel} class:badge-missing={!localLogChannel}>
+            {localLogChannel ? "Configuré" : "Manquant"}
+          </span>
+        </div>
+      </div>
+
       <!-- Supervision info + bouton save -->
       <div class="creds-footer">
         <div class="info-row-inline">
@@ -473,17 +626,15 @@
           title={credsDirty ? "Sauvegarder les identifiants" : "Aucune modification"}
         >
           <Save class="w-3.5 h-3.5" />
-          {savingCreds ? "…" : "Sauvegarder"}
+          {#if savingCreds}
+            <l-ring size="10" stroke="1.5" color="currentColor"></l-ring>
+          {:else}
+            Sauvegarder
+          {/if}
         </button>
       </div>
     </div>
   </div>
-
-  {#if !discordEnabled}
-    <div class="notice notice-warn">
-      Le bot est désactivé. Activez Discord dans l'onglet <strong>Discord</strong> pour le démarrer.
-    </div>
-  {/if}
 
   <!-- ── Panneau de contrôle encodage ──────────────────────────────────────── -->
   <div class="control-panel">
@@ -550,7 +701,7 @@
         >
           <Pause class="w-3.5 h-3.5" />
           Pause
-          {#if actionBusy === "pause"}<span class="btn-spinner"></span>{/if}
+          {#if actionBusy === "pause"}<l-ring size="10" stroke="1.5" color="currentColor"></l-ring>{/if}
         </button>
       {:else}
         <button
@@ -561,7 +712,7 @@
         >
           <Play class="w-3.5 h-3.5" />
           Reprendre
-          {#if actionBusy === "resume"}<span class="btn-spinner"></span>{/if}
+          {#if actionBusy === "resume"}<l-ring size="10" stroke="1.5" color="currentColor"></l-ring>{/if}
         </button>
       {/if}
 
@@ -573,7 +724,7 @@
       >
         <SkipForward class="w-3.5 h-3.5" />
         Suivant
-        {#if actionBusy === "skip"}<span class="btn-spinner"></span>{/if}
+        {#if actionBusy === "skip"}<l-ring size="10" stroke="1.5" color="currentColor"></l-ring>{/if}
       </button>
 
       <button
@@ -584,7 +735,7 @@
       >
         <Square class="w-3.5 h-3.5" />
         Annuler
-        {#if actionBusy === "cancel"}<span class="btn-spinner"></span>{/if}
+        {#if actionBusy === "cancel"}<l-ring size="10" stroke="1.5" color="currentColor"></l-ring>{/if}
       </button>
     </div>
   </div>
@@ -979,7 +1130,6 @@
     background: color-mix(in srgb, var(--color-warning, #d4a017) 10%, transparent);
     border: 1px solid color-mix(in srgb, var(--color-warning, #d4a017) 25%, transparent);
   }
-  .notice strong { font-weight: 600; }
 
   /* ── Panneau de contrôle ─────────────────────────────────────────────────── */
 
@@ -1170,19 +1320,6 @@
     background: color-mix(in srgb, var(--color-danger, #e05c5c) 20%, var(--color-panel));
   }
 
-  .btn-spinner {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border: 1.5px solid currentColor;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    margin-left: 2px;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
   /* ── Référence commandes ─────────────────────────────────────────────────── */
 
   .commands-section {
@@ -1339,4 +1476,59 @@
   .log-msg { color: var(--color-text); }
   .log-entry--error   .log-msg { color: var(--color-danger, #e05c5c); }
   .log-entry--success .log-msg { color: var(--color-success); }
+
+  /* ── Bot actions (Stop / Start / Restart) ────────────────────────────────── */
+
+  .bot-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .restart-btn--danger {
+    background: color-mix(in srgb, var(--color-danger, #e05c5c) 12%, var(--color-panel));
+    border-color: color-mix(in srgb, var(--color-danger, #e05c5c) 30%, transparent) !important;
+    color: var(--color-danger, #e05c5c) !important;
+  }
+  .restart-btn--danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-danger, #e05c5c) 20%, var(--color-panel));
+  }
+
+  .restart-btn--start {
+    background: color-mix(in srgb, var(--color-success) 12%, var(--color-panel));
+    border-color: color-mix(in srgb, var(--color-success) 30%, transparent) !important;
+    color: var(--color-success) !important;
+  }
+  .restart-btn--start:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-success) 22%, var(--color-panel));
+  }
+
+  /* Badge "Arrêté" affiché dans status-label */
+  .stopped-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: "Geist Mono", monospace;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-subtext);
+    background: color-mix(in srgb, var(--color-subtext) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-subtext) 22%, transparent);
+    border-radius: 999px;
+    padding: 1px 7px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Compteur de reconnexions */
+  .reconnect-count {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    color: var(--color-subtext);
+    margin-top: 2px;
+  }
 </style>

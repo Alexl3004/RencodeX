@@ -180,6 +180,8 @@ fn main() {
             commands::settings::get_effective_config,
             commands::settings::get_discord_field_catalog,
             commands::settings::get_bot_status,
+            commands::settings::stop_bot,
+            commands::settings::start_bot,
             commands::settings::load_stats,
             commands::settings::save_stats,
             // encoding
@@ -206,7 +208,9 @@ fn main() {
             commands::discord::send_discord_progress_notification,
         ])
         .setup(move |app| {
-            if !cfg.discord_bot_token.is_empty()
+            // Ne démarrer le bot que si l'utilisateur ne l'a pas arrêté manuellement.
+            if !cfg.discord_bot_stopped
+                && !cfg.discord_bot_token.is_empty()
                 && !cfg.discord_cmd_channel_id.is_empty()
             {
                 if let Ok(cmd_channel_id) = cfg.discord_cmd_channel_id.parse::<u64>() {
@@ -216,13 +220,21 @@ fn main() {
                 }
             }
 
-            // Redémarrer (ou arrêter) le bot quand la config est sauvegardée
+            // Redémarrer (ou arrêter) le bot quand la config est sauvegardée.
+            // Respecte discord_bot_stopped : si true, stopper sans relancer.
             let app_handle = app.handle().clone();
             app.listen("config-saved", move |_| {
                 let app2 = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
                     let cfg = resolve_config(load_config());
-                    if !cfg.discord_bot_token.is_empty()
+                    if cfg.discord_bot_stopped {
+                        // L'utilisateur a demandé un arrêt : stopper la supervision.
+                        let mut guard = bot_token_slot().lock().unwrap();
+                        if let Some(old) = guard.take() {
+                            eprintln!("[Discord bot] Arrêt demandé (discord_bot_stopped), supervision stoppée.");
+                            old.cancel();
+                        }
+                    } else if !cfg.discord_bot_token.is_empty()
                         && !cfg.discord_cmd_channel_id.is_empty()
                     {
                         if let Ok(id) = cfg.discord_cmd_channel_id.parse::<u64>() {

@@ -59,6 +59,7 @@
     discord_fields: Record<string, string[]>;
     discord_custom_notes: Record<string, string>;
     output_dir_presets: string[];
+    discord_bot_stopped: boolean;
   };
 
   type FfmpegCheckResult = {
@@ -172,6 +173,7 @@
     discord_fields: {},
     discord_custom_notes: {},
     output_dir_presets: [],
+    discord_bot_stopped: false,
     nav_layout: "vertical",
     inner_nav_layout: "vertical",
   });
@@ -254,6 +256,9 @@
         output_dir_presets:
           g("output_dir_presets", "outputDirPresets") ??
           form.output_dir_presets,
+        discord_bot_stopped:
+          g("discord_bot_stopped", "discordBotStopped") ??
+          form.discord_bot_stopped,
         nav_layout: g("nav_layout", "navLayout") ?? form.nav_layout,
         inner_nav_layout:
           g("inner_nav_layout", "innerNavLayout") ?? form.inner_nav_layout,
@@ -304,6 +309,7 @@
       discord_fields: form.discord_fields,
       discord_custom_notes: form.discord_custom_notes,
       output_dir_presets: overridePresets ?? form.output_dir_presets,
+      discord_bot_stopped: form.discord_bot_stopped,
       nav_layout: form.nav_layout,
       inner_nav_layout: form.inner_nav_layout,
     };
@@ -531,10 +537,14 @@
           discordEnabled={form.discord_enabled}
           discordBotToken={form.discord_bot_token}
           discordCmdChannelId={form.discord_cmd_channel_id}
-          onConfigChange={(token, channelId, enabled) => {
+          discordLogChannelId={form.discord_log_channel_id}
+          discordBotStopped={form.discord_bot_stopped}
+          onConfigChange={(token, cmdChannelId, logChannelId, enabled, botStopped) => {
             form.discord_bot_token = token;
-            form.discord_cmd_channel_id = channelId;
+            form.discord_cmd_channel_id = cmdChannelId;
+            form.discord_log_channel_id = logChannelId;
             form.discord_enabled = enabled;
+            form.discord_bot_stopped = botStopped;
           }}
         />
       {/if}

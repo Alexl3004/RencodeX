@@ -137,6 +137,9 @@ pub struct AppConfig {
     /// Clés : "summary", "start", "file_done", "error", "progress".
     #[serde(default)]
     pub discord_custom_notes: HashMap<String, String>,
+    /// true = l'utilisateur a arrêté le bot manuellement ; ne pas redémarrer au prochain lancement.
+    #[serde(default)]
+    pub discord_bot_stopped: bool,
 }
 
 impl Default for AppConfig {
@@ -160,6 +163,7 @@ impl Default for AppConfig {
             output_dir_presets: Vec::new(),
             output_dir_history: Vec::new(),
             discord_custom_notes: HashMap::new(),
+            discord_bot_stopped: false,
         }
     }
 }

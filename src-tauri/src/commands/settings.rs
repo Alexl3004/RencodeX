@@ -110,3 +110,20 @@ pub fn get_bot_status() -> serde_json::Value {
         .clone();
     serde_json::json!({ "connected": connected, "name": name })
 }
+
+#[tauri::command]
+pub fn stop_bot() {
+    eprintln!("[Discord bot] Arrêt manuel demandé depuis l'UI.");
+    let mut guard = crate::bot_token_slot().lock().unwrap();
+    if let Some(old) = guard.take() {
+        old.cancel();
+    }
+}
+ 
+#[tauri::command]
+pub fn start_bot(
+    config: crate::models::AppConfig,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    save_config(config, app)
+}
