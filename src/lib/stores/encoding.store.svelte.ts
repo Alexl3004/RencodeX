@@ -297,7 +297,7 @@ function createEncodingStore() {
       paused = false;
     }
     manuallyCancelled = true;
-    invoke("cancel_encoding");
+    await invoke("cancel_encoding");
     encoding = false;
     // Marquer les fichiers encore en attente / en cours comme annulés
     filesStore.files = filesStore.files.map((f) =>

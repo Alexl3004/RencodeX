@@ -404,6 +404,12 @@ pub fn skip_ffmpeg_process() -> bool {
     // Marque le fichier courant comme "ignoré volontairement".
     // Pas de CANCEL.store(true) → la boucle for continue vers le fichier suivant.
     // `media.rs` remet SKIP à false en tête de chaque nouveau fichier.
+    //
+    // Si l'encodage était en pause, on remet PAUSE à false : le process FFmpeg
+    // vient d'être tué, il n'existe plus de process à reprendre. Sans ce reset,
+    // le fichier suivant démarrerait avec PAUSE=true (état fantôme), provoquant
+    // un affichage UI incohérent et des commandes pause/resume erratiques.
+    PAUSE.store(false, Ordering::Release);
     SKIP.store(true, Ordering::Release);
 
     true

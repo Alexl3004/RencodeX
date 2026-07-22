@@ -140,20 +140,26 @@ async fn send_panel(http: &HttpClient, channel_id: Id<ChannelMarker>) {
         })
     }
 
-    let row = Component::ActionRow(ActionRow {
+    let row1 = Component::ActionRow(ActionRow {
         components: vec![
             btn("status",  "📊 Status",    ButtonStyle::Primary),
             btn("queue",   "📋 Queue",     ButtonStyle::Secondary),
             btn("pause",   "⏸️ Pause",    ButtonStyle::Secondary),
             btn("resume",  "▶️ Reprendre", ButtonStyle::Success),
-            btn("cancel",  "🛑 Annuler",  ButtonStyle::Danger),
+        ],
+    });
+
+    let row2 = Component::ActionRow(ActionRow {
+        components: vec![
+            btn("skip",   "⏭️ Skip",    ButtonStyle::Primary),
+            btn("cancel", "🛑 Annuler", ButtonStyle::Danger),
         ],
     });
 
     if let Err(e) = http
         .create_message(channel_id)
         .embeds(&[embed])
-        .components(&[row])
+        .components(&[row1, row2])
         .await
     {
         eprintln!("[Discord bot] Erreur envoi panneau : {e}");
@@ -360,6 +366,13 @@ pub async fn start(
                 let response_text = match custom_id.as_str() {
                     "status" => format_status(),
                     "queue"  => format_queue(),
+                    "skip" => {
+                        if skip_ffmpeg_process() {
+                            "⏭ Fichier actuel ignoré, passage au suivant.".to_string()
+                        } else {
+                            "ℹ️ Aucun encodage en cours.".to_string()
+                        }
+                    }
                     "pause" => {
                         if pause_ffmpeg_process() {
                             let _ = app.emit("encode-paused", true);
