@@ -103,14 +103,25 @@ pub fn normalize_resolution(r: &str) -> String {
     }
 }
 
-#[allow(dead_code)]
 pub fn ffmpeg_path() -> PathBuf {
+    // 1. Env var
     if let Ok(p) = std::env::var("RENCODEX_FFMPEG_PATH") {
         let pb = PathBuf::from(&p);
         if pb.exists() { return pb; }
     }
+    // 2. Config fichier — lecture directe pour éviter la dépendance circulaire
+    if let Ok(raw) = std::fs::read_to_string(config_path()) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+            if let Some(p) = val["ffmpeg_path"].as_str() {
+                let pb = PathBuf::from(p);
+                if pb.exists() { return pb; }
+            }
+        }
+    }
+    // 3. Chemin par défaut Windows
     let default = PathBuf::from(r"C:\Outil\ffmpeg\bin\ffmpeg.exe");
     if default.exists() { return default; }
+    // 4. Fallback PATH système
     PathBuf::from("ffmpeg")
 }
 

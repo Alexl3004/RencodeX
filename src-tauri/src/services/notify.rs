@@ -446,7 +446,7 @@ pub async fn discord_notify_progress(
     percent: f64,
     speed: f64,
     remaining_secs: f64,
-    _elapsed_secs: f64,
+    elapsed_secs: f64,
     enabled_fields: &[String],
     custom_note: &str,
 ) {
@@ -455,7 +455,7 @@ pub async fn discord_notify_progress(
     let filled = (percent / 100.0 * 15.0) as usize;
     let bar = format!("{}{}", "█".repeat(filled), "░".repeat(15usize.saturating_sub(filled)));
     let remaining_str = duration_to_str(remaining_secs as u64);
-    let ts = unix_timestamp();
+    let ts = unix_timestamp() - elapsed_secs as i64;
 
     let all = enabled_fields.is_empty();
     let has = |id: &str| all || enabled_fields.iter().any(|f| f == id);

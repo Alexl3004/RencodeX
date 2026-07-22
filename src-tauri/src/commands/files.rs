@@ -65,9 +65,7 @@ pub struct SubtitleTrack {
 pub async fn list_subtitle_tracks(path: String) -> Result<Vec<SubtitleTrack>, String> {
     let cfg = resolve_config(load_config());
     let ffprobe = std::path::Path::new(&cfg.ffmpeg_path)
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new(""))
-        .join("ffprobe");
+        .with_file_name(if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" });
 
     let output = tokio::process::Command::new(&ffprobe)
         .args([
