@@ -146,6 +146,13 @@ pub static FILE_TOTAL: AtomicUsize = AtomicUsize::new(0);
 
 // ─── État du bot Discord ──────────────────────────────────────────────────────
 
+/// `true` dès qu'une annulation d'extraction de sous-titres a été demandée.
+/// Positionné par la commande `cancel_subtitle_extraction`, remis à `false`
+/// en début de chaque extraction batch par `reset_subtitle_extraction`.
+/// Vérifié avant chaque `invoke("extract_subtitles")` dans la boucle JS, et
+/// côté Rust avant de lancer FFmpeg pour un kill immédiat.
+pub static CANCEL_EXTRACTION: AtomicBool = AtomicBool::new(false);
+
 /// `true` quand le bot Discord est authentifié et prêt.
 /// Écrit depuis le handler `ready` du bot, lu par la commande `get_bot_status`.
 pub static BOT_CONNECTED: AtomicBool = AtomicBool::new(false);
@@ -371,6 +378,51 @@ pub fn kill_ffmpeg_process() -> Option<String> {
 
     lock_meta().current_out.clone()
 }
+
+/// Demande l'annulation de l'extraction de sous-titres en cours.
+///
+/// Positionne `CANCEL_EXTRACTION` à `true`. Le process FFmpeg d'extraction
+/// en cours sera tué via `kill_subtitle_ffmpeg_process` si un PID est stocké
+/// dans `EXTRACTION_PID`. La boucle JS vérifie également ce flag entre chaque
+/// appel `invoke("extract_subtitles")`.
+pub fn request_cancel_extraction() {
+    CANCEL_EXTRACTION.store(true, Ordering::Release);
+
+    // Tuer le process FFmpeg d'extraction en cours s'il existe.
+    let pid = EXTRACTION_PID.swap(NO_PID, Ordering::AcqRel);
+    if pid == NO_PID {
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+        use windows::Win32::Foundation::CloseHandle;
+        unsafe {
+            if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+                let _ = TerminateProcess(handle, 1);
+                let _ = CloseHandle(handle);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+}
+
+/// Remet `CANCEL_EXTRACTION` et `EXTRACTION_PID` à leur état initial.
+/// À appeler au début de chaque nouvelle session d'extraction batch.
+pub fn reset_extraction_state() {
+    EXTRACTION_PID.store(NO_PID, Ordering::Relaxed);
+    CANCEL_EXTRACTION.store(false, Ordering::Relaxed);
+}
+
+/// PID du process FFmpeg d'extraction en cours. Vaut `NO_PID` si absent.
+/// Écrit par `extract_subtitles` juste après le spawn, relu par
+/// `request_cancel_extraction` pour kill immédiat.
+pub static EXTRACTION_PID: AtomicU32 = AtomicU32::new(NO_PID);
 
 /// Interrompt uniquement le process FFmpeg du fichier courant
 /// Retourne `true` si un process a bien été tué.

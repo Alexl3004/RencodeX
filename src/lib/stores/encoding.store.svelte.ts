@@ -342,9 +342,10 @@ function createEncodingStore() {
 
   // ─── Extraction sous-titres ───────────────────────────────────────────────
 
-  function cancelSubtitleExtraction() {
+  async function cancelSubtitleExtraction() {
     if (!extractingSubs) return;
     cancelExtraction = true;
+    await invoke("cancel_subtitle_extraction");   // kill FFmpeg immédiatement
     log("Annulation de l'extraction demandée…", "warn");
   }
 
@@ -365,6 +366,11 @@ function createEncodingStore() {
     cancelExtraction   = false;
     subExtractProgress = null;
 
+    // Remettre le flag côté Rust à zéro AVANT de démarrer la boucle.
+    // Sans ça, un CANCEL_EXTRACTION resté à true depuis une session précédente
+    // ferait échouer immédiatement la première extract_subtitles.
+    await invoke("reset_subtitle_extraction");
+
     filesStore.files = filesStore.files.map((f) => ({
       ...f,
       sub_extract_status: targetFiles.some((t) => t.path === f.path)
@@ -379,6 +385,13 @@ function createEncodingStore() {
       const total = targetFiles.length;
       for (let i = 0; i < total; i++) {
         if (cancelExtraction) {
+          // Remettre tous les fichiers non encore traités à "none".
+          const remaining = targetFiles.slice(i);
+          filesStore.files = filesStore.files.map((f) =>
+            remaining.some((t) => t.path === f.path) && f.sub_extract_status === "none"
+              ? { ...f, sub_extract_status: "none" }
+              : f,
+          );
           log("Extraction annulée par l'utilisateur", "warn");
           toasts.warn("Extraction annulée");
           break;
@@ -428,15 +441,38 @@ function createEncodingStore() {
           const activeSubs = filesStore.fileSelSubs.get(file.path) ?? selSubs;
           const extracted: string[] = [];
 
+          let trackCancelled = false;
           for (const track of tracks) {
+            // Vérification du flag entre chaque piste (annulation en cours de fichier).
+            if (cancelExtraction) {
+              trackCancelled = true;
+              break;
+            }
             if (!activeSubs.has(track.language)) continue;
             const outputPath = `${dir}\\${baseName}.${track.language}.${prefs.subExtractFormat}`;
-            await invoke("extract_subtitles", {
-              sourcePath: file.path,
-              trackIndex: track.index,
-              outputPath,
-            });
-            extracted.push(track.language.toUpperCase());
+            try {
+              await invoke("extract_subtitles", {
+                sourcePath: file.path,
+                trackIndex: track.index,
+                outputPath,
+              });
+              extracted.push(track.language.toUpperCase());
+            } catch (e) {
+              // Si FFmpeg a été tué par cancel_subtitle_extraction, l'erreur
+              // est "cancelled" — on brise la boucle proprement.
+              if (String(e).includes("cancelled") || cancelExtraction) {
+                trackCancelled = true;
+                break;
+              }
+              throw e; // autre erreur : remontée vers le catch externe
+            }
+          }
+
+          if (trackCancelled) {
+            filesStore.files = filesStore.files.map((f) =>
+              f.path === file.path ? { ...f, sub_extract_status: "none" } : f,
+            );
+            break; // sortie de la boucle fichiers
           }
 
           filesStore.files = filesStore.files.map((f) =>

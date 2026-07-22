@@ -107,9 +107,16 @@ pub async fn extract_subtitles(
     track_index: u32,
     output_path: String,
 ) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+
+    // Vérifier le flag d'annulation AVANT de lancer FFmpeg.
+    if crate::state::CANCEL_EXTRACTION.load(Ordering::Acquire) {
+        return Err("cancelled".to_string());
+    }
+
     let cfg = resolve_config(load_config());
 
-    let status = tokio::process::Command::new(&cfg.ffmpeg_path)
+    let mut child = tokio::process::Command::new(&cfg.ffmpeg_path)
         .args([
             "-y",
             "-i", &source_path,
@@ -117,9 +124,26 @@ pub async fn extract_subtitles(
             &output_path,
         ])
         .creation_flags(0x08000000)
-        .status()
-        .await
+        .spawn()
         .map_err(|e| format!("Erreur lancement ffmpeg : {}", e))?;
+
+    // Stocker le PID pour permettre un kill immédiat depuis cancel_subtitle_extraction.
+    if let Some(pid) = child.id() {
+        crate::state::EXTRACTION_PID.store(pid, Ordering::Release);
+    }
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("Erreur attente ffmpeg : {}", e))?;
+
+    // Remettre le PID à NO_PID une fois terminé.
+    crate::state::EXTRACTION_PID.store(u32::MAX, Ordering::Relaxed);
+
+    // Si le process a été tué par cancel, retourner "cancelled" proprement.
+    if crate::state::CANCEL_EXTRACTION.load(Ordering::Acquire) {
+        return Err("cancelled".to_string());
+    }
 
     if status.success() {
         Ok(())
@@ -129,4 +153,18 @@ pub async fn extract_subtitles(
             status.code().unwrap_or(-1)
         ))
     }
+}
+
+/// Annule immédiatement l'extraction de sous-titres en cours.
+/// Positionne le flag `CANCEL_EXTRACTION` et tue le process FFmpeg actif.
+#[tauri::command]
+pub fn cancel_subtitle_extraction() {
+    crate::state::request_cancel_extraction();
+}
+
+/// Remet l'état d'extraction à zéro avant de démarrer un nouveau batch.
+/// Doit être appelé au début de chaque `startSubtitleExtraction()` côté front.
+#[tauri::command]
+pub fn reset_subtitle_extraction() {
+    crate::state::reset_extraction_state();
 }

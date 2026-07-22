@@ -199,6 +199,8 @@ fn main() {
             commands::files::list_subtitle_tracks,
             commands::files::extract_subtitles,
             commands::files::scan_folder,
+            commands::files::cancel_subtitle_extraction,
+            commands::files::reset_subtitle_extraction,
             // discord
             commands::discord::send_discord_notification,
             commands::discord::send_discord_start_notification,
